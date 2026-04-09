@@ -1,0 +1,67 @@
+const express = require('express');
+const router = express.Router();
+const { sendLLM } = require('../lib/llm');
+const RemotionManager = require('../lib/remotion-manager');
+const { getGenerationPrompt } = require('../lib/prompts');
+
+router.post('/', (req, res) => {
+  const {
+    proposal,
+    transcriptSegment,
+    provider,
+    model,
+    apiKey,
+    sessionDir,
+    brandfetchKey,
+  } = req.body;
+
+  if (!proposal || !transcriptSegment) {
+    return res.status(400).json({ error: 'Missing proposal or transcriptSegment' });
+  }
+
+  const manager = new RemotionManager(req.app.locals.renderProject);
+
+  const compositionId = (proposal.id + '-v' + (proposal.version || 1)).replace(/_/g, '-');
+  const durationSecs = (proposal.endTime || 0) - (proposal.startTime || 0);
+  // Add 6 buffer frames to prevent Premiere framerate mismatch seek errors
+  const durationFrames = Math.max(90, Math.round(durationSecs * 30) + 6);
+
+  const { systemMsg, userMsg } = getGenerationPrompt({
+    transcriptSegment,
+    type: proposal.type,
+    description: proposal.description,
+    durationFrames,
+    compositionId,
+    brandfetchKey: brandfetchKey || '',
+  });
+
+  sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {
+    if (err) {
+      return res.status(500).json({ error: 'LLM error: ' + err.message });
+    }
+
+    let tsxCode = rawCode;
+    const codeMatch = rawCode.match(/```(?:tsx?|jsx?|react)?\s*\n([\s\S]*?)```/);
+    if (codeMatch) {
+      tsxCode = codeMatch[1].trim();
+    }
+
+    try {
+      // Sync session before writing (ensures clean state)
+      if (sessionDir) manager.syncFromSession(sessionDir);
+      const tsxPath = manager.writeComposition(compositionId, tsxCode, durationFrames);
+      // Save back to session folder
+      if (sessionDir) manager.saveToSession(compositionId, sessionDir);
+      res.json({
+        compositionId,
+        tsxPath,
+        durationFrames,
+        status: 'generated',
+      });
+    } catch (writeErr) {
+      res.status(500).json({ error: 'Write error: ' + writeErr.message });
+    }
+  });
+});
+
+module.exports = router;

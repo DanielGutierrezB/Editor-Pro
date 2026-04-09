@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor-Pro</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-row">
+            <div id="ai-status" class="ai-status"></div>
+            <div class="header-spacer"></div>
+            <button id="btn-seq-dropdown" class="seq-dropdown-btn" title="Ver secuencias con contenido generado">
+                <span id="seq-name" class="comp-name">Sin secuencia activa</span>
+                <span id="seq-meta" class="layer-count"></span>
+                <span class="seq-dropdown-arrow">▾</span>
+            </button>
+            <button id="btn-settings" class="icon-btn" title="Configuración IA">
+                <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+                    <path d="M6.2 1.5L6.7 3.2C7 3.3 7.2 3.4 7.5 3.6L9.2 3L10.4 5.2L8.9 6.5C8.95 6.8 8.97 7.1 8.95 7.4L10.4 8.7L9.2 10.9L7.5 10.3C7.2 10.5 7 10.6 6.7 10.7L6.2 12.4H3.8L3.3 10.7C3 10.6 2.8 10.5 2.5 10.3L0.8 10.9L-0.4 8.7L1.1 7.4C1.05 7.1 1.03 6.8 1.05 6.5L-0.4 5.2L0.8 3L2.5 3.6C2.8 3.4 3 3.3 3.3 3.2L3.8 1.5H6.2Z" transform="translate(2.5 1)" stroke="currentColor" stroke-width="1.1" fill="none"/>
+                    <circle cx="7.5" cy="7.95" r="1.8" stroke="currentColor" stroke-width="1.1" fill="none"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Sequence Dropdown -->
+    <div id="seq-dropdown-panel" class="seq-dropdown-panel hidden">
+        <div id="seq-dropdown-list" class="seq-dropdown-list">
+            <div class="seq-dropdown-empty">Sin secuencias con contenido</div>
+        </div>
+    </div>
+
+    <!-- AI Settings Panel -->
+    <div id="settings-panel" class="settings-panel hidden">
+        <div class="settings-card">
+            <!-- STT Provider Settings -->
+            <div class="settings-section-title">Speech-to-Text</div>
+            <div class="settings-group">
+                <label class="settings-label">Proveedor STT</label>
+                <select id="stt-provider-select" class="select-input">
+                    <option value="elevenlabs">ElevenLabs Scribe (Cloud)</option>
+                    <option value="whisper_local">Whisper Local (whisper.cpp)</option>
+                    <option value="whisper_api">Whisper API (OpenAI)</option>
+                </select>
+            </div>
+            <div id="stt-key-group" class="settings-group api-key-row">
+                <input type="password" id="stt-api-key-input" class="text-input" placeholder="xi-api-key...">
+                <button id="btn-save-stt-key" class="btn btn-sm btn-ghost">Guardar</button>
+            </div>
+            <div id="stt-status" class="stt-status hidden">
+                <span id="stt-status-text">Verificando...</span>
+            </div>
+            <div id="whisper-local-status" class="stt-status hidden">
+                <span id="whisper-local-status-text">Verificando whisper.cpp...</span>
+                <button id="btn-whisper-refresh" class="btn-icon-tiny" title="Re-verificar">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 6A4.5 4.5 0 1 1 3 9.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M1 4.5V7.5H4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </div>
+            <div id="stt-model-group" class="settings-group">
+                <label class="settings-label">Modelo STT</label>
+                <select id="stt-model-select" class="select-input">
+                    <option value="scribe_v1">Scribe v1 (recomendado)</option>
+                    <option value="scribe_v1_experimental">Scribe v1 Experimental</option>
+                </select>
+            </div>
+
+            <!-- AI Provider Settings -->
+            <div class="settings-section-title" style="margin-top:6px">Proveedor de IA</div>
+            <div class="settings-group">
+                <select id="ai-provider-select" class="select-input">
+                    <option value="ollama">Ollama (Local)</option>
+                    <option value="google">Gemini (Google)</option>
+                    <option value="anthropic">Claude (Anthropic)</option>
+                    <option value="openai">GPT (OpenAI)</option>
+                    <option value="openrouter">OpenRouter (Multi-modelo)</option>
+                </select>
+            </div>
+            <div id="ollama-status" class="ollama-status hidden">
+                <span id="ollama-status-text">Verificando...</span>
+                <button id="btn-ollama-refresh" class="btn-icon-tiny" title="Verificar conexión con Ollama">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 6A4.5 4.5 0 1 1 3 9.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M1 4.5V7.5H4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </div>
+            <div id="api-key-group" class="settings-group api-key-row">
+                <input type="password" id="api-key-input" class="text-input" placeholder="API Key...">
+                <button id="btn-save-api-key" class="btn btn-sm btn-ghost" title="Guardar API Key">Guardar</button>
+            </div>
+            <div id="api-key-status" class="api-key-status"></div>
+            <div class="settings-group">
+                <label class="settings-label">Modelo</label>
+                <select id="ai-model-select" class="select-input"></select>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ TOOL CARDS ═══ -->
+    <div class="tools-container">
+
+        <!-- 0. PR-CUTTER -->
+        <div class="tool-card">
+            <div class="tool-card-header" data-tool="cutter">
+                <span class="tool-card-title">✂️ Cortes Automáticos</span>
+                <div id="cutter-progress-header" class="header-progress hidden">
+                    <div class="progress-track header-progress-track"><div id="cutter-progress-header-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="cutter-progress-header-text" class="header-progress-text">Procesando...</span>
+                </div>
+                <span class="toggle-icon">▾</span>
+            </div>
+            <div class="tool-card-body" id="cutter-body">
+                <p class="tool-description">Lee los marcadores de la secuencia activa para identificar bloques IN/OUT. El primer marcador (claqueta) se ignora. Los marcadores con "OUT:" marcan el final de cada bloque.</p>
+
+                <div class="btn-row">
+                    <button id="btn-cutter-analyze" class="btn-analyze">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M2 3h12M2 8h8M2 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            <circle cx="13" cy="11" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                        <span>Leer Marcadores</span>
+                    </button>
+                    <button id="btn-batch-analyze" class="btn-analyze btn-batch">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <rect x="1" y="2" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                            <rect x="1" y="7" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                            <rect x="1" y="12" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                        </svg>
+                        <span>Analizar Todas</span>
+                    </button>
+                </div>
+
+                <div id="cutter-progress" class="progress-bar hidden">
+                    <div class="progress-track"><div id="cutter-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="cutter-progress-text" class="progress-text">Leyendo marcadores...</span>
+                </div>
+
+                <div id="cutter-empty" class="empty-state-mini">
+                    <p class="empty-text">Presiona <strong>Leer Marcadores</strong> para analizar la secuencia activa o <strong>Analizar Todas</strong> para procesar en lote</p>
+                    <button id="btn-cutter-resume-session" class="btn-resume-session hidden">Volver a última sesión</button>
+                </div>
+
+                <div id="cutter-results" class="hidden">
+                    <div id="cutter-summary" class="summary-bar">
+                        <div class="stat-box keep">
+                            <div class="stat-label">Mantener</div>
+                            <div id="cutter-keep-duration" class="stat-value">0:00</div>
+                            <div id="cutter-keep-blocks" class="stat-detail">0 bloques</div>
+                        </div>
+                        <div class="stat-box remove">
+                            <div class="stat-label">Eliminar</div>
+                            <div id="cutter-remove-duration" class="stat-value">0:00</div>
+                            <div id="cutter-remove-blocks" class="stat-detail">0 zonas</div>
+                        </div>
+                        <div class="stat-box comment">
+                            <div class="stat-label">Comentarios</div>
+                            <div id="cutter-comment-count" class="stat-value">0</div>
+                            <div id="cutter-comment-detail" class="stat-detail">notas</div>
+                        </div>
+                    </div>
+                    <div id="cutter-block-list" class="block-list"></div>
+                    <button id="btn-cutter-execute" class="btn-analyze btn-execute">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 5-10 5V3z" fill="currentColor"/></svg>
+                        <span>Ejecutar Cortes</span>
+                    </button>
+                </div>
+
+                <div id="cutter-batch-section" class="hidden">
+                    <div class="batch-header">
+                        <span class="batch-title">Secuencias abiertas</span>
+                        <span id="batch-seq-count" class="marker-mgr-count">0</span>
+                    </div>
+                    <div class="batch-select-all">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#aaa;">
+                            <input type="checkbox" id="batch-select-all-cb" checked>
+                            Seleccionar todas
+                        </label>
+                    </div>
+                    <div id="batch-list" class="batch-list"></div>
+                    <button id="btn-batch-execute" class="btn-analyze btn-execute">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 5-10 5V3z" fill="currentColor"/></svg>
+                        <span>Cortar Secuencias</span>
+                    </button>
+                </div>
+
+                <div id="cutter-batch-done" class="hidden">
+                    <div class="result-panel result-panel-compact">
+                        <div class="result-header-row">
+                            <span class="result-icon-inline">&#10003;</span>
+                            <span class="result-msg">Cortes ejecutados en lote</span>
+                        </div>
+                        <div id="batch-result-detail" class="result-detail"></div>
+                        <div class="result-actions-row" style="margin-top:8px;">
+                            <button id="btn-batch-copy-log" class="btn btn-ghost btn-sm">Copiar Log</button>
+                            <button id="btn-batch-restore-all" class="btn btn-ghost btn-sm btn-warning-text">Restaurar todas</button>
+                        </div>
+                    </div>
+                    <div id="batch-results-list" class="batch-results-list"></div>
+                    <button id="btn-batch-back" class="btn-back-nav">&#8592; Volver al inicio</button>
+                </div>
+
+                <div id="cutter-result-done" class="hidden">
+                    <div class="result-panel result-panel-compact">
+                        <div class="result-header-row">
+                            <span class="result-icon-inline">&#10003;</span>
+                            <span id="cutter-result-msg" class="result-msg">Cortes ejecutados</span>
+                        </div>
+                        <div id="cutter-result-detail" class="result-detail"></div>
+                        <div class="result-actions-row">
+                            <button id="btn-cutter-restore" class="btn btn-restore">
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                    <path d="M1.5 6A4.5 4.5 0 1 1 3 9.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                    <path d="M1 4.5V7.5H4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Restaurar Backup
+                            </button>
+                            <button id="btn-cutter-copy-log" class="btn btn-ghost">Copiar Log</button>
+                        </div>
+                    </div>
+                    <div id="cutter-view-section" class="hidden"></div>
+                    <div id="cutter-marker-manager" class="marker-manager collapsible-section">
+                        <div class="collapsible-header" id="marker-mgr-toggle">
+                            <span class="marker-mgr-title">Marcadores</span>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <span id="cutter-marker-count" class="marker-mgr-count">0</span>
+                                <span class="collapsible-icon">▾</span>
+                            </div>
+                        </div>
+                        <div class="collapsible-body" id="marker-mgr-body">
+                            <div class="marker-mgr-toolbar">
+                                <label class="marker-select-all-label">
+                                    <input type="checkbox" id="cutter-select-all-cb">
+                                    Todos
+                                </label>
+                                <button id="btn-cutter-delete-no-comments" class="btn btn-ghost btn-sm">Borrar sin comentarios</button>
+                                <button id="btn-cutter-delete-selected" class="btn btn-ghost btn-sm btn-danger-text">Borrar seleccionados (<span id="cutter-selected-count">0</span>)</button>
+                            </div>
+                            <div id="cutter-marker-list" class="marker-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 1. TRANSCRIPT INPUT -->
+        <div class="tool-card" id="tool-card-transcript">
+            <div class="tool-card-header" data-tool="transcript">
+                <span class="tool-card-title">📝 Transcripción</span>
+                <div id="stt-progress-header-transcript" class="header-progress hidden">
+                    <div class="progress-track header-progress-track"><div id="stt-progress-header-fill-transcript" class="progress-fill" style="width:0%"></div></div>
+                    <span id="stt-progress-header-text-transcript" class="header-progress-text">Transcribiendo...</span>
+                </div>
+                <span class="toggle-icon">▸</span>
+            </div>
+            <div class="tool-card-body hidden" id="transcript-body">
+                <div id="stt-progress-transcript" class="progress-bar hidden">
+                    <div class="progress-track"><div id="stt-progress-fill-transcript" class="progress-fill" style="width:0%"></div></div>
+                    <span id="stt-progress-text-transcript" class="progress-text">Procesando audio...</span>
+                </div>
+                <div class="section-header" style="margin-bottom:6px">
+                    <span class="section-title">Generar con IA</span>
+                </div>
+                <p class="tool-description" style="margin-bottom:6px">Mismo audio que en Notas de grabación. Carga o exporta ahí y transcribe aquí o allí.</p>
+                <div class="transcript-source-row">
+                    <button id="btn-load-audio-transcript" class="btn btn-sm btn-ghost" title="Cargar archivo de audio">🎵 Cargar audio</button>
+                    <button id="btn-export-seq-transcript" class="btn btn-sm btn-ghost" title="Exportar audio de la secuencia">📤 Exportar de secuencia</button>
+                    <button id="btn-transcribe-whisper" class="btn btn-sm btn-ghost" title="Transcribir con el proveedor de STT configurado">🎙 Transcribir con IA</button>
+                    <button id="btn-bring-whisper-transcript" class="btn btn-sm btn-ghost hidden" title="Cargar la última transcripción generada con IA">↩ Traer transcripción generada</button>
+                </div>
+                <div id="transcript-whisper-audio-status" class="audio-info" style="font-size:10px;color:var(--text-muted)">Sin audio cargado</div>
+
+                <div class="section-divider"></div>
+                <div class="transcript-source-row">
+                    <button id="btn-fetch-captions" class="btn btn-sm btn-ghost" title="Traer transcript de la secuencia activa">🎬 Traer de secuencia</button>
+                    <button id="btn-load-json-transcript" class="btn btn-sm btn-ghost" title="Cargar JSON exportado desde Premiere (Text > Transcript > Export)">📄 Cargar JSON</button>
+                    <button id="btn-load-srt" class="btn btn-sm btn-ghost" title="Importar archivo SRT">
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v8M3 6l3 3 3-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                        Importar SRT
+                    </button>
+                    <button id="btn-paste-transcript" class="btn btn-sm btn-ghost" title="Pegar desde portapapeles">📋 Pegar</button>
+                    <button id="btn-clear-transcript" class="btn btn-sm btn-ghost" title="Limpiar transcripción">✕ Limpiar</button>
+                </div>
+                <div class="transcript-info" id="transcript-info">Sin transcripción cargada</div>
+                <textarea id="transcript-input" class="transcript-textarea" placeholder="Pega aquí la transcripción con tiempos...&#10;&#10;Formatos: SRT, [00:00] Texto, o texto plano" rows="5"></textarea>
+                <div id="transcript-rendered" class="transcript-rendered hidden"></div>
+                <div class="transcript-stats hidden" id="transcript-stats">
+                    <span id="transcript-word-count">0 palabras</span>
+                    <span id="transcript-duration">0:00</span>
+                    <span id="transcript-segment-count">0 segmentos</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. SPELLCHECK IA (text clips from timeline) -->
+        <div class="tool-card">
+            <div class="tool-card-header" id="spellcheck-header" data-tool="spellcheck">
+                <span class="tool-card-title">✍️ SpellCheck IA</span>
+                <span id="spellcheck-toggle-icon" class="toggle-icon">▸</span>
+            </div>
+            <div id="spellcheck-body" class="tool-card-body hidden">
+                <p class="tool-description">Analiza los clips de texto (Essential Graphics) en la secuencia activa. Detecta errores ortográficos, gramaticales y de estilo, con opción de corregir directamente.</p>
+                <div class="action-bar">
+                    <button id="btn-spellcheck" class="btn-analyze" title="Escanea todos los clips de texto en la secuencia y analiza ortografía con IA">
+                        <span class="btn-analyze-text">Analizar Textos de Secuencia</span>
+                    </button>
+                </div>
+                <div id="sc-progress" class="progress-bar hidden">
+                    <div class="progress-track"><div id="sc-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="sc-progress-text" class="progress-text">Analizando...</span>
+                </div>
+                <div id="sc-results" class="hidden">
+                    <div id="sc-clip-list" class="clip-list"></div>
+                </div>
+                <div id="sc-empty" class="empty-state-mini">
+                    <p class="empty-text">Presiona <strong>Analizar</strong> para revisar los textos en la secuencia</p>
+                </div>
+
+                <!-- Custom Dictionary -->
+                <div class="dictionary-section">
+                    <div class="dictionary-header">
+                        <span class="tool-label" style="margin:0">Diccionario Personal</span>
+                        <span id="dict-count" class="dict-count">0 palabras</span>
+                    </div>
+                    <div class="dictionary-add-row">
+                        <input type="text" id="dict-word-input" class="text-input" placeholder="Agregar palabra...">
+                        <button id="btn-dict-add" class="btn btn-sm btn-ghost" title="Agregar palabra al diccionario personalizado">+ Agregar</button>
+                    </div>
+                    <div id="dict-words" class="dict-words"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. SMART SUPERTEXTS — MOGRT Graphics -->
+        <div class="tool-card">
+            <div class="tool-card-header" data-tool="supertexts2">
+                <span class="tool-card-title">💡 Smart Supertexts</span>
+                <div id="st2-progress-header" class="header-progress hidden">
+                    <div class="progress-track header-progress-track"><div id="st2-progress-header-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="st2-progress-header-text" class="header-progress-text">Analizando...</span>
+                </div>
+                <span class="toggle-icon">▸</span>
+            </div>
+            <div class="tool-card-body hidden">
+                <p class="tool-description">Genera gráficos (Essential Graphics) directamente en la línea de tiempo usando un MOGRT como plantilla. Cada supertexto se inserta como un clip de gráfico con su duración exacta.</p>
+
+                <!-- MOGRT Config per Type (collapsible) -->
+                <div class="mogrt-config">
+                    <div class="mogrt-config-header mogrt-config-toggle" id="mogrt-config-toggle">
+                        <span class="tool-label" style="margin:0">MOGRT por Tipo</span>
+                        <span id="mogrt-config-status" class="mogrt-config-status"></span>
+                        <span class="mogrt-toggle-icon">▸</span>
+                    </div>
+                    <div id="mogrt-config-body" class="mogrt-config-body hidden">
+                        <div class="mogrt-folder-row">
+                            <button id="btn-mogrt-folder" class="btn btn-sm btn-ghost" title="Selecciona una carpeta y auto-asigna MOGRTs por nombre (title.mogrt, bullet.mogrt, etc.)">📁 Cargar Carpeta</button>
+                            <span id="mogrt-folder-path" class="mogrt-folder-path"></span>
+                        </div>
+                        <div id="st2-mogrt-grid" class="mogrt-type-grid">
+                            <div class="mogrt-type-row" data-mogrt-type="title">
+                                <span class="mogrt-type-label type-title">title</span>
+                                <span class="mogrt-type-file" id="st2-mogrt-file-title">Sin configurar</span>
+                                <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="title">Elegir</button>
+                            </div>
+                            <div class="mogrt-type-row" data-mogrt-type="bullet">
+                                <span class="mogrt-type-label type-bullet">bullet</span>
+                                <span class="mogrt-type-file" id="st2-mogrt-file-bullet">Sin configurar</span>
+                                <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="bullet">Elegir</button>
+                            </div>
+                            <div class="mogrt-type-row" data-mogrt-type="step">
+                                <span class="mogrt-type-label type-step">step</span>
+                                <span class="mogrt-type-file" id="st2-mogrt-file-step">Sin configurar</span>
+                                <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="step">Elegir</button>
+                            </div>
+                            <div class="mogrt-type-row" data-mogrt-type="definition">
+                                <span class="mogrt-type-label type-definition">definition</span>
+                                <span class="mogrt-type-file" id="st2-mogrt-file-definition">Sin configurar</span>
+                                <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="definition">Elegir</button>
+                            </div>
+                            <div class="mogrt-type-row" data-mogrt-type="data">
+                                <span class="mogrt-type-label type-data">data</span>
+                                <span class="mogrt-type-file" id="st2-mogrt-file-data">Sin configurar</span>
+                                <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="data">Elegir</button>
+                            </div>
+                            <div class="mogrt-type-row" data-mogrt-type="summary">
+                                <span class="mogrt-type-label type-summary">summary</span>
+                                <span class="mogrt-type-file" id="st2-mogrt-file-summary">Sin configurar</span>
+                                <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="summary">Elegir</button>
+                            </div>
+                            <div class="mogrt-type-row" data-mogrt-type="highlight">
+                                <span class="mogrt-type-label type-highlight">highlight</span>
+                                <span class="mogrt-type-file" id="st2-mogrt-file-highlight">Sin configurar</span>
+                                <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="highlight">Elegir</button>
+                            </div>
+                        </div>
+                        <div class="mogrt-config-row" style="margin-top:8px">
+                            <label class="mogrt-track-label">Pista de video:</label>
+                            <select id="st2-track-select" class="select-input mogrt-track-select">
+                                <option value="auto">Auto (última + 1)</option>
+                                <option value="0">V1</option>
+                                <option value="1">V2</option>
+                                <option value="2">V3</option>
+                                <option value="3">V4</option>
+                                <option value="4">V5</option>
+                                <option value="5">V6</option>
+                                <option value="6">V7</option>
+                                <option value="7">V8</option>
+                            </select>
+                        </div>
+                        <p class="mogrt-hint">Crea un texto con la herramienta Texto (T) en Premiere, estílalo, pon un placeholder largo (+200 caracteres), y expórtalo como MOGRT desde Essential Graphics. Asigna un MOGRT distinto por cada tipo. También puedes usar "Cargar Carpeta" para auto-asignar MOGRTs por nombre de archivo.</p>
+                    </div>
+                </div>
+
+                <!-- Prompt Editor -->
+                <div class="prompt-editor-toggle">
+                    <button id="btn-st2-prompt-toggle" class="btn btn-sm btn-ghost" title="Ver/editar el prompt que se envía a la IA">⚙ Editar Prompt</button>
+                </div>
+                <div id="st2-prompt-editor" class="prompt-editor hidden">
+                    <div id="st2-prompt-versions" class="prompt-versions-bar"></div>
+                    <label class="prompt-editor-label">System Message</label>
+                    <textarea id="st2-prompt-system" class="prompt-textarea prompt-textarea-sm" rows="3" spellcheck="false"></textarea>
+                    <label class="prompt-editor-label">Prompt (instrucciones) — usa {TRANSCRIPT} donde va la transcripción</label>
+                    <textarea id="st2-prompt-user" class="prompt-textarea" rows="12" spellcheck="false"></textarea>
+                    <div class="prompt-editor-actions">
+                        <button id="btn-st2-prompt-save" class="btn btn-sm btn-success">💾 Guardar versión</button>
+                        <button id="btn-st2-prompt-reset" class="btn btn-sm btn-ghost">↩ Restaurar Original</button>
+                    </div>
+                </div>
+
+                <div class="action-bar">
+                    <button id="btn-supertexts2" class="btn-analyze btn-analyze-alt" title="Analiza la transcripción y genera supertextos como gráficos MOGRT">
+                        <span class="btn-analyze-text">Generar Supertextos</span>
+                    </button>
+                </div>
+                <div id="st2-progress" class="progress-bar hidden">
+                    <div class="progress-track"><div id="st2-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="st2-progress-text" class="progress-text">Analizando transcripción...</span>
+                </div>
+                <div id="st2-results" class="hidden">
+                    <div id="st2-summary" class="result-summary"></div>
+                    <div class="result-actions">
+                        <button id="btn-st2-select-all" class="btn btn-sm btn-ghost" title="Seleccionar / deseleccionar todos">Seleccionar todos</button>
+                        <button id="btn-st2-create-graphics" class="btn btn-sm btn-success" title="Inserta gráficos MOGRT en la línea de tiempo">🎬 Crear Gráficos</button>
+                        <button id="btn-st2-export" class="btn btn-sm btn-ghost" title="Copiar al portapapeles">📋 Copiar</button>
+                    </div>
+                    <div id="st2-list" class="supertext-list"></div>
+                </div>
+                <div id="st2-empty" class="empty-state-mini">
+                    <p class="empty-text">Configura un MOGRT y genera supertextos como clips de gráfico en la línea de tiempo</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. EDIT SUGGESTIONS -->
+        <div class="tool-card">
+            <div class="tool-card-header" data-tool="editsuggestions2">
+                <span class="tool-card-title">✂️ Sugerencias de Edición</span>
+                <div id="es2-progress-header" class="header-progress hidden">
+                    <div class="progress-track header-progress-track"><div id="es2-progress-header-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="es2-progress-header-text" class="header-progress-text">Analizando contenido...</span>
+                </div>
+                <span class="toggle-icon">▸</span>
+            </div>
+            <div class="tool-card-body hidden">
+                <p class="tool-description">Analiza la transcripción: detecta highlights, sugiere cortes, e identifica errores como contenido repetido. Cada categoría tiene marcadores independientes.</p>
+                <div class="prompt-editor-toggle">
+                    <button id="btn-es2-prompt-toggle" class="btn btn-sm btn-ghost" title="Ver/editar el prompt">⚙ Editar Prompt</button>
+                </div>
+                <div id="es2-prompt-editor" class="prompt-editor hidden">
+                    <div id="es2-prompt-versions" class="prompt-versions-bar"></div>
+                    <label class="prompt-editor-label">System Message</label>
+                    <textarea id="es2-prompt-system" class="prompt-textarea prompt-textarea-sm" rows="3" spellcheck="false"></textarea>
+                    <label class="prompt-editor-label">Prompt (instrucciones) — usa {TRANSCRIPT} donde va la transcripción</label>
+                    <textarea id="es2-prompt-user" class="prompt-textarea" rows="12" spellcheck="false"></textarea>
+                    <div class="prompt-editor-actions">
+                        <button id="btn-es2-prompt-save" class="btn btn-sm btn-success">💾 Guardar versión</button>
+                        <button id="btn-es2-prompt-reset" class="btn btn-sm btn-ghost">↩ Restaurar Original</button>
+                    </div>
+                </div>
+                <div class="action-bar">
+                    <button id="btn-editsuggestions2" class="btn-analyze btn-analyze-warn" title="Analiza edición con detección de errores">
+                        <span class="btn-analyze-text">Analizar Edición</span>
+                    </button>
+                </div>
+                <div id="es2-progress" class="progress-bar hidden">
+                    <div class="progress-track"><div id="es2-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="es2-progress-text" class="progress-text">Analizando contenido...</span>
+                </div>
+                <div id="es2-results" class="hidden">
+                    <div id="es2-summary" class="result-summary"></div>
+                    <div class="result-actions">
+                        <button id="btn-es2-export" class="btn btn-sm btn-ghost" title="Copiar al portapapeles">📋 Copiar</button>
+                    </div>
+                    <div id="es2-list" class="suggestion-list"></div>
+                </div>
+                <div id="es2-empty" class="empty-state-mini">
+                    <p class="empty-text">Analiza la edición con detección de errores</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. REEL PROPOSAL -->
+        <div class="tool-card">
+            <div class="tool-card-header" data-tool="reelproposal">
+                <span class="tool-card-title">🎬 Propuesta de Reel</span>
+                <div id="rp-progress-header" class="header-progress hidden">
+                    <div class="progress-track header-progress-track"><div id="rp-progress-header-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="rp-progress-header-text" class="header-progress-text">Analizando contenido...</span>
+                </div>
+                <span class="toggle-icon">▸</span>
+            </div>
+            <div class="tool-card-body hidden">
+                <p class="tool-description">Analiza la transcripción y propone reels de alta retención para Instagram, YouTube y Facebook. Genera secuencias 9:16 listas para exportar.</p>
+                <div class="prompt-editor-toggle">
+                    <button id="btn-rp-prompt-toggle" class="btn btn-sm btn-ghost" title="Ver/editar el prompt">⚙ Editar Prompt</button>
+                </div>
+                <div id="rp-prompt-editor" class="prompt-editor hidden">
+                    <div id="rp-prompt-versions" class="prompt-versions-bar"></div>
+                    <label class="prompt-editor-label">System Message</label>
+                    <textarea id="rp-prompt-system" class="prompt-textarea prompt-textarea-sm" rows="3" spellcheck="false"></textarea>
+                    <label class="prompt-editor-label">Prompt (instrucciones) — usa {TRANSCRIPT} donde va la transcripción</label>
+                    <textarea id="rp-prompt-user" class="prompt-textarea" rows="12" spellcheck="false"></textarea>
+                    <div class="prompt-editor-actions">
+                        <button id="btn-rp-prompt-save" class="btn btn-sm btn-success">💾 Guardar versión</button>
+                        <button id="btn-rp-prompt-reset" class="btn btn-sm btn-ghost">↩ Restaurar Original</button>
+                    </div>
+                </div>
+                <div class="action-bar">
+                    <button id="btn-reelproposal" class="btn-analyze btn-analyze-reel" title="Analiza la transcripción y propone reels de alta retención">
+                        <span class="btn-analyze-text">Analizar para Reels</span>
+                    </button>
+                </div>
+                <div id="rp-progress" class="progress-bar hidden">
+                    <div class="progress-track"><div id="rp-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="rp-progress-text" class="progress-text">Analizando contenido...</span>
+                </div>
+                <div id="rp-results" class="hidden">
+                    <div id="rp-assessment" class="result-summary"></div>
+                    <div class="result-actions">
+                        <button id="btn-rp-export" class="btn btn-sm btn-ghost" title="Copiar al portapapeles">📋 Copiar</button>
+                    </div>
+                    <div id="rp-list" class="reel-list"></div>
+                </div>
+                <div id="rp-empty" class="empty-state-mini">
+                    <p class="empty-text">Analiza la clase para proponer reels de alta retención 🎬</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. NOTAS DE GRABACIÓN -->
+        <div class="tool-card" id="tool-card-recording">
+            <div class="tool-card-header" data-tool="recording">
+                <span class="tool-card-title">🎙️ Notas de Grabación</span>
+                <div id="stt-progress-header-recording" class="header-progress hidden">
+                    <div class="progress-track header-progress-track"><div id="stt-progress-header-fill-recording" class="progress-fill" style="width:0%"></div></div>
+                    <span id="stt-progress-header-text-recording" class="header-progress-text">Transcribiendo...</span>
+                </div>
+                <span class="toggle-icon">▸</span>
+            </div>
+            <div class="tool-card-body hidden" id="recording-body">
+
+                <!-- Steps Wrapper -->
+                <div id="rec-steps-wrapper">
+
+                <!-- Step 1: Audio Input -->
+                <div class="rec-step" data-rec-step="1">
+                    <div class="rec-step-header" data-rec-step="1">
+                        <span class="rec-step-num">1</span>
+                        <span class="rec-step-title">Audio</span>
+                        <span id="rec-step-hint-1" class="rec-step-hint">Sin audio cargado</span>
+                        <span class="rec-step-check">✓</span>
+                        <span id="rec-step-time-1" class="rec-step-time"></span>
+                        <span class="rec-step-arrow">▾</span>
+                    </div>
+                    <div class="rec-step-body" id="rec-step-body-1">
+                        <div class="audio-source-row">
+                            <button id="btn-load-audio" class="btn btn-sm btn-ghost" title="Cargar archivo de audio (MP3, WAV, M4A)">
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v8M3 6l3 3 3-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                                Cargar Audio
+                            </button>
+                            <button id="btn-export-seq" class="btn btn-sm btn-ghost" title="Exportar audio directamente de la secuencia activa en Premiere">
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1" y="2.5" width="10" height="7" rx="1" stroke="currentColor" stroke-width="1.1"/><path d="M4 6h4M6 4v4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+                                Exportar de Secuencia
+                            </button>
+                            <button id="btn-clear-audio" class="btn btn-sm btn-ghost" title="Limpiar audio cargado">✕ Limpiar</button>
+                        </div>
+                        <div id="export-progress" class="progress-bar hidden">
+                            <div class="progress-track"><div id="export-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                            <span id="export-progress-text" class="progress-text">Exportando audio...</span>
+                        </div>
+                        <div id="audio-info" class="audio-info">Sin audio cargado</div>
+                        <div id="audio-badge" class="audio-file-badge hidden">
+                            <span id="audio-filename" class="audio-filename">—</span>
+                            <span id="audio-filesize" class="audio-duration">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Transcribe -->
+                <div class="rec-step" data-rec-step="2">
+                    <div class="rec-step-header" data-rec-step="2">
+                        <span class="rec-step-num">2</span>
+                        <span class="rec-step-title">Transcripción</span>
+                        <span id="rec-step-hint-2" class="rec-step-hint"></span>
+                        <span class="rec-step-check">✓</span>
+                        <span id="rec-step-time-2" class="rec-step-time"></span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="rec-step-body-2">
+                        <div class="action-bar">
+                            <button id="btn-transcribe" class="btn-analyze btn-disabled" title="Transcribir audio con el proveedor STT seleccionado">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <path d="M8 1v6M5 4l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M3 8.5C3 10.7 5.2 12.5 8 12.5s5-1.8 5-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    <path d="M8 12.5V15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                </svg>
+                                <span id="btn-transcribe-text" class="btn-analyze-text">Transcribir</span>
+                            </button>
+                            <button id="btn-load-srt-recording" class="btn btn-sm btn-ghost" title="Cargar un archivo SRT ya generado">Cargar SRT</button>
+                            <button id="btn-fetch-captions-recording" class="btn btn-sm btn-ghost" title="Traer transcript de la secuencia activa en Premiere">Traer de secuencia</button>
+                            <button id="btn-load-json-recording" class="btn btn-sm btn-ghost" title="Cargar JSON exportado desde Premiere">Cargar JSON</button>
+                            <button id="btn-bring-whisper-recording" class="btn btn-sm btn-ghost hidden" title="Usar la última transcripción generada con IA">Traer transcripción</button>
+                        </div>
+                        <div id="rec-stt-status" class="audio-info" style="font-size:9px;color:var(--text-muted);margin-top:2px"></div>
+                        <input type="file" id="srt-file-input-recording" accept=".srt" style="display:none">
+                        <div id="stt-progress" class="progress-bar hidden">
+                            <div class="progress-track"><div id="stt-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                            <span id="stt-progress-text" class="progress-text">Procesando audio...</span>
+                        </div>
+                        <div id="transcript-preview-section" class="hidden">
+                            <div class="section-header">
+                                <span class="tool-label">Transcripción</span>
+                                <span id="rec-transcript-word-count" style="font-size:9px;color:var(--text-muted)">0 palabras</span>
+                            </div>
+                            <div id="transcript-preview" class="transcript-preview"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Detect & Analyze -->
+                <div class="rec-step" data-rec-step="3" id="detect-section" style="display:none">
+                    <div class="rec-step-header" data-rec-step="3">
+                        <span class="rec-step-num">3</span>
+                        <span class="rec-step-title">Detección de Tomas</span>
+                        <span id="rec-step-hint-3" class="rec-step-hint"></span>
+                        <span class="rec-step-check">✓</span>
+                        <span id="rec-step-time-3" class="rec-step-time"></span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="rec-step-body-3">
+                        <div id="detect-summary" class="summary-bar hidden">
+                            <div class="stat-box keep">
+                                <div class="stat-label">Mantener</div>
+                                <div id="detect-keep-duration" class="stat-value">0:00</div>
+                                <div id="detect-keep-detail" class="stat-detail">0 bloques</div>
+                            </div>
+                            <div class="stat-box remove">
+                                <div class="stat-label">Eliminar</div>
+                                <div id="detect-remove-duration" class="stat-value">0:00</div>
+                                <div id="detect-remove-detail" class="stat-detail">0 zonas</div>
+                            </div>
+                            <div class="stat-box comment">
+                                <div class="stat-label">Detecciones</div>
+                                <div id="detect-trigger-count" class="stat-value">0</div>
+                                <div id="detect-trigger-detail" class="stat-detail">IN / OUT</div>
+                            </div>
+                        </div>
+                        <div id="segment-list" class="segment-list"></div>
+                    </div>
+                </div>
+
+                <!-- Step 4: AI Review -->
+                <div class="rec-step" data-rec-step="4" id="analyze-section" style="display:none">
+                    <div class="rec-step-header" data-rec-step="4">
+                        <span class="rec-step-num">4</span>
+                        <span class="rec-step-title">Revisión IA <span style="font-weight:400;font-size:9px;color:var(--text-muted)">(opcional)</span></span>
+                        <span id="rec-step-hint-4" class="rec-step-hint"></span>
+                        <span class="rec-step-check">✓</span>
+                        <span id="rec-step-time-4" class="rec-step-time"></span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="rec-step-body-4">
+                        <p class="tool-description" style="margin:0 0 6px">Valida la continuidad del contenido entre las tomas seleccionadas. Revisa si al cortar las zonas eliminadas, el aprendizaje del estudiante se vería afectado.</p>
+                        <div class="prompt-editor-toggle">
+                            <button id="btn-ta-prompt-toggle" class="btn btn-sm btn-ghost" title="Ver/editar el prompt que se envía a la IA">Editar Prompt</button>
+                        </div>
+                        <div id="ta-prompt-editor" class="prompt-editor hidden">
+                            <div id="ta-prompt-versions" class="prompt-versions-bar"></div>
+                            <label class="prompt-editor-label">System Message</label>
+                            <textarea id="ta-prompt-system" class="prompt-textarea prompt-textarea-sm" rows="3" spellcheck="false"></textarea>
+                            <label class="prompt-editor-label">Prompt</label>
+                            <textarea id="ta-prompt-user" class="prompt-textarea" rows="12" spellcheck="false"></textarea>
+                            <div class="prompt-editor-actions">
+                                <button id="btn-ta-prompt-save" class="btn btn-sm btn-success">Guardar versión</button>
+                                <button id="btn-ta-prompt-reset" class="btn btn-sm btn-ghost">Restaurar Original</button>
+                            </div>
+                        </div>
+                        <div class="action-bar">
+                            <button id="btn-analyze-takes" class="btn-analyze btn-analyze-alt btn-disabled" title="Revisar continuidad con IA">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+                                    <path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                <span class="btn-analyze-text">Revisar con IA</span>
+                            </button>
+                        </div>
+                        <div id="take-progress" class="progress-bar hidden">
+                            <div class="progress-track"><div id="take-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                            <span id="take-progress-text" class="progress-text">Analizando continuidad...</span>
+                        </div>
+                        <div id="take-results" class="hidden">
+                            <div id="take-summary" class="summary-bar">
+                                <div class="stat-box take-stat">
+                                    <div class="stat-label">Ajustes</div>
+                                    <div id="take-group-count" class="stat-value">0</div>
+                                    <div class="stat-detail">sugerencias de IA</div>
+                                </div>
+                            </div>
+                            <div id="take-list" class="segment-list"></div>
+                            <button id="btn-add-supplement-markers" class="btn btn-sm btn-success hidden" style="margin-top:6px" title="Aplicar los ajustes sugeridos por la IA">Aplicar ajustes IA</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 5: Place Markers -->
+                <div class="rec-step" data-rec-step="5" id="markers-section" style="display:none">
+                    <div class="rec-step-header" data-rec-step="5">
+                        <span class="rec-step-num">5</span>
+                        <span class="rec-step-title">Marcadores</span>
+                        <span id="rec-step-hint-5" class="rec-step-hint"></span>
+                        <span class="rec-step-check">✓</span>
+                        <span id="rec-step-time-5" class="rec-step-time"></span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="rec-step-body-5">
+                        <div id="markers-active-count" class="tool-description" style="margin:0 0 6px"></div>
+                        <div class="result-actions">
+                            <button id="btn-place-markers" class="btn btn-sm btn-success" title="Colocar marcadores IN/OUT en la secuencia">Colocar Marcadores</button>
+                            <button id="btn-export-markers" class="btn btn-sm btn-ghost" title="Copiar marcadores al portapapeles">Copiar</button>
+                        </div>
+                        <div id="markers-result" class="hidden">
+                            <div class="result-panel result-panel-compact" style="margin-top:8px">
+                                <div class="result-header-row">
+                                    <span class="result-icon-inline">&#10003;</span>
+                                    <span id="markers-result-msg" class="result-msg">Marcadores colocados</span>
+                                </div>
+                                <div id="markers-result-detail" class="result-detail"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 6: Execute Cuts -->
+                <div class="rec-step" data-rec-step="6" id="rec-cut-section" style="display:none">
+                    <div class="rec-step-header" data-rec-step="6">
+                        <span class="rec-step-num">6</span>
+                        <span class="rec-step-title">Cortar Secuencia</span>
+                        <span id="rec-step-hint-6" class="rec-step-hint"></span>
+                        <span class="rec-step-check">✓</span>
+                        <span id="rec-step-time-6" class="rec-step-time"></span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="rec-step-body-6">
+                        <div id="rec-cut-summary" class="summary-bar">
+                            <div class="stat-box keep">
+                                <div class="stat-label">Mantener</div>
+                                <div id="rec-cut-keep-dur" class="stat-value">0:00</div>
+                                <div id="rec-cut-keep-detail" class="stat-detail">0 bloques</div>
+                            </div>
+                            <div class="stat-box remove">
+                                <div class="stat-label">Eliminar</div>
+                                <div id="rec-cut-remove-dur" class="stat-value">0:00</div>
+                                <div id="rec-cut-remove-detail" class="stat-detail">0 zonas</div>
+                            </div>
+                        </div>
+                        <div id="rec-cut-blocks" class="block-list"></div>
+                        <div id="rec-cut-progress" class="progress-bar hidden">
+                            <div class="progress-track"><div id="rec-cut-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                            <span id="rec-cut-progress-text" class="progress-text">Procesando cortes...</span>
+                        </div>
+                        <div class="action-bar" style="margin-top:6px">
+                            <button id="btn-rec-cut" class="btn-analyze" title="Hacer backup y cortar la secuencia">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                                </svg>
+                                <span id="btn-rec-cut-text" class="btn-analyze-text">Cortar Secuencia</span>
+                            </button>
+                        </div>
+                        <div id="rec-cut-done" class="hidden">
+                            <div class="result-panel result-panel-compact" style="margin-top:8px">
+                                <div class="result-header-row">
+                                    <span class="result-icon-inline">&#10003;</span>
+                                    <span id="rec-cut-done-msg" class="result-msg">Cortes ejecutados</span>
+                                </div>
+                                <div id="rec-cut-done-detail" class="result-detail"></div>
+                                <div class="result-actions-row" style="margin-top:6px">
+                                    <button id="btn-rec-cut-restore" class="btn btn-ghost btn-sm btn-warning-text">Restaurar backup</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 7: Views Classification -->
+                <div class="rec-step" data-rec-step="7" id="rec-views-section" style="display:none">
+                    <div class="rec-step-header" data-rec-step="7">
+                        <span class="rec-step-num">7</span>
+                        <span class="rec-step-title">Vistas</span>
+                        <span id="rec-step-hint-7" class="rec-step-hint"></span>
+                        <span class="rec-step-check">✓</span>
+                        <span id="rec-step-time-7" class="rec-step-time"></span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="rec-step-body-7">
+                        <div class="tool-description" style="margin:0 0 8px">Clasifica cada toma como Cámara o PC usando IA con visión.</div>
+                        <div class="inline-fields" style="margin-bottom:8px">
+                            <label class="field-label">Modelo de visión</label>
+                            <select id="view-vision-model" class="input-sm"></select>
+                        </div>
+                        <div class="action-bar">
+                            <button id="btn-classify-views" class="btn-analyze btn-analyze-alt" title="Extraer frames y clasificar vistas con IA">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+                                    <circle cx="6" cy="7" r="1.5" stroke="currentColor" stroke-width="1.2"/>
+                                    <path d="M10 6l2 3H4l3-2.5 1.5 1.5z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>
+                                </svg>
+                                <span id="btn-classify-views-text" class="btn-analyze-text">Clasificar Vistas</span>
+                            </button>
+                        </div>
+                        <div id="view-progress" class="progress-bar hidden">
+                            <div class="progress-track"><div id="view-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                            <span id="view-progress-text" class="progress-text">Procesando...</span>
+                        </div>
+                        <div id="view-results" class="hidden">
+                            <div class="summary-bar" style="margin-bottom:6px">
+                                <div class="stat-box">
+                                    <div class="stat-label">Resultados</div>
+                                    <div id="view-result-summary" class="stat-value">—</div>
+                                </div>
+                            </div>
+                            <div id="view-list" class="segment-list"></div>
+                            <div class="inline-fields" style="margin-top:8px">
+                                <label class="field-label">Track CAM</label>
+                                <select id="view-track-cam" class="input-sm"></select>
+                                <label class="field-label" style="margin-left:8px">Track PC</label>
+                                <select id="view-track-pc" class="input-sm"></select>
+                            </div>
+                            <div class="action-bar" style="margin-top:6px">
+                                <button id="btn-apply-views" class="btn btn-sm btn-success" title="Etiquetar marcadores y generar preset de vistas">Aplicar Vistas</button>
+                            </div>
+                            <div id="view-applied-msg" class="hidden">
+                                <div class="result-panel result-panel-compact" style="margin-top:8px">
+                                    <div class="result-header-row">
+                                        <span class="result-icon-inline">&#10003;</span>
+                                        <span id="view-applied-text" class="result-msg">Vistas aplicadas</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="rec-total-time" class="rec-total-time hidden">Tiempo total: <span id="rec-total-time-val">—</span></div>
+                </div><!-- /rec-steps-wrapper -->
+
+                <!-- Empty state -->
+                <div id="recording-empty" class="empty-state-mini">
+                    <p class="empty-text">Carga un archivo de audio y presiona <strong>Transcribir</strong> para comenzar</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. MOTION-PRO -->
+        <div class="tool-card" id="tool-card-motionpro">
+            <div class="tool-card-header" data-tool="motionpro">
+                <span class="tool-card-title">🎬 Motion-Pro</span>
+                <div id="mp-progress-header" class="header-progress hidden">
+                    <div class="progress-track header-progress-track"><div id="mp-progress-header-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="mp-progress-header-text" class="header-progress-text">Procesando...</span>
+                </div>
+                <span class="toggle-icon">▸</span>
+            </div>
+            <div class="tool-card-body hidden" id="motionpro-body">
+
+                <!-- Server Status -->
+                <div id="mp-server-status" class="mp-server-status">
+                    <span id="mp-server-indicator" class="mp-server-dot mp-dot-off"></span>
+                    <span id="mp-server-text" class="mp-server-label">Servidor detenido</span>
+                    <button id="btn-mp-open-studio" class="btn btn-sm btn-ghost" title="Abrir Remotion Studio en el browser">🖥 Studio</button>
+                    <button id="btn-mp-docs" class="btn btn-sm btn-ghost" title="Abrir documentación de Motion-Pro">📖 Docs</button>
+                    <button id="btn-mp-server-toggle" class="btn btn-sm btn-ghost">Iniciar</button>
+                </div>
+                <!-- Session indicator -->
+                <div id="mp-session-info" class="mp-session-info">
+                    <span class="mp-session-label">Secuencia:</span>
+                    <span id="mp-session-name" class="mp-session-name">—</span>
+                </div>
+                <!-- Brandfetch API Key -->
+                <div id="mp-brandfetch-row" class="mp-brandfetch-row">
+                    <span class="mp-brandfetch-label">Logos</span>
+                    <div id="mp-brandfetch-status" class="mp-brandfetch-status">
+                        <span id="mp-brandfetch-dot" class="mp-server-dot mp-dot-off"></span>
+                        <span id="mp-brandfetch-text" class="mp-brandfetch-hint">Sin configurar</span>
+                    </div>
+                    <input type="password" id="mp-brandfetch-key" class="text-input mp-brandfetch-input" placeholder="Brandfetch Client ID...">
+                    <button id="btn-mp-brandfetch-save" class="btn btn-sm btn-ghost">Guardar</button>
+                </div>
+
+                <!-- Generation Prompts Panel -->
+                <div class="mp-gen-prompts-section">
+                    <div class="mp-gen-prompts-header" id="mp-gen-prompts-toggle">
+                        <span class="tool-label" style="margin:0">Prompts de Generación</span>
+                        <span class="mogrt-toggle-icon" id="mp-gen-prompts-icon">▸</span>
+                    </div>
+                    <div id="mp-gen-prompts-body" class="mp-gen-prompts-body hidden">
+                        <p class="tool-description" style="margin:0 0 6px">Estos prompts controlan cómo se generan las animaciones. El System Prompt, Style Guide y Design Fundamentals se envían completos al LLM junto con las instrucciones de cada tipo.</p>
+
+                        <!-- System Prompt -->
+                        <div class="mp-gp-item">
+                            <div class="mp-gp-item-header" data-mp-gp="system">
+                                <span class="mp-gp-item-title">System Prompt</span>
+                                <span class="mp-gp-item-arrow">▸</span>
+                            </div>
+                            <div class="mp-gp-item-body hidden" data-mp-gp-body="system">
+                                <textarea id="mp-gp-system" class="prompt-textarea" rows="16" spellcheck="false"></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Style Guide -->
+                        <div class="mp-gp-item">
+                            <div class="mp-gp-item-header" data-mp-gp="style">
+                                <span class="mp-gp-item-title">Style Guide</span>
+                                <span class="mp-gp-item-arrow">▸</span>
+                            </div>
+                            <div class="mp-gp-item-body hidden" data-mp-gp-body="style">
+                                <textarea id="mp-gp-style" class="prompt-textarea" rows="16" spellcheck="false"></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Design Fundamentals -->
+                        <div class="mp-gp-item">
+                            <div class="mp-gp-item-header" data-mp-gp="design">
+                                <span class="mp-gp-item-title">Design Fundamentals</span>
+                                <span class="mp-gp-item-arrow">▸</span>
+                            </div>
+                            <div class="mp-gp-item-body hidden" data-mp-gp-body="design">
+                                <textarea id="mp-gp-design" class="prompt-textarea" rows="16" spellcheck="false"></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Type Instructions -->
+                        <div class="mp-gp-item">
+                            <div class="mp-gp-item-header" data-mp-gp="types">
+                                <span class="mp-gp-item-title">Instrucciones por Tipo</span>
+                                <span class="mp-gp-item-arrow">▸</span>
+                            </div>
+                            <div class="mp-gp-item-body hidden" data-mp-gp-body="types">
+                                <textarea id="mp-gp-types" class="prompt-textarea" rows="16" spellcheck="false"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="prompt-editor-actions" style="margin-top:6px">
+                            <button id="btn-mp-gp-save" class="btn btn-sm btn-success">💾 Guardar Prompts</button>
+                            <button id="btn-mp-gp-reset" class="btn btn-sm btn-ghost">↩ Restaurar Originales</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Steps Wrapper -->
+                <div id="mp-steps-wrapper">
+
+                <!-- Step 1: Analysis -->
+                <div class="rec-step" data-mp-step="1">
+                    <div class="rec-step-header mp-step-header" data-mp-step="1">
+                        <span class="rec-step-num">1</span>
+                        <span class="rec-step-title">Análisis</span>
+                        <span id="mp-step-hint-1" class="rec-step-hint">Requiere transcripción</span>
+                        <span class="rec-step-check">✓</span>
+                        <span class="rec-step-arrow">▾</span>
+                    </div>
+                    <div class="rec-step-body" id="mp-step-body-1">
+                        <p class="tool-description" style="margin:0 0 6px">Analiza la transcripción e identifica momentos donde motion graphics agregarían valor educativo.</p>
+                        <div id="mp-no-transcript" class="mp-warning-box">
+                            <span>⚠ Carga una transcripción en la pestaña Transcripción primero</span>
+                        </div>
+                        <div class="prompt-editor-toggle">
+                            <button id="btn-mp-prompt-toggle" class="btn btn-sm btn-ghost" title="Ver/editar el prompt de análisis">⚙ Editar Prompt</button>
+                        </div>
+                        <div id="mp-prompt-editor" class="prompt-editor hidden">
+                            <div id="mp-prompt-versions" class="prompt-versions-bar"></div>
+                            <label class="prompt-editor-label">System Message</label>
+                            <textarea id="mp-prompt-system" class="prompt-textarea prompt-textarea-sm" rows="3" spellcheck="false"></textarea>
+                            <label class="prompt-editor-label">Prompt — usa {TRANSCRIPT} donde va la transcripción</label>
+                            <textarea id="mp-prompt-user" class="prompt-textarea" rows="10" spellcheck="false"></textarea>
+                            <div class="prompt-editor-actions">
+                                <button id="btn-mp-prompt-save" class="btn btn-sm btn-success">💾 Guardar versión</button>
+                                <button id="btn-mp-prompt-reset" class="btn btn-sm btn-ghost">↩ Restaurar Original</button>
+                            </div>
+                        </div>
+                        <div class="action-bar">
+                            <button id="btn-mp-analyze" class="btn-analyze btn-analyze-alt btn-disabled" title="Analizar transcripción para identificar momentos de motion graphics">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+                                    <path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                <span class="btn-analyze-text">Analizar para Motions</span>
+                            </button>
+                        </div>
+                        <div id="mp-analyze-progress" class="progress-bar hidden">
+                            <div class="progress-track"><div id="mp-analyze-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                            <span id="mp-analyze-progress-text" class="progress-text">Analizando transcripción...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Proposals + Selection + Generation -->
+                <div class="rec-step" data-mp-step="2" id="mp-proposals-section" style="display:none">
+                    <div class="rec-step-header mp-step-header" data-mp-step="2">
+                        <span class="rec-step-num">2</span>
+                        <span class="rec-step-title">Selección y Generación</span>
+                        <span id="mp-step-hint-2" class="rec-step-hint"></span>
+                        <span class="rec-step-check">✓</span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="mp-step-body-2">
+                        <div id="mp-proposals-summary" class="summary-bar hidden">
+                            <div class="stat-box keep">
+                                <div class="stat-label">Propuestas</div>
+                                <div id="mp-proposal-count" class="stat-value">0</div>
+                                <div id="mp-proposal-detail" class="stat-detail">momentos identificados</div>
+                            </div>
+                            <div class="stat-box comment">
+                                <div class="stat-label">Seleccionados</div>
+                                <div id="mp-selected-count" class="stat-value">0</div>
+                                <div id="mp-selected-detail" class="stat-detail">para generar</div>
+                            </div>
+                        </div>
+                        <div class="result-actions" style="margin-bottom:6px">
+                            <button id="btn-mp-select-all" class="btn btn-sm btn-ghost">Seleccionar todos</button>
+                            <button id="btn-mp-generate" class="btn btn-sm btn-success btn-disabled" title="Genera motion graphics para las propuestas seleccionadas">🎬 Generar Seleccionados</button>
+                        </div>
+                        <div id="mp-proposal-list" class="mp-proposal-list"></div>
+                        <div id="mp-generate-progress" class="progress-bar mp-generate-progress-wrap hidden">
+                            <div class="mp-generate-progress-row">
+                                <div class="mp-generate-progress-main">
+                                    <div class="progress-track"><div id="mp-generate-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                                    <span id="mp-generate-progress-text" class="progress-text">Generando motions...</span>
+                                </div>
+                                <button type="button" id="btn-mp-generate-cancel" class="btn btn-sm btn-ghost mp-generate-cancel-btn" title="Detiene el lote al terminar el clip en curso (no cancela el render actual)">Detener</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Control Panel -->
+                <div class="rec-step" data-mp-step="3" id="mp-control-section" style="display:none">
+                    <div class="rec-step-header mp-step-header" data-mp-step="3">
+                        <span class="rec-step-num">3</span>
+                        <span class="rec-step-title">Panel de Control</span>
+                        <span id="mp-step-hint-3" class="rec-step-hint"></span>
+                        <span class="rec-step-check">✓</span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="mp-step-body-3">
+                        <div id="mp-motions-summary" class="summary-bar hidden">
+                            <div class="stat-box keep">
+                                <div class="stat-label">Generados</div>
+                                <div id="mp-motions-count" class="stat-value">0</div>
+                                <div class="stat-detail">clips en timeline</div>
+                            </div>
+                            <div class="stat-box comment">
+                                <div class="stat-label">Track</div>
+                                <div id="mp-track-info" class="stat-value">—</div>
+                                <div class="stat-detail">pista de video</div>
+                            </div>
+                        </div>
+                        <div id="mp-motions-list" class="mp-motions-list"></div>
+                    </div>
+                </div>
+
+                </div><!-- /mp-steps-wrapper -->
+
+                <!-- Empty state -->
+                <div id="mp-empty" class="empty-state-mini">
+                    <p class="empty-text">Carga una transcripción y presiona <strong>Analizar para Motions</strong> para comenzar</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Confirm Dialog (Cutter) -->
+    <div id="cutter-confirm-overlay" class="confirm-overlay hidden">
+        <div class="confirm-dialog">
+            <div class="confirm-title">Confirmar cortes</div>
+            <div id="cutter-confirm-msg" class="confirm-msg">
+                Se creará un backup de la secuencia y se ejecutarán los cortes. Esta acción modificará la secuencia activa.
+            </div>
+            <div class="confirm-actions">
+                <button id="btn-cutter-cancel" class="btn btn-ghost">Cancelar</button>
+                <button id="btn-cutter-confirm" class="btn btn-confirm-danger">Cortar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Modal (persistent, closeable) -->
+    <div id="info-modal-overlay" class="confirm-overlay hidden">
+        <div class="confirm-dialog info-modal-dialog">
+            <div class="confirm-title" id="info-modal-title">Información</div>
+            <div id="info-modal-body" class="info-modal-body"></div>
+            <div class="confirm-actions">
+                <button id="btn-info-modal-close" class="btn btn-ghost">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <!-- File inputs (hidden) -->
+    <input type="file" id="srt-file-input" accept=".srt,.vtt,.txt" style="display:none">
+    <input type="file" id="json-transcript-input" accept=".json" style="display:none">
+    <input type="file" id="audio-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.webm,.mp4" style="display:none">
+
+    <!-- Scripts -->
+    <script src="js/CSInterface.js"></script>
+    <script src="js/spellcheck-engine.js"></script>
+    <script src="js/context-rules.js"></script>
+    <script src="js/ai-analyzer.js"></script>
+    <script src="js/cutter.js"></script>
+    <script src="js/speech-to-text.js"></script>
+    <script src="js/recording-notes.js"></script>
+    <script src="js/motion-pro.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

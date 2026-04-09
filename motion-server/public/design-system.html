@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Motion Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #1a1d23;
+  --bg-card: #2d323a;
+  --bg-sidebar: #22262e;
+  --border-color: rgba(255,255,255,0.08);
+  --border-hover: rgba(255,255,255,0.06);
+  --border-radius: 12px;
+  --color-text: #fff;
+  --color-text-muted: rgba(255,255,255,0.55);
+  --color-accent: #0ae98d;
+  --color-accent-glow: rgba(10,233,141,0.08);
+  --shadow-card: 0px 8px 24px 0px rgba(10,233,141,0.08);
+  --shadow-hover: 0px 4px 16px 0px rgba(0,0,0,0.2);
+  --padding-card: 24px;
+  --sidebar-width: 280px;
+  --zone-titulos: rgba(56,89,115,0.6);
+  --zone-supertextos: rgba(46,102,77,0.6);
+  --zone-disclaimers: rgba(64,64,64,0.6);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--bg-primary);color:var(--color-text);line-height:24px;overflow-x:hidden}
+
+/* SIDEBAR */
+.sidebar{position:fixed;top:0;left:0;width:var(--sidebar-width);height:100vh;background:var(--bg-sidebar);border-right:1px solid var(--border-color);z-index:100;display:flex;flex-direction:column;transition:transform .3s cubic-bezier(.4,0,.2,1)}
+.sidebar.collapsed{transform:translateX(calc(-1*var(--sidebar-width)))}
+.sidebar-header{padding:20px;border-bottom:1px solid var(--border-color);position:relative}
+.sidebar-header h2{font-size:15px;font-weight:600;color:var(--color-accent);letter-spacing:.5px;margin-bottom:12px}
+.search-box{width:100%;padding:8px 12px;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:8px;color:var(--color-text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s}
+.search-box:focus{border-color:var(--color-accent)}
+.search-box::placeholder{color:var(--color-text-muted)}
+.sidebar-nav{flex:1;overflow-y:auto;padding:12px 0}
+.sidebar-nav::-webkit-scrollbar{width:4px}
+.sidebar-nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px}
+.nav-section{padding:0 12px;margin-bottom:8px}
+.nav-section-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--color-text-muted);padding:8px 8px 4px}
+.nav-link{display:block;padding:7px 12px;color:rgba(255,255,255,.7);text-decoration:none;font-size:13px;border-radius:6px;transition:all .15s}
+.nav-link:hover{background:rgba(255,255,255,.05);color:#fff}
+.nav-link.active{background:var(--color-accent-glow);color:var(--color-accent)}
+.nav-link.hidden{display:none}
+.sidebar-toggle{position:absolute;top:20px;right:-52px;z-index:200;width:36px;height:36px;background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;color:var(--color-text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:all .3s}
+.sidebar-toggle:hover{background:var(--color-accent);color:var(--bg-primary)}
+
+/* MAIN */
+.main{margin-left:var(--sidebar-width);padding:40px 40px 40px 56px;transition:margin-left .3s cubic-bezier(.4,0,.2,1);max-width:1200px}
+.sidebar.collapsed~.main{margin-left:0;padding-left:60px}
+.page-title{font-size:36px;font-weight:600;margin-bottom:8px;line-height:1.2;background:linear-gradient(135deg,var(--color-accent),#4aeadc);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.page-subtitle{color:var(--color-text-muted);font-size:15px;margin-bottom:48px}
+.section{margin-bottom:64px;scroll-margin-top:32px}
+.section-title{font-size:24px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.section-title .badge{font-size:11px;padding:2px 8px;background:var(--color-accent-glow);color:var(--color-accent);border-radius:4px;font-weight:600}
+.section-desc{color:var(--color-text-muted);font-size:14px;margin-bottom:24px;max-width:720px}
+.glass-card{background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:var(--padding-card);box-shadow:var(--shadow-card);transition:border-color .2s,box-shadow .2s;margin-bottom:20px}
+.glass-card:hover{border-color:var(--border-hover);box-shadow:var(--shadow-hover)}
+.card-label{font-size:13px;color:var(--color-text-muted);margin-bottom:16px;font-weight:500}
+
+/* PROGRESS BAR */
+.progress-track{position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.06);z-index:15}
+.progress-fill{height:100%;width:0;background:var(--color-accent);border-radius:0 2px 2px 0}
+
+/* ANIM CARDS */
+.anim-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:16px}
+.anim-card{background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--border-radius);overflow:hidden;transition:border-color .2s}
+.anim-card:hover{border-color:rgba(10,233,141,.15)}
+.anim-card-stage{width:100%;aspect-ratio:16/9;background:#13161b;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.anim-card-info{padding:16px}
+.anim-card-info h4{font-size:14px;font-weight:600;margin-bottom:4px}
+.anim-card-info p{font-size:12px;color:var(--color-text-muted)}
+.anim-card-info code{font-size:11px;background:rgba(10,233,141,.1);color:var(--color-accent);padding:1px 6px;border-radius:3px}
+.replay-btn{position:absolute;bottom:8px;right:8px;width:28px;height:28px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:var(--color-accent);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;z-index:10;transition:background .15s}
+.replay-btn:hover{background:rgba(10,233,141,.2)}
+.replay-btn{display:none}
+.anim-card-stage{cursor:pointer}
+.anim-text{font-size:24px;font-weight:600;color:#fff;font-family:'DM Sans',sans-serif}
+.anim-text.small{font-size:16px}
+.char-stagger span{display:inline-block;animation:charIn .4s cubic-bezier(.16,1,.3,1) both}
+
+/* EDITABLE PARAMS */
+.editable-param{display:inline-flex;align-items:center;gap:4px}
+.editable-param input{background:transparent;border:none;border-bottom:1px solid transparent;color:var(--color-accent);font-family:'DM Sans',monospace;font-size:12px;padding:1px 4px;outline:none;width:auto;min-width:40px;transition:all .15s}
+.editable-param input:hover{border-bottom-color:rgba(10,233,141,.3)}
+.editable-param input:focus{border-bottom-color:var(--color-accent);background:rgba(10,233,141,.05);border-radius:2px 2px 0 0}
+.reset-btn{width:18px;height:18px;border:none;border-radius:3px;background:rgba(255,255,255,.05);color:var(--color-text-muted);cursor:pointer;font-size:10px;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;opacity:0}
+.editable-param:hover .reset-btn{opacity:1}
+.reset-btn:hover{background:rgba(10,233,141,.15);color:var(--color-accent)}
+
+/* DIRECTION SELECT */
+.dir-select{background:var(--bg-primary);border:1px solid var(--border-color);border-radius:6px;color:var(--color-text);font-family:'DM Sans',sans-serif;font-size:13px;padding:4px 8px;outline:none;cursor:pointer;transition:border-color .15s}
+.dir-select:focus{border-color:var(--color-accent)}
+
+/* TABLES */
+.params-table{width:100%;border-collapse:collapse;font-size:13px}
+.params-table th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border-color);color:var(--color-text-muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.params-table td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.03)}
+.params-table tr:hover td{background:rgba(255,255,255,.02)}
+.params-table code{background:rgba(10,233,141,.1);color:var(--color-accent);padding:1px 6px;border-radius:3px;font-size:12px}
+
+/* LAYOUT SELECTOR */
+.ratio-btn{padding:12px 20px;background:rgba(255,255,255,.04);border:1px solid var(--border-color);border-radius:8px;color:var(--color-text-muted);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;transition:all .2s;text-align:center}
+.ratio-btn:hover{border-color:rgba(10,233,141,.3);color:#fff}
+.ratio-btn.active{border-color:var(--color-accent);color:var(--color-accent);background:var(--color-accent-glow)}
+.ratio-btn .ratio-icon{display:block;margin:0 auto 8px;border:2px solid currentColor;border-radius:3px}
+
+/* COMPOSITION */
+.comp-preview{position:relative;width:100%;background:#181b20;border-radius:8px;overflow:hidden;border:1px solid var(--border-color)}
+.comp-grid{position:absolute;inset:0;display:grid;pointer-events:none}
+.comp-grid .cell{border:1px solid rgba(10,233,141,.12)}
+.comp-photo{position:absolute;inset:0;background-position:center;background-size:cover;background-repeat:no-repeat;z-index:1}
+.zone-label{position:absolute;font-size:10px;text-transform:uppercase;letter-spacing:1px;padding:2px 8px;border-radius:3px;color:rgba(255,255,255,.7);z-index:10;pointer-events:none}
+
+/* LAYOUT THUMBS */
+.layout-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.layout-thumb{background:#13161b;border:1px solid var(--border-color);border-radius:8px;position:relative;overflow:hidden;cursor:pointer;transition:border-color .2s}
+.layout-thumb:hover{border-color:var(--color-accent)}
+.layout-thumb .photo-area{position:absolute;background:linear-gradient(135deg,#5b8cc9,#8ec5d6);display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(255,255,255,.5)}
+.layout-thumb .text-area{position:absolute;background:rgba(10,233,141,.15);border:1px dashed rgba(10,233,141,.3);display:flex;align-items:center;justify-content:center}
+.layout-thumb .text-area span{font-size:8px;color:var(--color-accent);text-transform:uppercase;letter-spacing:.5px}
+.layout-label{position:absolute;bottom:6px;left:6px;font-size:9px;color:rgba(255,255,255,.5);background:rgba(0,0,0,.5);padding:2px 6px;border-radius:3px}
+
+/* POSITION GRID */
+.pos-grid-wrapper{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
+.position-grid-container{display:flex;flex-direction:column;gap:12px;flex:1;min-width:280px}
+.pos-preview-panel{flex:1;min-width:300px;position:sticky;top:40px}
+.pos-preview-box{position:relative;width:100%;background:#13161b;border-radius:8px;border:1px solid var(--border-color);overflow:hidden}
+.pos-hello{position:absolute;font-size:14px;font-weight:600;color:var(--color-accent);transform:translate(-50%,-50%);transition:all .25s cubic-bezier(.16,1,.3,1);pointer-events:none;opacity:0;white-space:nowrap}
+.pos-hello.visible{opacity:1}
+.pos-crosshair-h,.pos-crosshair-v{position:absolute;background:rgba(10,233,141,.15);transition:all .25s cubic-bezier(.16,1,.3,1);pointer-events:none;opacity:0}
+.pos-crosshair-h{height:1px;left:0;right:0}
+.pos-crosshair-v{width:1px;top:0;bottom:0}
+.pos-crosshair-h.visible,.pos-crosshair-v.visible{opacity:1}
+.pos-zone{border-radius:8px;padding:12px}
+.pos-zone-title{font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600}
+.pos-zone.titulos{background:var(--zone-titulos)}
+.pos-zone.titulos .pos-zone-title{color:#7abfff}
+.pos-zone.supertextos{background:var(--zone-supertextos)}
+.pos-zone.supertextos .pos-zone-title{color:var(--color-accent)}
+.pos-zone.disclaimers{background:var(--zone-disclaimers)}
+.pos-zone.disclaimers .pos-zone-title{color:rgba(255,255,255,.5)}
+.pos-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.pos-dot{aspect-ratio:1;border-radius:4px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--color-text-muted);cursor:pointer;transition:all .15s;position:relative}
+.pos-dot:hover{background:var(--color-accent-glow);border-color:var(--color-accent);color:var(--color-accent)}
+.pos-dot.center{background:var(--color-accent-glow);border-color:var(--color-accent);color:var(--color-accent);font-weight:600;font-size:14px}
+
+/* OTHER */
+.stroker-line{height:4px;background:var(--color-accent);transform-origin:left center;border-radius:2px}
+.color-swatches{display:flex;gap:12px;flex-wrap:wrap}
+.swatch{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.03);border:1px solid var(--border-color);border-radius:8px;padding:10px 14px}
+.swatch-color{width:32px;height:32px;border-radius:6px;border:1px solid rgba(255,255,255,.1)}
+.swatch-info .swatch-name{font-size:12px;font-weight:600}
+.swatch-info .swatch-value{font-size:11px;color:var(--color-text-muted);font-family:monospace}
+.carousel-stage{position:relative;width:100%;aspect-ratio:16/9;background:#13161b;border-radius:8px;overflow:hidden;border:1px solid var(--border-color)}
+.carousel-orbit{position:absolute;top:50%;left:50%;width:200px;height:200px;margin:-100px 0 0 -100px}
+.carousel-item{position:absolute;width:50px;height:50px;background:var(--color-accent);border-radius:8px;top:50%;left:50%;margin:-25px 0 0 -25px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;color:var(--bg-primary)}
+.easing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.easing-item{background:rgba(255,255,255,.03);border:1px solid var(--border-color);border-radius:8px;padding:16px;text-align:center;position:relative;overflow:hidden}
+.easing-item h5{font-size:12px;margin-bottom:8px;color:var(--color-accent)}
+.easing-item code{display:block;margin-top:8px;font-size:10px;color:var(--color-text-muted)}
+
+/* KEYFRAMES */
+@keyframes progressFill{0%{width:0}100%{width:100%}}
+@keyframes charIn{0%{transform:translateY(40px);opacity:0}100%{transform:translateY(0);opacity:1}}
+@keyframes scaleIn{0%{transform:scale(0)}100%{transform:scale(1)}}
+@keyframes scaleOut{0%{transform:scale(1)}100%{transform:scale(0)}}
+@keyframes strokerGrow{0%{transform:scaleX(0)}100%{transform:scaleX(1)}}
+@keyframes carouselSpin{0%{transform:rotate(0deg) translateX(100px) rotate(0deg)}100%{transform:rotate(360deg) translateX(100px) rotate(-360deg)}}
+@keyframes trimIn{0%{clip-path:inset(0 100% 0 0)}100%{clip-path:inset(0 0 0 0)}}
+@keyframes trimOut{0%{clip-path:inset(0 0 0 0)}100%{clip-path:inset(0 0 0 100%)}}
+@keyframes trimCenter{0%{clip-path:inset(0 50% 0 50%)}100%{clip-path:inset(0 0 0 0)}}
+@keyframes trimBoth{0%{clip-path:inset(0 100% 0 0)}50%{clip-path:inset(0 0 0 0)}100%{clip-path:inset(0 0 0 100%)}}
+
+/* COLLAPSIBLE SECTIONS */
+details.collapsible{border-top:1px solid var(--border-color);margin-top:16px;padding-top:12px}
+details.collapsible summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--color-text-muted);user-select:none;transition:color .2s}
+details.collapsible summary:hover{color:#fff}
+details.collapsible summary::-webkit-details-marker{display:none}
+details.collapsible summary::before{content:'';display:inline-block;width:0;height:0;border-left:5px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;transition:transform .2s}
+details.collapsible[open] summary::before{transform:rotate(90deg)}
+details.collapsible .collapsible-body{margin-top:16px}
+
+@media(max-width:768px){
+.sidebar{width:260px}.main{margin-left:0;padding:20px}.sidebar:not(.collapsed)~.main{margin-left:0}
+.layout-grid{grid-template-columns:repeat(2,1fr)}.layout-grid.vertical-ratio{grid-template-columns:repeat(3,1fr)}.anim-row{grid-template-columns:1fr}.pos-grid-wrapper{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <h2>MOTION DESIGN SYSTEM</h2>
+    <button class="sidebar-toggle" id="sidebarToggle">&#9776;</button>
+    <input type="text" class="search-box" id="searchBox" placeholder="Buscar secciones...">
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-section">
+      <div class="nav-section-title">Fundamentos</div>
+      <a href="#overview" class="nav-link active" data-search="overview resumen">Resumen General</a>
+      <a href="#layout" class="nav-link" data-search="layout aspect ratio formato">Layout / Formato</a>
+      <a href="#design-tokens" class="nav-link" data-search="tokens colores estilos css">Design Tokens</a>
+      <a href="#composition" class="nav-link" data-search="composicion grilla base estados">Base de Composici&oacute;n</a>
+      <a href="#position-grid" class="nav-link" data-search="posicion grid cuadricula zonas">Position Grid</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Movimiento</div>
+      <a href="#supertextos" class="nav-link" data-search="supertextos mover texto movimiento">Supertextos</a>
+      <a href="#text-animations" class="nav-link" data-search="texto caracteres palabras lineas">Animaci&oacute;n por Texto</a>
+      <a href="#move-in-out" class="nav-link" data-search="move in out entrada salida">Move In / Move Out</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Efectos</div>
+      <a href="#scaler" class="nav-link" data-search="escala scale zoom">Scaler</a>
+      <a href="#stroker" class="nav-link" data-search="stroker highlight subrayado">Stroker</a>
+      <a href="#trim-reveal" class="nav-link" data-search="trim reveal revelar recorte">Trim / Reveal</a>
+      <a href="#carousel" class="nav-link" data-search="carrusel radial circular">Carrusel</a>
+    </div>
+  </div>
+</nav>
+
+<div class="main" id="mainContent">
+
+  <!-- OVERVIEW -->
+  <section class="section" id="overview">
+    <h1 class="page-title">Motion Design System</h1>
+    <p class="page-subtitle">Manual interactivo del sistema de motion para composiciones en After Effects.</p>
+  </section>
+
+  <!-- LAYOUT -->
+  <section class="section" id="layout">
+    <h2 class="section-title">Layout <span class="badge">Formato</span></h2>
+    <p class="section-desc">Selecciona el formato. El grid, las zonas y la composici&oacute;n se adaptan al aspect ratio elegido.</p>
+    <div class="glass-card">
+      <div class="card-label">Selecciona el formato</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
+        <button class="ratio-btn active" onclick="setRatio(this,'16:9',16,9)"><span class="ratio-icon" style="width:48px;height:27px;"></span>16:9<div style="font-size:10px;color:var(--color-text-muted);margin-top:2px;">1920&times;1080</div></button>
+        <button class="ratio-btn" onclick="setRatio(this,'1:1',1,1)"><span class="ratio-icon" style="width:36px;height:36px;"></span>1:1<div style="font-size:10px;color:var(--color-text-muted);margin-top:2px;">1080&times;1080</div></button>
+        <button class="ratio-btn" onclick="setRatio(this,'4:5',4,5)"><span class="ratio-icon" style="width:32px;height:40px;"></span>4:5<div style="font-size:10px;color:var(--color-text-muted);margin-top:2px;">1080&times;1350</div></button>
+        <button class="ratio-btn" onclick="setRatio(this,'9:16',9,16)"><span class="ratio-icon" style="width:24px;height:42px;"></span>9:16<div style="font-size:10px;color:var(--color-text-muted);margin-top:2px;">1080&times;1920</div></button>
+      </div>
+      <div class="card-label" style="margin-bottom:8px;">Vista previa del grid <span id="ratioLabel" style="color:var(--color-accent);">16:9</span></div>
+      <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+        <div id="layoutPreviewWrapper" style="width:180px;flex-shrink:0;aspect-ratio:16/9;">
+          <div id="layoutPreview" class="comp-preview" style="width:100%;height:100%;aspect-ratio:16/9;">
+            <div class="comp-grid" id="layoutGrid" style="grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(4,1fr);"></div>
+            <div style="position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed rgba(10,233,141,.4);z-index:3;"></div>
+            <div class="zone-label" style="top:4%;left:3%;background:var(--zone-titulos);font-size:6px;padding:1px 3px;">T</div>
+            <div class="zone-label" style="top:35%;left:3%;background:var(--zone-supertextos);font-size:6px;padding:1px 3px;">S</div>
+            <div class="zone-label" style="bottom:4%;left:3%;background:var(--zone-disclaimers);font-size:6px;padding:1px 3px;">D</div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:180px;">
+          <table class="params-table" style="font-size:12px;">
+            <tr><td>Columnas</td><td id="layoutCols"><code>8</code></td></tr>
+            <tr><td>Filas</td><td id="layoutRows"><code>4</code></td></tr>
+            <tr><td>Resoluci&oacute;n</td><td id="layoutRes"><code>1920&times;1080</code></td></tr>
+            <tr><td>Zona T&iacute;tulos</td><td id="layoutZoneT"><code>Top ~25%</code></td></tr>
+            <tr><td>Zona Supertextos</td><td id="layoutZoneS"><code>Center ~50%</code></td></tr>
+            <tr><td>Zona Disclaimers</td><td id="layoutZoneD"><code>Bottom ~25%</code></td></tr>
+          </table>
+        </div>
+      </div>
+      <details class="collapsible">
+        <summary>Notas de formato</summary>
+        <div class="collapsible-body">
+          <ul style="font-size:13px;color:var(--color-text-muted);padding-left:20px;display:flex;flex-direction:column;gap:6px;">
+            <li><strong style="color:#fff;">16:9</strong> &mdash; Est&aacute;ndar de video. Grid 8&times;4. Pantalla completa, supertextos junto a profesor y B-Roll.</li>
+            <li><strong style="color:#fff;">1:1</strong> &mdash; Cuadrado para redes. Grid 6&times;6. Supertextos ocupan m&aacute;s espacio vertical.</li>
+            <li><strong style="color:#fff;">4:5</strong> &mdash; Vertical para feed. Grid 5&times;6. Texto centrado con foto superior.</li>
+            <li><strong style="color:#fff;">9:16</strong> &mdash; Stories/Reels. Grid 4&times;8. Zonas apiladas verticalmente.</li>
+          </ul>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- DESIGN TOKENS -->
+  <section class="section" id="design-tokens">
+    <h2 class="section-title">Design Tokens <span class="badge">CSS</span></h2>
+    <p class="section-desc">Colores, sombras, bordes y espaciado basados en <code>.glass-card.p-6</code>.</p>
+    <div class="glass-card">
+      <div class="card-label">Colores principales</div>
+      <div class="color-swatches">
+        <div class="swatch"><div class="swatch-color" style="background:#2d323a;"></div><div class="swatch-info"><div class="swatch-name">Background Card</div><div class="swatch-value">#2d323a</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#1a1d23;"></div><div class="swatch-info"><div class="swatch-name">Background Primary</div><div class="swatch-value">#1a1d23</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#0ae98d;"></div><div class="swatch-info"><div class="swatch-name">Accent Green</div><div class="swatch-value">#0ae98d</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#fff;"></div><div class="swatch-info"><div class="swatch-name">Text</div><div class="swatch-value">#ffffff</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);"></div><div class="swatch-info"><div class="swatch-name">Border</div><div class="swatch-value">#ffffff14</div></div></div>
+      </div>
+      <details class="collapsible">
+        <summary>Propiedades del Card</summary>
+        <div class="collapsible-body">
+          <table class="params-table">
+            <tr><th>Propiedad</th><th>Valor</th></tr>
+            <tr><td>background-color</td><td><code>#2d323a</code></td></tr>
+            <tr><td>border</td><td><code>1px solid #ffffff14</code></td></tr>
+            <tr><td>border-radius</td><td><code>12px</code></td></tr>
+            <tr><td>box-shadow</td><td><code>#0ae98d14 0 8px 24px</code></td></tr>
+            <tr><td>padding</td><td><code>24px</code></td></tr>
+          </table>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- COMPOSITION -->
+  <section class="section" id="composition">
+    <h2 class="section-title">Base de Composici&oacute;n <span class="badge">Layout</span></h2>
+    <p class="section-desc">El lienzo se divide en secciones iguales. Las l&iacute;neas punteadas son centros verticales de alineaci&oacute;n. La vista se adapta al formato seleccionado en Layout.</p>
+    <div class="glass-card">
+      <div class="card-label">Casos de composici&oacute;n (referencia de im&aacute;genes)</div>
+      <div class="layout-grid" id="compositionCases"></div>
+      <p style="font-size:12px;color:var(--color-text-muted);margin-top:16px;"><strong style="color:rgba(255,255,255,.7);">img/01:</strong> Lienzo dividido en 8 secciones iguales. <strong style="color:rgba(255,255,255,.7);">img/02:</strong> Subdivisi&oacute;n con l&iacute;neas punteadas para balance. <strong style="color:rgba(255,255,255,.7);">img/03:</strong> 6 estados de composici&oacute;n con diferentes posiciones de foto y texto.</p>
+    </div>
+    <div class="glass-card">
+      <div class="card-label">Vista previa: Grid con centros de alineaci&oacute;n <span id="compRatioLabel" style="color:var(--color-accent);">16:9</span></div>
+      <div id="compPreviewWrapper" style="max-width:640px;width:100%;aspect-ratio:16/9;">
+        <div id="compPreview" class="comp-preview" style="width:100%;height:100%;aspect-ratio:16/9;">
+          <div class="comp-photo" id="compPhoto" style="opacity:.35;background-image:url('img/foto_imageref.png');"></div>
+          <div class="comp-grid" id="compGridCells" style="grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(4,1fr);"></div>
+          <div id="compDashedLines"></div>
+          <div class="zone-label" style="top:2%;left:2%;background:var(--zone-titulos);">T&iacute;tulos</div>
+          <div class="zone-label" style="top:30%;left:2%;background:var(--zone-supertextos);">Supertextos</div>
+          <div class="zone-label" style="bottom:3%;left:2%;background:var(--zone-disclaimers);">Disclaimers</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- POSITION GRID -->
+  <section class="section" id="position-grid">
+    <h2 class="section-title">Position Grid <span class="badge">PositionGrid</span></h2>
+    <p class="section-desc">Grid de 7&times;7 con 49 posiciones predefinidas (1920&times;1080). 3 zonas: T&iacute;tulos, Supertextos, Disclaimers. Hover para ver la posici&oacute;n en el preview.</p>
+    <div class="glass-card">
+      <div class="pos-grid-wrapper">
+        <div class="position-grid-container">
+          <div class="pos-zone titulos"><div class="pos-zone-title">T&iacute;tulos (Y: 180, 270)</div><div class="pos-grid" id="gridTitulos"></div></div>
+          <div class="pos-zone supertextos"><div class="pos-zone-title">Supertextos (Y: 360, 540, 720)</div><div class="pos-grid" id="gridSupertextos"></div></div>
+          <div class="pos-zone disclaimers"><div class="pos-zone-title">Disclaimers (Y: 810, 900)</div><div class="pos-grid" id="gridDisclaimers"></div></div>
+        </div>
+        <div class="pos-preview-panel">
+          <div class="card-label">Preview de posici&oacute;n</div>
+          <div id="posPreviewWrapper" style="aspect-ratio:16/9;width:100%;">
+          <div class="pos-preview-box" id="posPreviewBox" style="width:100%;height:100%;aspect-ratio:16/9;">
+            <div class="comp-grid" id="posPreviewGrid" style="grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(4,1fr);"></div>
+            <div class="pos-crosshair-h" id="posCrossH"></div>
+            <div class="pos-crosshair-v" id="posCrossV"></div>
+            <div class="pos-hello" id="posHello">Hello</div>
+          </div>
+          </div>
+          <div id="posCoordLabel" style="font-size:11px;color:var(--color-text-muted);margin-top:8px;height:18px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="glass-card">
+      <div class="card-label">Coordenadas (1920&times;1080)</div>
+      <table class="params-table">
+        <tr><th>Eje</th><th>Valores (px)</th><th>Zona</th></tr>
+        <tr><td>X</td><td><code>360</code> <code>480</code> <code>600</code> <code>960</code> <code>1320</code> <code>1440</code> <code>1560</code></td><td>7 columnas</td></tr>
+        <tr><td>Y T&iacute;tulos</td><td><code>180</code> <code>270</code></td><td style="color:#7abfff">Filas 0-1</td></tr>
+        <tr><td>Y Supertextos</td><td><code>360</code> <code>540</code> <code>720</code></td><td style="color:var(--color-accent)">Filas 2-4</td></tr>
+        <tr><td>Y Disclaimers</td><td><code>810</code> <code>900</code></td><td style="color:rgba(255,255,255,.5)">Filas 5-6</td></tr>
+      </table>
+    </div>
+    <div class="glass-card">
+      <div class="card-label">Uso t&iacute;pico por zona</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+        <div style="background:var(--zone-titulos);border-radius:8px;padding:16px;"><div style="font-size:13px;font-weight:600;color:#7abfff;margin-bottom:6px;">T&iacute;tulos</div><div style="font-size:12px;color:rgba(255,255,255,.6);">Nombres, logos, t&iacute;tulos de secci&oacute;n. Y: 180-270px.</div></div>
+        <div style="background:var(--zone-supertextos);border-radius:8px;padding:16px;"><div style="font-size:13px;font-weight:600;color:var(--color-accent);margin-bottom:6px;">Supertextos</div><div style="font-size:12px;color:rgba(255,255,255,.6);">Textos principales, bullets. [960,540] es el centro exacto.</div></div>
+        <div style="background:var(--zone-disclaimers);border-radius:8px;padding:16px;"><div style="font-size:13px;font-weight:600;color:rgba(255,255,255,.5);margin-bottom:6px;">Disclaimers</div><div style="font-size:12px;color:rgba(255,255,255,.6);">Textos legales, cr&eacute;ditos, notas al pie. Y: 810-900px.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SUPERTEXTOS -->
+  <section class="section" id="supertextos">
+    <h2 class="section-title">Supertextos <span class="badge">MoverPro</span></h2>
+    <p class="section-desc">Movimiento de texto de abajo hacia arriba. Entradas suben desde abajo, salidas contin&uacute;an hacia arriba. Con o sin opacidad.</p>
+    <div class="glass-card" style="margin-bottom:20px;">
+      <div class="card-label">Direcci&oacute;n</div>
+      <select class="dir-select" id="superDir" onchange="refreshSuper()">
+        <option value="0">&uarr; Arriba (0&deg;)</option><option value="180">&darr; Abajo (180&deg;)</option><option value="270">&larr; Izquierda (270&deg;)</option><option value="90">&rarr; Derecha (90&deg;)</option><option value="315">&nwarr; Noroeste (315&deg;)</option><option value="45">&nearr; Noreste (45&deg;)</option><option value="135">&searr; Sureste (135&deg;)</option><option value="225">&swarr; Suroeste (225&deg;)</option>
+      </select>
+    </div>
+    <div class="anim-row" id="superAnimRow"></div>
+    <div class="glass-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="card-label" style="margin:0;">Par&aacute;metros por defecto</div>
+        <button onclick="resetGroup('super');refreshSuper()" style="background:none;border:1px solid var(--border-color);border-radius:4px;color:var(--color-text-muted);font-size:10px;padding:2px 8px;cursor:pointer;font-family:'DM Sans',sans-serif;">Reset all</button>
+      </div>
+      <table class="params-table">
+        <tr><th>Par&aacute;metro</th><th>Valor</th><th>Descripci&oacute;n</th></tr>
+        <tr><td>Duration</td><td><span class="editable-param"><input id="p_super_dur" data-default="15" value="15" style="width:50px;" oninput="refreshSuper()"> frames <button class="reset-btn" onclick="this.previousElementSibling.previousElementSibling.value=this.previousElementSibling.previousElementSibling.dataset.default;refreshSuper()">&times;</button></span></td><td>Duraci&oacute;n de la animaci&oacute;n</td></tr>
+        <tr><td>Amount</td><td><span class="editable-param"><input id="p_super_amt" data-default="200" value="200" style="width:50px;" oninput="refreshSuper()"> px <button class="reset-btn" onclick="this.previousElementSibling.previousElementSibling.value=this.previousElementSibling.previousElementSibling.dataset.default;refreshSuper()">&times;</button></span></td><td>Distancia de desplazamiento</td></tr>
+        <tr><td>Delay</td><td><span class="editable-param"><input id="p_super_del" data-default="2" value="2" style="width:50px;" oninput="refreshSuper()"> frames <button class="reset-btn" onclick="this.previousElementSibling.previousElementSibling.value=this.previousElementSibling.previousElementSibling.dataset.default;refreshSuper()">&times;</button></span></td><td>Retraso entre elementos</td></tr>
+        <tr><td>Easing</td><td><span class="editable-param"><select id="p_super_ease" class="dir-select" style="font-size:12px;padding:2px 6px;" onchange="refreshSuper()"><option value="1">Ease Out</option><option value="0">Linear</option><option value="2">Ease In</option><option value="3">Ease In Out</option><option value="4">Bounce Out</option><option value="5">Elastic Out</option><option value="6">Back Out</option></select></span></td><td>Curva de aceleraci&oacute;n</td></tr>
+      </table>
+    </div>
+    <div class="glass-card">
+      <div class="card-label">Curvas de Easing disponibles</div>
+      <div class="easing-grid" id="easingGrid"></div>
+    </div>
+  </section>
+
+  <!-- TEXT ANIMATIONS -->
+  <section class="section" id="text-animations">
+    <h2 class="section-title">Animaci&oacute;n por Texto <span class="badge">MoverPro</span></h2>
+    <p class="section-desc">5 modos: Layer, Caracteres, Caracteres sin espacios, Palabras, L&iacute;neas. Delay escalonado entre elementos.</p>
+    <div class="anim-row" id="textAnimRow"></div>
+  </section>
+
+  <!-- MOVE IN / MOVE OUT -->
+  <section class="section" id="move-in-out">
+    <h2 class="section-title">Move In / Move Out <span class="badge">Direcci&oacute;n</span></h2>
+    <p class="section-desc">Move In: entra desde la direcci&oacute;n seleccionada. Move Out: sale. Se pueden apilar m&uacute;ltiples animaciones.</p>
+    <div class="glass-card" style="margin-bottom:20px;">
+      <div class="card-label">Direcci&oacute;n</div>
+      <select class="dir-select" id="moveDir" onchange="refreshMove()">
+        <option value="0">&uarr; Arriba (0&deg;)</option><option value="180">&darr; Abajo (180&deg;)</option><option value="270">&larr; Izquierda (270&deg;)</option><option value="90">&rarr; Derecha (90&deg;)</option><option value="315">&nwarr; Noroeste (315&deg;)</option><option value="45">&nearr; Noreste (45&deg;)</option><option value="135">&searr; Sureste (135&deg;)</option><option value="225">&swarr; Suroeste (225&deg;)</option>
+      </select>
+    </div>
+    <div id="moveInOutArea"></div>
+  </section>
+
+  <!-- SCALER -->
+  <section class="section" id="scaler">
+    <h2 class="section-title">Scaler <span class="badge">Escala</span></h2>
+    <p class="section-desc">Scale In (0% a 100%) y Scale Out (100% a 0%).</p>
+    <div class="glass-card" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;"><div class="card-label" style="margin:0;">Par&aacute;metros</div><button onclick="document.getElementById('p_scaler_fr').value='5';refreshScaler()" style="background:none;border:1px solid var(--border-color);border-radius:4px;color:var(--color-text-muted);font-size:10px;padding:2px 8px;cursor:pointer;font-family:'DM Sans',sans-serif;">Reset</button></div>
+      <div style="margin-top:8px;"><span class="editable-param">Frames: <input id="p_scaler_fr" data-default="5" value="5" style="width:40px;" oninput="refreshScaler()"> <button class="reset-btn" onclick="document.getElementById('p_scaler_fr').value='5';refreshScaler()">&times;</button></span></div>
+    </div>
+    <div class="anim-row" id="scalerRow"></div>
+  </section>
+
+  <!-- STROKER -->
+  <section class="section" id="stroker">
+    <h2 class="section-title">Stroker <span class="badge">Highlight</span></h2>
+    <p class="section-desc">L&iacute;neas responsivas usando <code>sourceRectAtTime()</code>. 3 alineaciones.</p>
+    <div class="glass-card" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;"><div class="card-label" style="margin:0;">Par&aacute;metros</div><button onclick="document.getElementById('p_stroker_w').value='60';document.getElementById('p_stroker_p').value='10';refreshStroker()" style="background:none;border:1px solid var(--border-color);border-radius:4px;color:var(--color-text-muted);font-size:10px;padding:2px 8px;cursor:pointer;font-family:'DM Sans',sans-serif;">Reset</button></div>
+      <div style="display:flex;gap:20px;margin-top:8px;flex-wrap:wrap;">
+        <span class="editable-param">Width: <input id="p_stroker_w" data-default="60" value="60" style="width:40px;" oninput="refreshStroker()"> px</span>
+        <span class="editable-param">Padding: <input id="p_stroker_p" data-default="10" value="10" style="width:40px;" oninput="refreshStroker()">%</span>
+      </div>
+    </div>
+    <div class="anim-row" id="strokerRow"></div>
+  </section>
+
+  <!-- TRIM / REVEAL -->
+  <section class="section" id="trim-reveal">
+    <h2 class="section-title">Trim / Reveal <span class="badge">TrimPowerProMax</span></h2>
+    <p class="section-desc">Revelaci&oacute;n de paths con Trim Paths. 4 modos autom&aacute;ticos + manual.</p>
+    <div class="glass-card" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;"><div class="card-label" style="margin:0;">Par&aacute;metros</div><button onclick="document.getElementById('p_trim_fr').value='20';refreshTrim()" style="background:none;border:1px solid var(--border-color);border-radius:4px;color:var(--color-text-muted);font-size:10px;padding:2px 8px;cursor:pointer;font-family:'DM Sans',sans-serif;">Reset</button></div>
+      <div style="margin-top:8px;"><span class="editable-param">Frames: <input id="p_trim_fr" data-default="20" value="20" style="width:40px;" oninput="refreshTrim()"> <button class="reset-btn" onclick="document.getElementById('p_trim_fr').value='20';refreshTrim()">&times;</button></span></div>
+    </div>
+    <div class="anim-row" id="trimRow"></div>
+  </section>
+
+  <!-- CAROUSEL -->
+  <section class="section" id="carousel">
+    <h2 class="section-title">Carrusel <span class="badge">Array radial</span></h2>
+    <p class="section-desc">Distribuye capas en un patr&oacute;n circular alrededor de un null controlador.</p>
+    <div class="glass-card">
+      <div class="carousel-stage" style="max-width:640px;">
+        <div class="carousel-orbit" id="carouselOrbit"></div>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:20px;height:20px;border:2px solid var(--color-accent);border-radius:50%;opacity:.4;"></div>
+        <div style="position:absolute;top:50%;left:50%;width:200px;height:200px;transform:translate(-50%,-50%);border:1px dashed rgba(255,255,255,.1);border-radius:50%;"></div>
+        <div class="progress-track"><div class="progress-fill" style="animation:progressFill 8s linear infinite;"></div></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+const FPS = 30;
+const sidebar = document.getElementById('sidebar');
+document.getElementById('sidebarToggle').addEventListener('click',()=>sidebar.classList.toggle('collapsed'));
+const navLinks = document.querySelectorAll('.nav-link');
+document.getElementById('searchBox').addEventListener('input',e=>{const q=e.target.value.toLowerCase();navLinks.forEach(l=>{const d=(l.textContent+' '+(l.dataset.search||'')).toLowerCase();l.classList.toggle('hidden',q.length>0&&!d.includes(q));});});
+const sects = document.querySelectorAll('.section');
+const obs = new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){navLinks.forEach(l=>l.classList.remove('active'));const lk=document.querySelector(`.nav-link[href="#${e.target.id}"]`);if(lk)lk.classList.add('active');}});},{threshold:.2});
+sects.forEach(s=>obs.observe(s));
+document.querySelectorAll('.nav-link').forEach(l=>l.addEventListener('click',e=>{e.preventDefault();const t=document.querySelector(l.getAttribute('href'));if(t)t.scrollIntoView({behavior:'smooth',block:'start'});if(window.innerWidth<=768)sidebar.classList.add('collapsed');}));
+
+// === EASING CSS MAP ===
+const easeCss = ['linear','cubic-bezier(.16,1,.3,1)','cubic-bezier(.7,0,.84,0)','cubic-bezier(.4,0,.2,1)','cubic-bezier(.34,1.56,.64,1)','cubic-bezier(.34,1.8,.64,1)','cubic-bezier(.34,1.3,.64,1)'];
+const easeNames = ['Linear','Ease Out','Ease In','Ease In Out','Bounce Out','Elastic Out','Back Out'];
+
+// === ANGLE TO XY ===
+function angleToXY(deg, amt) {
+  const r = deg * Math.PI / 180;
+  return [Math.round(Math.sin(r)*amt), Math.round(-Math.cos(r)*amt)];
+}
+
+// === GENERIC ANIM BUILDER ===
+function makeAnimStyle(dx, dy, durS, easeIdx, isOut, withOpa, delay) {
+  delay = delay || 0;
+  const ec = easeCss[easeIdx] || easeCss[1];
+  const from = isOut ? `translate(0,0)` : `translate(${dx}px,${dy}px)`;
+  const to = isOut ? `translate(${-dx}px,${-dy}px)` : `translate(0,0)`;
+  const name = `anim_${Math.random().toString(36).slice(2,8)}`;
+  let kf = `@keyframes ${name}{0%{transform:${from};${withOpa?(isOut?'opacity:1':'opacity:0'):''}}100%{transform:${to};${withOpa?(isOut?'opacity:0':'opacity:1'):''}}}`;
+  const style = document.createElement('style'); style.textContent = kf; document.head.appendChild(style);
+  return {name, css:`${name} ${durS}s ${ec} ${delay}s both`, dur:durS, delay, style};
+}
+
+// === READ SUPER PARAMS ===
+function getSuperParams() {
+  return {
+    dur: Math.max(1, parseInt(document.getElementById('p_super_dur').value)||15),
+    amt: parseFloat(document.getElementById('p_super_amt').value)||200,
+    del: parseFloat(document.getElementById('p_super_del').value)||2,
+    ease: parseInt(document.getElementById('p_super_ease').value)||1,
+    angle: parseInt(document.getElementById('superDir').value)||0
+  };
+}
+
+// === RENDER CARD ===
+function renderAnimCard(container, id, label, desc, animCss, durS, delayS) {
+  delayS = delayS||0;
+  const card = document.createElement('div'); card.className='anim-card';
+  card.innerHTML = `<div class="anim-card-stage"><div class="anim-text" id="${id}" style="animation:${animCss};">Supertexto</div><div class="progress-track"><div class="progress-fill" style="animation:progressFill ${durS}s linear ${delayS}s both;"></div></div><button class="replay-btn" data-id="${id}" data-anim="${animCss}" data-dur="${durS}" data-delay="${delayS}">&#8635;</button></div><div class="anim-card-info"><h4>${label}</h4><p>${desc}</p></div>`;
+  container.appendChild(card);
+  card.querySelector('.replay-btn').addEventListener('click',function(){
+    const el=document.getElementById(this.dataset.id);const pf=this.closest('.anim-card-stage').querySelector('.progress-fill');
+    el.style.animation='none';pf.style.animation='none';el.offsetHeight;
+    el.style.animation=this.dataset.anim;pf.style.animation=`progressFill ${this.dataset.dur}s linear ${this.dataset.delay}s both`;
+  });
+}
+
+// === REFRESH SUPERTEXTOS ===
+function refreshSuper() {
+  const p = getSuperParams();
+  const [dx,dy] = angleToXY(p.angle, p.amt);
+  const durS = p.dur / FPS;
+  const row = document.getElementById('superAnimRow'); row.innerHTML='';
+  // cleanup old dynamic styles
+  document.querySelectorAll('style[data-dynamic]').forEach(s=>s.remove());
+
+  const configs = [
+    {id:'s_inO', label:'Move In + Opacidad', desc:`Entrada con fade. <code>${easeNames[p.ease]}</code>`, out:false, opa:true, delay:0},
+    {id:'s_inN', label:'Move In (sin opacidad)', desc:`Solo movimiento. <code>${easeNames[p.ease]}</code>`, out:false, opa:false, delay:0},
+    {id:'s_outO', label:'Move Out + Opacidad', desc:`Salida con fade. <code>${easeNames[p.ease]}</code>`, out:true, opa:true, delay:1},
+    {id:'s_outN', label:'Move Out (sin opacidad)', desc:`Solo movimiento. <code>${easeNames[p.ease]}</code>`, out:true, opa:false, delay:1}
+  ];
+  configs.forEach(c=>{
+    const a = makeAnimStyle(dx,dy,durS,p.ease,c.out,c.opa,c.delay);
+    a.style.dataset.dynamic='1';
+    renderAnimCard(row, c.id, c.label, c.desc, a.css, durS, c.delay);
+  });
+}
+
+// === REFRESH TEXT ANIMATIONS ===
+function refreshTextAnims() {
+  const p = getSuperParams();
+  const durS = p.dur / FPS;
+  const delS = p.del / FPS;
+  const [dx,dy] = angleToXY(p.angle, p.amt);
+  const row = document.getElementById('textAnimRow'); row.innerHTML='';
+  const ec = easeCss[p.ease]||easeCss[1];
+
+  // Layer
+  const aL = makeAnimStyle(dx,dy,durS,p.ease,false,true,0); aL.style.dataset.dynamic='1';
+  renderAnimCard(row,'ta_layer','Layer',`Capa completa. <code>animType: 0</code>`,aL.css,durS,0);
+
+  // Characters
+  const cCard = document.createElement('div'); cCard.className='anim-card';
+  const chars = 'Caracteres';
+  let charSpans = [...chars].map((ch,i)=>`<span style="display:inline-block;animation:charIn ${durS}s ${ec} ${(i*delS).toFixed(3)}s both;">${ch===' '?'&nbsp;':ch}</span>`).join('');
+  const totalCharDur = durS + chars.length*delS;
+  cCard.innerHTML=`<div class="anim-card-stage"><div class="anim-text small" id="ta_chars">${charSpans}</div><div class="progress-track"><div class="progress-fill" style="animation:progressFill ${totalCharDur}s linear both;"></div></div><button class="replay-btn" data-type="chars">&#8635;</button></div><div class="anim-card-info"><h4>Characters</h4><p>Cada car&aacute;cter. <code>animType: 1</code></p></div>`;
+  row.appendChild(cCard);
+  cCard.querySelector('.replay-btn').addEventListener('click',function(){
+    const cont=document.getElementById('ta_chars');const pf=this.closest('.anim-card-stage').querySelector('.progress-fill');
+    cont.innerHTML=charSpans;pf.style.animation='none';pf.offsetHeight;pf.style.animation=`progressFill ${totalCharDur}s linear both`;
+  });
+
+  // Words
+  const wCard = document.createElement('div'); wCard.className='anim-card';
+  const words = ['Cada','palabra','animada'];
+  let wordSpans = words.map((w,i)=>{const a2=makeAnimStyle(dx,dy,durS,p.ease,false,true,i*delS*3);a2.style.dataset.dynamic='1';return `<span class="anim-text small" style="animation:${a2.css};">${w}</span>`;}).join('');
+  const totalWordDur = durS + words.length*delS*3;
+  wCard.innerHTML=`<div class="anim-card-stage"><div style="display:flex;gap:8px;" id="ta_words">${wordSpans}</div><div class="progress-track"><div class="progress-fill" style="animation:progressFill ${totalWordDur}s linear both;"></div></div><button class="replay-btn" data-type="words">&#8635;</button></div><div class="anim-card-info"><h4>Words</h4><p>Cada palabra. <code>animType: 3</code></p></div>`;
+  row.appendChild(wCard);
+  wCard.querySelector('.replay-btn').addEventListener('click',()=>refreshTextAnims());
+
+  // Lines
+  const lCard = document.createElement('div'); lCard.className='anim-card';
+  const lines = ['L\u00EDnea uno','L\u00EDnea dos','L\u00EDnea tres'];
+  let lineDivs = lines.map((l,i)=>{const a3=makeAnimStyle(dx,dy,durS,p.ease,false,true,i*delS*4);a3.style.dataset.dynamic='1';return `<div class="anim-text small" style="animation:${a3.css};">${l}</div>`;}).join('');
+  const totalLineDur = durS + lines.length*delS*4;
+  lCard.innerHTML=`<div class="anim-card-stage"><div style="display:flex;flex-direction:column;align-items:center;gap:4px;" id="ta_lines">${lineDivs}</div><div class="progress-track"><div class="progress-fill" style="animation:progressFill ${totalLineDur}s linear both;"></div></div><button class="replay-btn" data-type="lines">&#8635;</button></div><div class="anim-card-info"><h4>Lines</h4><p>Cada l&iacute;nea. <code>animType: 4</code></p></div>`;
+  row.appendChild(lCard);
+  lCard.querySelector('.replay-btn').addEventListener('click',()=>refreshTextAnims());
+}
+
+// === REFRESH MOVE IN/OUT ===
+function refreshMove() {
+  const p = getSuperParams();
+  const angle = parseInt(document.getElementById('moveDir').value)||0;
+  const [dx,dy] = angleToXY(angle, p.amt);
+  const durS = p.dur / FPS;
+  const area = document.getElementById('moveInOutArea'); area.innerHTML='';
+
+  const aIn = makeAnimStyle(dx,dy,durS,p.ease,false,true,0); aIn.style.dataset.dynamic='1';
+  const aOut = makeAnimStyle(dx,dy,durS,p.ease,true,true,1.2); aOut.style.dataset.dynamic='1';
+  const aFull1 = makeAnimStyle(dx,dy,durS,p.ease,false,true,0); aFull1.style.dataset.dynamic='1';
+  const aFull2 = makeAnimStyle(dx,dy,durS,p.ease,true,true,3); aFull2.style.dataset.dynamic='1';
+
+  area.innerHTML=`
+  <div class="glass-card"><div style="display:flex;gap:24px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:280px;"><div class="card-label" style="color:var(--color-accent);">Move In</div>
+      <div style="background:#13161b;border-radius:8px;height:150px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;">
+        <div class="anim-text small" id="mi_in" style="animation:${aIn.css};">Supertexto entra</div>
+        <div class="progress-track"><div class="progress-fill" id="mi_p1" style="animation:progressFill ${durS}s linear both;"></div></div>
+        <button class="replay-btn" onclick="replayEl('mi_in','${aIn.css}','mi_p1',${durS},0)">&#8635;</button>
+      </div><p style="font-size:12px;color:var(--color-text-muted);margin-top:8px;">Offset desde <code>inPoint</code>.</p></div>
+    <div style="flex:1;min-width:280px;"><div class="card-label" style="color:var(--color-accent);">Move Out</div>
+      <div style="background:#13161b;border-radius:8px;height:150px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;">
+        <div class="anim-text small" id="mi_out" style="animation:${aOut.css};">Supertexto sale</div>
+        <div class="progress-track"><div class="progress-fill" id="mi_p2" style="animation:progressFill ${durS}s linear 1.2s both;"></div></div>
+        <button class="replay-btn" onclick="replayEl('mi_out','${aOut.css}','mi_p2',${durS},1.2)">&#8635;</button>
+      </div><p style="font-size:12px;color:var(--color-text-muted);margin-top:8px;">Offset desde <code>outPoint</code>.</p></div>
+  </div></div>
+  <div class="glass-card"><div class="card-label">Flujo completo: Entrada + Salida</div>
+    <div style="background:#13161b;border-radius:8px;height:180px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;">
+      <div class="anim-text" id="mi_full" style="animation:${aFull1.css},${aFull2.css};">Ciclo completo</div>
+      <div class="progress-track"><div class="progress-fill" id="mi_p3" style="animation:progressFill ${3+durS}s linear both;"></div></div>
+      <button class="replay-btn" onclick="replayEl('mi_full','${aFull1.css},${aFull2.css}','mi_p3',${3+durS},0)">&#8635;</button>
+    </div>
+  </div>`;
+}
+
+function replayEl(id,anim,pid,dur,delay){
+  const el=document.getElementById(id);const pf=document.getElementById(pid);
+  el.style.animation='none';pf.style.animation='none';el.offsetHeight;
+  el.style.animation=anim;pf.style.animation=`progressFill ${dur}s linear ${delay}s both`;
+}
+
+// === REFRESH SCALER ===
+function refreshScaler() {
+  const fr = Math.max(1, parseInt(document.getElementById('p_scaler_fr').value)||5);
+  const durS = fr / FPS;
+  const row = document.getElementById('scalerRow'); row.innerHTML='';
+  [{id:'sc_in',label:'Scale In',anim:`scaleIn ${durS}s cubic-bezier(.16,1,.3,1) both`,desc:`De <code>0%</code> a <code>100%</code>.`,del:0},
+   {id:'sc_out',label:'Scale Out',anim:`scaleOut ${durS}s cubic-bezier(.7,0,.84,0) 1.5s both`,desc:`De <code>100%</code> a <code>0%</code>.`,del:1.5}
+  ].forEach(c=>{
+    const card=document.createElement('div');card.className='anim-card';
+    card.innerHTML=`<div class="anim-card-stage"><div id="${c.id}" style="width:80px;height:80px;background:var(--color-accent);border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--bg-primary);animation:${c.anim};">${c.label==='Scale In'?'IN':'OUT'}</div><div class="progress-track"><div class="progress-fill" style="animation:progressFill ${durS}s linear ${c.del}s both;"></div></div><button class="replay-btn" data-id="${c.id}" data-anim="${c.anim}" data-dur="${durS}" data-delay="${c.del}">&#8635;</button></div><div class="anim-card-info"><h4>${c.label}</h4><p>${c.desc}</p></div>`;
+    row.appendChild(card);
+    card.querySelector('.replay-btn').addEventListener('click',function(){const el=document.getElementById(this.dataset.id);const pf=this.closest('.anim-card-stage').querySelector('.progress-fill');el.style.animation='none';pf.style.animation='none';el.offsetHeight;el.style.animation=this.dataset.anim;pf.style.animation=`progressFill ${this.dataset.dur}s linear ${this.dataset.delay}s both`;});
+  });
+}
+
+// === REFRESH STROKER ===
+function refreshStroker() {
+  const w = parseFloat(document.getElementById('p_stroker_w').value)||60;
+  const durS = 0.6;
+  const row = document.getElementById('strokerRow'); row.innerHTML='';
+  [{id:'sk_t',label:'Arriba',del:0,above:true},{id:'sk_c',label:'Centro',del:.2,center:true},{id:'sk_b',label:'Abajo',del:.4,above:false}].forEach(c=>{
+    const card=document.createElement('div');card.className='anim-card';
+    const lineH = c.center ? `height:20px;opacity:.3;margin-top:-18px;position:relative;z-index:1;` : '';
+    const inner = c.above
+      ? `<div class="anim-text small" style="margin-bottom:6px;">Highlight ${c.label}</div><div class="stroker-line" id="${c.id}" style="width:${w*2.5}px;${lineH}animation:strokerGrow ${durS}s cubic-bezier(.16,1,.3,1) ${c.del}s both;"></div>`
+      : c.center
+        ? `<div class="anim-text small" style="position:relative;z-index:2;">Highlight ${c.label}</div><div class="stroker-line" id="${c.id}" style="width:${w*3}px;${lineH}animation:strokerGrow ${durS}s cubic-bezier(.16,1,.3,1) ${c.del}s both;"></div>`
+        : `<div class="stroker-line" id="${c.id}" style="width:${w*2.3}px;animation:strokerGrow ${durS}s cubic-bezier(.16,1,.3,1) ${c.del}s both;"></div><div class="anim-text small" style="margin-top:6px;">Highlight ${c.label}</div>`;
+    card.innerHTML=`<div class="anim-card-stage" style="flex-direction:column;gap:${c.center?'0':'12px'};"><div style="text-align:center;${c.center?'position:relative;':''}">${inner}</div><div class="progress-track"><div class="progress-fill" style="animation:progressFill ${durS}s linear ${c.del}s both;"></div></div><button class="replay-btn" data-id="${c.id}" data-dur="${durS}" data-del="${c.del}">&#8635;</button></div><div class="anim-card-info"><h4>${c.label}</h4><p>Width: ${w}px</p></div>`;
+    row.appendChild(card);
+    card.querySelector('.replay-btn').addEventListener('click',function(){const el=document.getElementById(this.dataset.id);const pf=this.closest('.anim-card-stage').querySelector('.progress-fill');el.style.animation='none';pf.style.animation='none';el.offsetHeight;el.style.animation=`strokerGrow ${this.dataset.dur}s cubic-bezier(.16,1,.3,1) ${this.dataset.del}s both`;pf.style.animation=`progressFill ${this.dataset.dur}s linear ${this.dataset.del}s both`;});
+  });
+}
+
+// === REFRESH TRIM ===
+function refreshTrim() {
+  const fr = Math.max(1, parseInt(document.getElementById('p_trim_fr').value)||20);
+  const durS = fr / FPS;
+  const row = document.getElementById('trimRow'); row.innerHTML='';
+  [{id:'tr_in',label:'IN',desc:`End: <code>0%&rarr;100%</code>`,anim:`trimIn ${durS}s cubic-bezier(.16,1,.3,1) both`,del:0},
+   {id:'tr_out',label:'OUT',desc:`Start: <code>0%&rarr;100%</code>`,anim:`trimOut ${durS}s cubic-bezier(.7,0,.84,0) ${durS+.3}s both`,del:durS+.3},
+   {id:'tr_ctr',label:'CENTER',desc:`Start: <code>50%&rarr;0%</code> End: <code>50%&rarr;100%</code>`,anim:`trimCenter ${durS}s cubic-bezier(.16,1,.3,1) .3s both`,del:.3},
+   {id:'tr_both',label:'BOTH',desc:`Anima Start y End`,anim:`trimBoth ${durS*2}s cubic-bezier(.4,0,.2,1) both`,del:0,dur2:durS*2}
+  ].forEach(c=>{
+    const d = c.dur2||durS;
+    const card=document.createElement('div');card.className='anim-card';
+    card.innerHTML=`<div class="anim-card-stage"><div style="width:70%;height:4px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;"><div id="${c.id}" style="width:100%;height:100%;background:var(--color-accent);border-radius:2px;animation:${c.anim};"></div></div><div class="progress-track"><div class="progress-fill" style="animation:progressFill ${d}s linear ${c.del}s both;"></div></div><button class="replay-btn" data-id="${c.id}" data-anim="${c.anim}" data-dur="${d}" data-del="${c.del}">&#8635;</button></div><div class="anim-card-info"><h4>${c.label}</h4><p>${c.desc}</p></div>`;
+    row.appendChild(card);
+    card.querySelector('.replay-btn').addEventListener('click',function(){const el=document.getElementById(this.dataset.id);const pf=this.closest('.anim-card-stage').querySelector('.progress-fill');el.style.animation='none';pf.style.animation='none';el.offsetHeight;el.style.animation=this.dataset.anim;pf.style.animation=`progressFill ${this.dataset.dur}s linear ${this.dataset.del}s both`;});
+  });
+}
+
+function resetGroup(g){document.querySelectorAll(`[id^="p_${g}_"]`).forEach(i=>{if(i.dataset.default)i.value=i.dataset.default;if(i.tagName==='SELECT')i.selectedIndex=0;});}
+
+// === POSITION GRID ===
+const xVals=[360,480,600,960,1320,1440,1560], yVals=[180,270,360,540,720,810,900];
+const posHello=document.getElementById('posHello'),posCrossH=document.getElementById('posCrossH'),posCrossV=document.getElementById('posCrossV'),posLabel=document.getElementById('posCoordLabel');
+for(let i=0;i<32;i++){const c=document.createElement('div');c.className='cell';document.getElementById('posPreviewGrid').appendChild(c);}
+[{id:'gridTitulos',rows:[0,1]},{id:'gridSupertextos',rows:[2,3,4]},{id:'gridDisclaimers',rows:[5,6]}].forEach(z=>{
+  const grid=document.getElementById(z.id);
+  z.rows.forEach(r=>{xVals.forEach((x,c)=>{
+    const dot=document.createElement('div');dot.className='pos-dot'+(r===3&&c===3?' center':'');dot.textContent=(r===3&&c===3)?'+':'';
+    dot.addEventListener('mouseenter',()=>{const px=(x/1920)*100,py=(yVals[r]/1080)*100;posHello.style.left=px+'%';posHello.style.top=py+'%';posHello.classList.add('visible');posCrossH.style.top=py+'%';posCrossH.classList.add('visible');posCrossV.style.left=px+'%';posCrossV.classList.add('visible');posLabel.textContent=`X: ${x}px  Y: ${yVals[r]}px  (${px.toFixed(1)}%, ${py.toFixed(1)}%)`;});
+    dot.addEventListener('mouseleave',()=>{posHello.classList.remove('visible');posCrossH.classList.remove('visible');posCrossV.classList.remove('visible');posLabel.textContent='';});
+    grid.appendChild(dot);
+  });});
+});
+
+// === LAYOUT RATIO ===
+let currentRatio = '16:9';
+const ratioConfigs = {
+  '16:9': {w:16,h:9,cols:8,rows:4,res:'1920&times;1080',zt:'Top ~25%',zs:'Center ~50%',zd:'Bottom ~25%',img:'img/foto_imageref.png'},
+  '1:1':  {w:1,h:1,cols:6,rows:6,res:'1080&times;1080',zt:'Top ~20%',zs:'Center ~55%',zd:'Bottom ~25%',img:'img/foto_imageref_1x1.png'},
+  '4:5':  {w:4,h:5,cols:5,rows:6,res:'1080&times;1350',zt:'Top ~15%',zs:'Center ~60%',zd:'Bottom ~25%',img:'img/foto_imageref_1x1.png'},
+  '9:16': {w:9,h:16,cols:4,rows:8,res:'1080&times;1920',zt:'Top ~12%',zs:'Center ~65%',zd:'Bottom ~23%',img:'img/foto_imageref_1x1.png'}
+};
+
+function setRatio(btn, label) {
+  document.querySelectorAll('.ratio-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentRatio = label;
+  const cfg = ratioConfigs[label];
+  document.getElementById('ratioLabel').textContent = label;
+
+  // Layout preview
+  document.getElementById('layoutPreviewWrapper').style.aspectRatio = `${cfg.w}/${cfg.h}`;
+  const lp = document.getElementById('layoutPreview'); lp.style.aspectRatio = `${cfg.w}/${cfg.h}`;
+  const lg = document.getElementById('layoutGrid'); lg.style.gridTemplateColumns=`repeat(${cfg.cols},1fr)`;lg.style.gridTemplateRows=`repeat(${cfg.rows},1fr)`;lg.innerHTML='';
+  for(let i=0;i<cfg.cols*cfg.rows;i++){const c=document.createElement('div');c.className='cell';lg.appendChild(c);}
+  document.getElementById('layoutCols').innerHTML=`<code>${cfg.cols}</code>`;
+  document.getElementById('layoutRows').innerHTML=`<code>${cfg.rows}</code>`;
+  document.getElementById('layoutRes').innerHTML=`<code>${cfg.res}</code>`;
+  document.getElementById('layoutZoneT').innerHTML=`<code>${cfg.zt}</code>`;
+  document.getElementById('layoutZoneS').innerHTML=`<code>${cfg.zs}</code>`;
+  document.getElementById('layoutZoneD').innerHTML=`<code>${cfg.zd}</code>`;
+
+  // Composition section
+  updateComposition(cfg);
+  updateCompositionCases(cfg);
+
+  // Position grid preview
+  document.getElementById('posPreviewWrapper').style.aspectRatio = `${cfg.w}/${cfg.h}`;
+  const ppb = document.getElementById('posPreviewBox');
+  ppb.style.aspectRatio = `${cfg.w}/${cfg.h}`;
+  const ppg = document.getElementById('posPreviewGrid');
+  ppg.style.gridTemplateColumns = `repeat(${cfg.cols},1fr)`;
+  ppg.style.gridTemplateRows = `repeat(${cfg.rows},1fr)`;
+  ppg.innerHTML = '';
+  for(let i=0;i<cfg.cols*cfg.rows;i++){const c=document.createElement('div');c.className='cell';ppg.appendChild(c);}
+}
+
+function updateComposition(cfg) {
+  document.getElementById('compPreviewWrapper').style.aspectRatio = `${cfg.w}/${cfg.h}`;
+  const cp = document.getElementById('compPreview'); cp.style.aspectRatio = `${cfg.w}/${cfg.h}`;
+  const photo = document.getElementById('compPhoto'); photo.style.backgroundImage = `url('${cfg.img}')`;
+  const cg = document.getElementById('compGridCells'); cg.style.gridTemplateColumns=`repeat(${cfg.cols},1fr)`;cg.style.gridTemplateRows=`repeat(${cfg.rows},1fr)`;cg.innerHTML='';
+  for(let i=0;i<cfg.cols*cfg.rows;i++){const c=document.createElement('div');c.className='cell';cg.appendChild(c);}
+  document.getElementById('compRatioLabel').textContent = currentRatio;
+
+  // Dashed lines
+  const dl = document.getElementById('compDashedLines'); dl.innerHTML='';
+  for(let i=1;i<cfg.cols;i++){
+    const pct = (i/cfg.cols*100).toFixed(2);
+    const d=document.createElement('div');d.style.cssText=`position:absolute;left:${pct}%;top:0;bottom:0;border-left:1px dashed rgba(10,233,141,${i===Math.floor(cfg.cols/2)?'.4':'.2'});z-index:3;`;dl.appendChild(d);
+  }
+}
+
+function updateCompositionCases(cfg) {
+  const ar = `${cfg.w}/${cfg.h}`;
+  const isVertical = cfg.h > cfg.w;
+  const cases = document.getElementById('compositionCases'); cases.innerHTML='';
+  cases.classList.toggle('vertical-ratio', isVertical);
+  const layouts = [
+    {label:'Full Screen / B-Roll', photo:null, text:{inset:'0',bg:'rgba(10,233,141,.1)'}},
+    {label:'Profe Pantalla Completa', photo:{inset:'0'}, text:null},
+    {label: isVertical ? 'Profe arriba + texto' : 'Profe derecha + texto',
+     photo: isVertical ? {left:'0',right:'0',top:'0',height:'50%'} : {right:'0',top:'0',bottom:'0',width:'50%'},
+     text:  isVertical ? {left:'0',right:'0',bottom:'0',height:'50%'} : {left:'0',top:'0',bottom:'0',width:'50%'}},
+    {label: isVertical ? 'Profe abajo + texto' : 'Profe izquierda + texto',
+     photo: isVertical ? {left:'0',right:'0',bottom:'0',height:'50%'} : {left:'0',top:'0',bottom:'0',width:'50%'},
+     text:  isVertical ? {left:'0',right:'0',top:'0',height:'50%'} : {right:'0',top:'0',bottom:'0',width:'50%'}},
+    {label:'Profe + texto superpuesto', photo:{inset:'0'}, text:{left:'5%',right:'55%',top:'25%',bottom:'25%'}},
+    {label: isVertical ? 'B-Roll + foto superior' : 'B-Roll + foto lateral',
+     photo: isVertical ? {left:'0',right:'0',top:'0',height:'35%'} : {right:'0',top:'0',bottom:'0',width:'35%'},
+     text:  isVertical ? {left:'0',right:'0',bottom:'0',height:'65%',background:'rgba(10,233,141,.08)'} : {left:'0',top:'0',bottom:'0',width:'65%',background:'rgba(10,233,141,.08)'}}
+  ];
+  layouts.forEach(l=>{
+    const thumb=document.createElement('div');thumb.className='layout-thumb';thumb.style.aspectRatio=ar;
+    let inner='';
+    if(l.photo){const s=Object.entries(l.photo).map(([k,v])=>`${k}:${v}`).join(';');inner+=`<div class="photo-area" style="${s};background-image:url('${cfg.img}');background-size:cover;background-position:center;"></div>`;}
+    if(l.text){const s=Object.entries(l.text).map(([k,v])=>`${k}:${v}`).join(';');inner+=`<div class="text-area" style="${s}"><span>${l.text.inset?'Supertextos':'Texto'}</span></div>`;}
+    inner+=`<div class="layout-label">${l.label}</div>`;
+    thumb.innerHTML=inner;cases.appendChild(thumb);
+  });
+}
+
+// === EASING GRID ===
+const eg = document.getElementById('easingGrid');
+easeNames.forEach((name,i)=>{
+  const animCss = i>=4 ? `ease_bounce_${i} .8s both` : `moveInUp_eg .8s ${easeCss[i]} both`;
+  // Create keyframes for easing demo
+  if(i<4){
+    if(!document.getElementById('kf_eg')){const s=document.createElement('style');s.id='kf_eg';s.textContent='@keyframes moveInUp_eg{0%{transform:translateY(60px);opacity:0}100%{transform:translateY(0);opacity:1}}';document.head.appendChild(s);}
+  }
+  const kfNames = ['','','','','easeBounce_eg','easeElastic_eg','easeBack_eg'];
+  if(i===4&&!document.getElementById('kf_b')){const s=document.createElement('style');s.id='kf_b';s.textContent='@keyframes easeBounce_eg{0%{transform:translateY(60px);opacity:0}40%{transform:translateY(-8px);opacity:1}55%{transform:translateY(4px)}70%{transform:translateY(-2px)}100%{transform:translateY(0)}}';document.head.appendChild(s);}
+  if(i===5&&!document.getElementById('kf_e')){const s=document.createElement('style');s.id='kf_e';s.textContent='@keyframes easeElastic_eg{0%{transform:translateY(60px);opacity:0}50%{transform:translateY(-12px);opacity:1}65%{transform:translateY(6px)}80%{transform:translateY(-3px)}100%{transform:translateY(0)}}';document.head.appendChild(s);}
+  if(i===6&&!document.getElementById('kf_bk')){const s=document.createElement('style');s.id='kf_bk';s.textContent='@keyframes easeBack_eg{0%{transform:translateY(60px);opacity:0}70%{transform:translateY(-14px);opacity:1}100%{transform:translateY(0)}}';document.head.appendChild(s);}
+  const realAnim = i>=4 ? `${kfNames[i]} .8s both` : animCss;
+  const item=document.createElement('div');item.className='easing-item';
+  item.innerHTML=`<h5>${name}</h5><div style="height:50px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;"><div class="anim-text" id="eg_${i}" style="font-size:14px;animation:${realAnim};">Aa</div></div><code>type: ${i}</code><div class="progress-track" style="position:relative;margin-top:8px;"><div class="progress-fill" style="animation:progressFill .8s linear both;"></div></div><button class="replay-btn" style="position:relative;margin:6px auto 0;display:flex;" data-idx="${i}">&#8635;</button>`;
+  eg.appendChild(item);
+  item.querySelector('.replay-btn').addEventListener('click',function(){const el=document.getElementById(`eg_${this.dataset.idx}`);const pf=this.parentElement.querySelector('.progress-fill');el.style.animation='none';pf.style.animation='none';el.offsetHeight;el.style.animation=realAnim;pf.style.animation='progressFill .8s linear both';});
+});
+
+// === CAROUSEL ===
+const orbit=document.getElementById('carouselOrbit');
+for(let i=0;i<6;i++){const item=document.createElement('div');item.className='carousel-item';item.textContent=i+1;const a=(360/6)*i;item.style.animation=`carouselSpin 8s linear infinite`;item.style.animationDelay=`${-a/360*8}s`;orbit.appendChild(item);}
+
+// === INIT ===
+(function(){
+  const lg=document.getElementById('layoutGrid');for(let i=0;i<32;i++){const c=document.createElement('div');c.className='cell';lg.appendChild(c);}
+  updateComposition(ratioConfigs['16:9']);
+  updateCompositionCases(ratioConfigs['16:9']);
+  refreshSuper();
+  refreshTextAnims();
+  refreshMove();
+  refreshScaler();
+  refreshStroker();
+  refreshTrim();
+})();
+
+// === HOVER REPLAY ===
+function replayAnimations() {
+  const els = this.querySelectorAll('[style*="animation"]');
+  const saved = [...els].map(e => e.style.animation);
+  els.forEach(e => { e.style.animation = 'none'; });
+  this.offsetHeight;
+  els.forEach((e, i) => { e.style.animation = saved[i]; });
+}
+
+function setupHoverReplay() {
+  document.querySelectorAll('.anim-card-stage').forEach(s => {
+    s.onmouseenter = replayAnimations;
+  });
+  ['mi_in','mi_out','mi_full'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.parentElement.style.cursor = 'pointer'; el.parentElement.onmouseenter = replayAnimations; }
+  });
+  document.querySelectorAll('.easing-item').forEach(s => {
+    s.style.cursor = 'pointer';
+    s.onmouseenter = replayAnimations;
+  });
+}
+
+// Wrap refresh functions to re-attach hover after DOM rebuild
+const _refreshSuper = refreshSuper;
+const _refreshMove = refreshMove;
+const _refreshScaler = refreshScaler;
+const _refreshStroker = refreshStroker;
+const _refreshTrim = refreshTrim;
+
+refreshSuper = function(){ _refreshSuper(); refreshTextAnims(); _refreshMove(); setupHoverReplay(); };
+refreshMove = function(){ _refreshMove(); setupHoverReplay(); };
+refreshScaler = function(){ _refreshScaler(); setupHoverReplay(); };
+refreshStroker = function(){ _refreshStroker(); setupHoverReplay(); };
+refreshTrim = function(){ _refreshTrim(); setupHoverReplay(); };
+
+setupHoverReplay();
+</script>
+</body>
+</html>

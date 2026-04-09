@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motion-Pro — Documentación</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+            background: #060a14;
+            color: #e4eaf4;
+            line-height: 1.6;
+            padding: 40px 20px;
+        }
+        .container { max-width: 860px; margin: 0 auto; }
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #a78bfa, #60a5fa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            font-size: 14px;
+            color: #6b7fa0;
+            margin-bottom: 32px;
+        }
+        h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #00d4ff;
+            margin: 32px 0 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #222230;
+        }
+        h3 {
+            font-size: 15px;
+            font-weight: 700;
+            color: #a78bfa;
+            margin: 20px 0 8px;
+        }
+        p { margin-bottom: 12px; font-size: 13px; color: #9898a8; }
+        ul, ol { margin: 0 0 16px 20px; font-size: 13px; color: #9898a8; }
+        li { margin-bottom: 6px; }
+        li strong { color: #e4eaf4; }
+        code {
+            font-family: 'IBM Plex Mono', monospace;
+            background: #0c1222;
+            color: #00d4ff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        pre {
+            background: #0c1222;
+            border: 1px solid #222230;
+            border-radius: 6px;
+            padding: 16px;
+            overflow-x: auto;
+            margin: 12px 0 16px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            line-height: 1.5;
+            color: #9898a8;
+        }
+        .card {
+            background: #0c1222;
+            border: 1px solid #222230;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 16px 0;
+        }
+        .card-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #e4eaf4;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .badge-cyan { background: #00d4ff22; color: #00d4ff; border: 1px solid #00d4ff44; }
+        .badge-green { background: #34d39922; color: #34d399; border: 1px solid #34d39944; }
+        .badge-purple { background: #a78bfa22; color: #a78bfa; border: 1px solid #a78bfa44; }
+        .badge-orange { background: #fb923c22; color: #fb923c; border: 1px solid #fb923c44; }
+        .badge-red { background: #f8717122; color: #f87171; border: 1px solid #f8717144; }
+        .flow {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 16px 0;
+        }
+        .flow-step {
+            background: #141418;
+            border: 1px solid #222230;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 12px;
+            color: #e4eaf4;
+            text-align: center;
+            min-width: 100px;
+        }
+        .flow-arrow { color: #00d4ff; font-size: 18px; }
+        .type-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin: 12px 0;
+        }
+        .type-card {
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #222230;
+        }
+        .type-card-name { font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+        .type-card-desc { font-size: 10px; color: #6b7fa0; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 16px;
+            font-size: 12px;
+        }
+        th {
+            text-align: left;
+            padding: 8px;
+            background: #141418;
+            color: #00d4ff;
+            font-weight: 600;
+            border-bottom: 1px solid #222230;
+        }
+        td {
+            padding: 8px;
+            border-bottom: 1px solid #1a1a24;
+            color: #9898a8;
+        }
+        .divider { border-top: 1px solid #222230; margin: 32px 0; }
+        a { color: #00d4ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <h1>Motion-Pro</h1>
+    <p class="subtitle">Generador automático de motion graphics para clases educativas — Plugin para Adobe Premiere Pro</p>
+
+    <h2>¿Qué es Motion-Pro?</h2>
+    <p>Motion-Pro es una herramienta dentro de Editor-Pro que analiza la transcripción de una clase y genera automáticamente motion graphics animados usando Remotion (React). Los clips se renderizan como MP4 y se colocan directamente en la línea de tiempo de Premiere.</p>
+
+    <div class="flow">
+        <div class="flow-step">📝 Transcripción</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">🤖 Análisis IA</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">✅ Selección</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">⚡ Generación TSX</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">🎬 Render MP4</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-step">📐 Timeline</div>
+    </div>
+
+    <h2>Arquitectura</h2>
+    <pre>
+Editor-Pro (Panel CEP)
+    ├── client/js/motion-pro.js   → Módulo principal (server lifecycle, estado)
+    ├── client/js/main.js         → UI: análisis, propuestas, control panel
+    └── client/js/ai-analyzer.js  → Prompt de análisis (paso 1)
+            │
+            │ HTTP localhost:3847
+            ▼
+motion-server/ (Node.js Express)
+    ├── server.js                 → Endpoints API
+    ├── routes/generate.js        → LLM genera código TSX
+    ├── routes/render.js          → Remotion renderiza MP4
+    ├── routes/feedback.js        → LLM modifica TSX con feedback
+    ├── routes/studio.js          → Lanza Remotion Studio en browser
+    └── lib/
+        ├── prompts.js            → Template de código + reglas
+        ├── llm.js                → Multi-proveedor (Ollama, Gemini, Claude, GPT)
+        ├── remotion-manager.js   → Escribe TSX, registra en Root.tsx, renderiza
+        ├── SYSTEM_PROMPT.md      → Reglas de generación (editable)
+        ├── STYLE_GUIDE.md        → Tamaños, spacing, charts (editable)
+        └── DESIGN_FUNDAMENTALS.md → Principios de diseño (editable)
+            │
+            ▼
+motion-render/ (Proyecto Remotion)
+    ├── src/Root.tsx               → Registro de composiciones (auto)
+    ├── src/compositions/*.tsx     → Archivos generados por LLM
+    ├── src/components/            → Safe, Enter, Fade, theme
+    └── out/                       → MP4s renderizados
+            │
+            │ evalScript()
+            ▼
+host/index.jsx (ExtendScript ES3)
+    ├── importAndPlaceMotions()    → Importa MP4 + coloca en track
+    └── replaceMotionOnTrack()     → Reemplaza versión en timeline</pre>
+
+    <h2>Los 3 Pasos</h2>
+
+    <div class="card">
+        <div class="card-title"><span class="badge badge-cyan">Paso 1</span> Análisis</div>
+        <p>La IA analiza la transcripción completa (con timestamps) y propone momentos donde motion graphics agregarían valor educativo. Cada propuesta tiene: tipo de animación, tiempos exactos, descripción y prioridad.</p>
+        <p><strong>Prompt editable:</strong> "Editar Prompt" dentro del paso 1 controla cómo la IA decide qué momentos proponer.</p>
+    </div>
+
+    <div class="card">
+        <div class="card-title"><span class="badge badge-green">Paso 2</span> Selección y Generación</div>
+        <p>Revisa las propuestas, filtra por tipo, selecciona cuáles generar. Al generar, cada motion pasa por: LLM genera TSX → Remotion renderiza MP4 → se coloca en la timeline de Premiere. Los clips se van agregando conforme terminan.</p>
+    </div>
+
+    <div class="card">
+        <div class="card-title"><span class="badge badge-purple">Paso 3</span> Panel de Control</div>
+        <p>Cada motion generado aparece como una ficha con: versión (dropdown), link a Remotion Studio, feedback con imágenes de referencia, regenerar. Cada nueva versión se apila encima en la timeline.</p>
+    </div>
+
+    <h2>8 Tipos de Animación</h2>
+    <div class="type-grid">
+        <div class="type-card" style="border-color:#00d4ff44">
+            <div class="type-card-name" style="color:#00d4ff">comparison</div>
+            <div class="type-card-desc">Dos cards lado a lado comparando A vs B. Ideal para ventajas/desventajas, antes/después.</div>
+        </div>
+        <div class="type-card" style="border-color:#34d39944">
+            <div class="type-card-name" style="color:#34d399">steps</div>
+            <div class="type-card-desc">Un paso a la vez con progress dots. Para procesos secuenciales, tutoriales.</div>
+        </div>
+        <div class="type-card" style="border-color:#a78bfa44">
+            <div class="type-card-name" style="color:#a78bfa">icons</div>
+            <div class="type-card-desc">2-4 íconos SVG con labels. Para categorías, listados de conceptos.</div>
+        </div>
+        <div class="type-card" style="border-color:#fb923c44">
+            <div class="type-card-name" style="color:#fb923c">chart</div>
+            <div class="type-card-desc">Barras o líneas animadas. Para datos, estadísticas, comparativas numéricas.</div>
+        </div>
+        <div class="type-card" style="border-color:#818cf844">
+            <div class="type-card-name" style="color:#818cf8">title</div>
+            <div class="type-card-desc">Ícono centrado + título + subtítulo. Para intros de sección.</div>
+        </div>
+        <div class="type-card" style="border-color:#2dd4bf44">
+            <div class="type-card-name" style="color:#2dd4bf">cards</div>
+            <div class="type-card-desc">Tarjetas horizontales con flechas. Para flujos causa-efecto.</div>
+        </div>
+        <div class="type-card" style="border-color:#f8717144">
+            <div class="type-card-name" style="color:#f87171">diagram</div>
+            <div class="type-card-desc">Cajas conectadas con líneas. Para arquitectura, flujos de datos.</div>
+        </div>
+        <div class="type-card" style="border-color:#fbbf2444">
+            <div class="type-card-name" style="color:#fbbf24">ui</div>
+            <div class="type-card-desc">Mockup de interfaz centrado. Para demos de formularios, navegación.</div>
+        </div>
+    </div>
+
+    <h2>Prompts de Generación</h2>
+    <p>La generación usa 3 documentos que se envían completos al LLM como system prompt, más un template de código e instrucciones por tipo:</p>
+
+    <table>
+        <tr><th>Documento</th><th>Contenido</th><th>Editable</th></tr>
+        <tr>
+            <td><strong>SYSTEM_PROMPT.md</strong></td>
+            <td>Reglas maestras: componentes (Safe, E, Fd), paleta de colores, tipografía, tipos de animación, anti-patterns, safe zones</td>
+            <td>Sí — desde "Prompts de Generación" en el panel</td>
+        </tr>
+        <tr>
+            <td><strong>STYLE_GUIDE.md</strong></td>
+            <td>Tamaños para 1080p, spacing entre elementos, reglas de charts (barras, líneas, donut), reglas de UI mockups</td>
+            <td>Sí</td>
+        </tr>
+        <tr>
+            <td><strong>DESIGN_FUNDAMENTALS.md</strong></td>
+            <td>12 Principios Disney aplicados, Gestalt, teoría del color, tipografía, composición, timing, dinamismo visual</td>
+            <td>Sí</td>
+        </tr>
+        <tr>
+            <td><strong>Template TSX</strong></td>
+            <td>Código base que el LLM debe usar: imports, paleta C, componentes Safe/E/Fd inline</td>
+            <td>En prompts.js</td>
+        </tr>
+        <tr>
+            <td><strong>Instrucciones por Tipo</strong></td>
+            <td>Reglas específicas para cada uno de los 8 tipos (tamaños, layout, comportamiento)</td>
+            <td>Solo lectura en UI</td>
+        </tr>
+    </table>
+
+    <h2>Feedback y Versionado</h2>
+    <p>Cada motion puede tener múltiples versiones. Al enviar feedback:</p>
+    <ol>
+        <li>El LLM recibe: el TSX actual + tu feedback + los 3 docs de diseño + instrucciones del tipo</li>
+        <li>Genera una nueva versión del TSX</li>
+        <li>Remotion la renderiza a MP4</li>
+        <li>Se coloca en el track superior de la timeline</li>
+        <li>El dropdown de versión se actualiza</li>
+        <li>Todo el feedback se registra en <code>FEEDBACK.md</code> junto al proyecto</li>
+    </ol>
+
+    <h2>Archivos Generados</h2>
+    <p>Los archivos se guardan en una carpeta <code>Motion-Pro/</code> junto al archivo <code>.prproj</code>:</p>
+    <pre>
+TuProyecto.prproj
+Motion-Pro/
+├── 13-2603-001-v1.mp4      ← Video renderizado
+├── 13-2603-001-v1.tsx      ← Código fuente editable
+├── 13-2603-001-v2.mp4      ← Nueva versión (feedback)
+├── 13-2603-001-v2.tsx
+├── FEEDBACK.md             ← Log de todos los feedbacks
+└── README.txt              ← Instrucciones</pre>
+
+    <h2>Remotion Studio</h2>
+    <p>Desde el panel de control, el botón "Remotion" abre Remotion Studio en el browser. Ahí puedes:</p>
+    <ul>
+        <li>Ver el preview en tiempo real de cualquier composición</li>
+        <li>Editar el TSX directamente y ver cambios al instante</li>
+        <li>Renderizar manualmente desde el browser</li>
+    </ul>
+    <p>Comando manual: <code>cd motion-render && npx remotion studio</code></p>
+
+    <h2>Servidor Local</h2>
+    <p>El servidor Express corre en <code>localhost:3847</code>. Se inicia/detiene desde el panel de Premiere.</p>
+    <table>
+        <tr><th>Endpoint</th><th>Método</th><th>Función</th></tr>
+        <tr><td><code>/api/status</code></td><td>GET</td><td>Health check</td></tr>
+        <tr><td><code>/api/prompts</code></td><td>GET/POST</td><td>Leer/escribir prompts de generación</td></tr>
+        <tr><td><code>/api/generate</code></td><td>POST</td><td>LLM → código TSX</td></tr>
+        <tr><td><code>/api/render</code></td><td>POST</td><td>Remotion → MP4</td></tr>
+        <tr><td><code>/api/feedback</code></td><td>POST</td><td>LLM modifica TSX + feedback</td></tr>
+        <tr><td><code>/api/studio</code></td><td>GET</td><td>Inicia Remotion Studio</td></tr>
+    </table>
+
+    <div class="divider"></div>
+    <p style="text-align:center;color:#6b7fa0;font-size:11px">Motion-Pro — Parte de Editor-Pro para Adobe Premiere Pro</p>
+
+</div>
+</body>
+</html>

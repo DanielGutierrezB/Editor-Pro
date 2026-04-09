@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+motion-render/out/
+
+# Adobe
+Adobe After Effects Auto-Save/
+*.aep
+
+# Archives
+*.zip
+
+# Whisper models (too large for Git)
+whisper/*.bin
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*

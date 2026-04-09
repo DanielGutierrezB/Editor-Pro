@@ -1,0 +1,133 @@
+# Quality Rules for Motion Graphics
+
+These rules improve the professional quality of generated motions.
+
+## 1. Smooth Transitions Between Sections
+- Use TransitionSeries with fade() for transitions between sections when content is related
+- Hard cuts ONLY between completely different topics
+- When two sections share context (e.g. "Types of attacks" → "Phishing details"), use fade()/slide()
+- Transition duration: 10-15 frames (0.3-0.5s)
+
+```tsx
+import { TransitionSeries, linearTiming } from '@remotion/transitions';
+import { fade } from '@remotion/transitions/fade';
+
+<TransitionSeries>
+  <TransitionSeries.Sequence durationInFrames={150}>
+    <Section1 />
+  </TransitionSeries.Sequence>
+  <TransitionSeries.Transition
+    presentation={fade()}
+    timing={linearTiming({ durationInFrames: 12 })}
+  />
+  <TransitionSeries.Sequence durationInFrames={200}>
+    <Section2 />
+  </TransitionSeries.Sequence>
+</TransitionSeries>
+```
+
+## 2. Exact Data from Transcript
+- When the narrator says a specific number ("73% de los usuarios"), use EXACTLY 73 — do not invent
+- When a URL is mentioned ("openclose.ai"), display it exactly as said
+- When specific names/terms are used, match them character by character
+- Numbers in charts MUST match the transcript, not be invented for aesthetics
+
+## 3. Accent Color by Topic
+Assign different accent colors to different topics within a single motion:
+- Main topic → C.accent (#0ae98d green)
+- Comparison A → C.accent, Comparison B → C.orange
+- Warning/danger → C.red
+- Secondary info → C.purple
+- Success/positive → C.green (same as accent)
+- Data/stats → C.orange
+
+Do NOT use the same accent color for everything. Vary by conceptual meaning.
+
+## 4. Fill the Screen Rule
+- Elements must occupy 70-85% of the safe area (1600×740 usable)
+- NEVER leave more than 30% empty space
+- If content is small, make elements BIGGER — not add decorative filler
+- Cards: min-width 500px. Icons: min 60px. Titles: min 36px font size.
+- Center content vertically AND horizontally in the safe area
+
+## 5. Text Hierarchy
+Every section must have clear hierarchy:
+- ONE title (largest, accent color or white, fontWeight 700)
+- Supporting text (smaller, C.dim, fontWeight 400)
+- Never two texts at the same size competing for attention
+- Maximum 3 levels of text size per screen
+
+## 6. Entry Timing
+- First element enters at frame 0 (no delay at start)
+- Subsequent elements: 10-15 frame stagger
+- All elements of a section should be visible within 30 frames (1 second)
+- Don't make the user wait — get content on screen fast
+
+## 7. Reading Time Rule (CRITICAL)
+Every text on screen must have enough time to be READ before disappearing or being replaced.
+
+**Minimum reading time formula:**
+- Count words in the text
+- reading_frames = words × 18 frames (≈0.6s per word at 30fps)
+- Minimum for ANY text: 60 frames (2 seconds)
+- Titles (1-4 words): 75 frames (2.5s)
+- Short text (5-8 words): 120 frames (4s)
+- Medium text (9-15 words): 180 frames (6s)
+- Long text (16+ words): 240 frames (8s)
+
+**Example:** "Sync multiple files easily" = 4 words → minimum 75 frames on screen
+
+**NEVER remove a text before its reading time is complete.**
+If the section is shorter than the reading time, either:
+- Make the text shorter (fewer words)
+- Extend the section duration
+
+## 8. Cumulative Content Rule (CRITICAL)
+When a section has multiple text elements or items:
+- NEW elements should ADD to the screen, NOT replace previous ones
+- Previous items stay visible (can dim to C.dim) while new ones appear highlighted
+- This gives viewers time to read earlier items while new ones arrive
+
+**Pattern — Additive reveal:**
+```tsx
+// Items accumulate on screen — each new one joins, previous stay
+{items.map((item, i) => {
+  const isActive = frame >= entryFrame[i];
+  const isLatest = i === currentIndex;
+  return isActive ? (
+    <div style={{
+      opacity: isLatest ? 1 : 0.6,
+      color: isLatest ? C.text : C.dim,
+      transform: `scale(${isLatest ? 1 : 0.95})`
+    }}>
+      {item.label}
+    </div>
+  ) : null;
+})}
+```
+
+**DO NOT:**
+- Replace one card with another (fade out → fade in)
+- Show text for < 2 seconds then remove it
+- Show 5+ items simultaneously with no stagger
+
+**DO:**
+- Item 1 appears → stays visible
+- Item 2 appears below/beside → Item 1 dims slightly
+- Item 3 appears → Items 1,2 dim, Item 3 highlighted
+- All items remain visible until the section ends
+
+## 9. Section Duration by Content
+Calculate minimum section duration based on how much content it shows:
+
+| Content | Min frames | Min seconds |
+|---------|-----------|-------------|
+| Title only | 75 | 2.5s |
+| Title + 1 item | 120 | 4s |
+| Title + 2-3 items (staggered) | 180 | 6s |
+| Title + 4-5 items (staggered) | 270 | 9s |
+| Chart with labels | 210 | 7s |
+| Comparison (2 cards) | 240 | 8s |
+| Diagram (3+ nodes) | 300 | 10s |
+
+If the transcript section is shorter than the minimum, extend the motion to cover the needed reading time (overlap with the next few seconds of narration if necessary).
