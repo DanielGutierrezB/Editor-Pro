@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor-Pro — Test Suite</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 20px; background: #1a1a2e; color: #eee; }
+        h1 { color: #64ffda; font-size: 18px; }
+        h2 { color: #82aaff; font-size: 14px; margin-top: 20px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+        .summary { padding: 12px; border-radius: 8px; margin: 16px 0; font-size: 14px; }
+        .summary.pass { background: #1b4332; border: 1px solid #2d6a4f; }
+        .summary.fail { background: #4a1c1c; border: 1px solid #7c2d2d; }
+        .test { margin: 2px 0; padding: 4px 8px; font-size: 12px; border-radius: 4px; }
+        .test.pass { color: #a7f3d0; }
+        .test.fail { background: #4a1c1c; color: #fca5a5; }
+        .test .label { font-weight: 600; }
+        .test .detail { opacity: 0.7; font-size: 11px; margin-left: 8px; }
+        .section { margin-bottom: 20px; }
+        #timer { color: #888; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>Editor-Pro — Test Suite</h1>
+    <div id="timer"></div>
+    <div id="summary" class="summary"></div>
+    <div id="results"></div>
+
+    <!-- Mock dependencies -->
+    <script>
+        // Mock CSInterface (not needed for core logic tests)
+        window.CSInterface = function() {};
+        window.CSInterface.prototype.getSystemPath = function() { return "/mock/path"; };
+        window.CSInterface.prototype.evalScript = function(s, cb) { if (cb) cb("{}"); };
+        window.SystemPath = { EXTENSION: "EXTENSION" };
+
+        // Mock require() for modules that try to load fs/path/os
+        window.require = function(name) {
+            if (name === "fs") return null;
+            if (name === "path") return { sep: "/", join: function() { return Array.prototype.slice.call(arguments).join("/"); }, dirname: function(p) { return p; }, basename: function(p) { return p; }, extname: function(p) { return ""; } };
+            if (name === "os") return { tmpdir: function() { return "/tmp"; } };
+            if (name === "http") return null;
+            if (name === "https") return null;
+            if (name === "child_process") return null;
+            if (name === "zlib") return null;
+            return null;
+        };
+    </script>
+
+    <!-- Load core modules (no Premiere Pro dependency) -->
+    <script src="../client/js/spellcheck-engine.js"></script>
+    <script src="../client/js/context-rules.js"></script>
+    <script src="../client/js/ai-analyzer.js"></script>
+    <script src="../client/js/speech-to-text.js"></script>
+    <script src="../client/js/recording-notes.js"></script>
+
+    <!-- Load UI modules (need mocked globals) -->
+    <script>
+        // Set up minimal global state for UI modules
+        window._epState = {
+            transcript: "", segments: [], sequenceName: "", analyzing: false,
+            supertexts2: [], mogrtPaths: {}, mogrtTrackIndex: "auto",
+            es2Highlights: [], es2Suggestions: [], es2Errors: [],
+            sttResult: null, customDictionary: [],
+            settings: { aiProvider: "ollama", aiModel: "test", sttProvider: "elevenlabs", sttModel: "scribe_v1" }
+        };
+        window._epCSInterface = new CSInterface();
+        window._epFs = null;
+        window._epPath = require("path");
+        window._epOs = require("os");
+        window._epEngine = null;
+        window._epAiAnalyzer = null;
+        window._epStt = null;
+        window._epRecorder = null;
+        window._epMotionPro = null;
+
+        // Stub out all shared utility functions
+        window._epOn = function() {};
+        window._epClearContainer = function(el) { if (el) el.innerHTML = ""; return el; };
+        window._epSafeCallback = function(fn) { return fn; };
+        window._epShowToast = function() {};
+        window._epShowElement = function() {};
+        window._epHideElement = function() {};
+        window._epDisableBtn = function() {};
+        window._epEnableBtn = function() {};
+        window._epEsc = function(s) { return s || ""; };
+        window._epEscAttr = function(s) { return s || ""; };
+        window._epEscExtend = function(s) { return s || ""; };
+        window._epSetProgress = function() {};
+        window._epCheckAIReady = function() { return true; };
+        window._epExpandSection = function() {};
+        window._epFormatTime = function(s) { return String(Math.floor(s)); };
+        window._epFormatTimeFull = function(s) { var m = Math.floor(s/60); var sec = Math.floor(s%60); return m + ":" + (sec<10?"0":"") + sec; };
+        window._epNavigateToTime = function() {};
+        window._epRefreshSequenceInfo = function() {};
+        window._epBuildTimedTranscript = function() { return ""; };
+        window._epCopyToClipboard = function() {};
+        window._epGetPromptContext = function() { return {}; };
+        window._epTogglePromptEditorById = function() {};
+        window._epSavePromptById = function() {};
+        window._epResetPromptById = function() {};
+        window._epNormalizeSupertextNewlines = function(s) {
+            if (s === undefined || s === null) return "";
+            var r = String(s);
+            r = r.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n");
+            return r;
+        };
+        window._epNormalizeSt2Fields = function(st) { return st; };
+        window._epEscSupertextHtml = function(s) { return s || ""; };
+        window._epSecsToSRTTime = function(secs) {
+            var h = Math.floor(secs / 3600);
+            var m = Math.floor((secs % 3600) / 60);
+            var s = Math.floor(secs % 60);
+            var ms = Math.floor((secs % 1) * 1000);
+            function p2(n) { return (n < 10 ? "0" : "") + n; }
+            function p3(n) { return (n < 10 ? "00" : n < 100 ? "0" : "") + n; }
+            return p2(h) + ":" + p2(m) + ":" + p2(s) + "," + p3(ms);
+        };
+        window._epPad2 = function(n) { return (n < 10 ? "0" : "") + n; };
+        window._epPad3 = function(n) { return (n < 10 ? "00" : n < 100 ? "0" : "") + n; };
+        window._epTruncate = function(s, n) { return s.length <= n ? s : s.substring(0, n-3) + "..."; };
+        window._epFormatFileSize = function(b) { return b + " B"; };
+        window._epRefreshAllHeaderProgress = function() {};
+        window._epUpdateAIStatus = function() {};
+        window._epShowInfoModal = function() {};
+        window._epRefreshProviderUI = function() {};
+        window._epParseTextClipsFromXML = function() { return []; };
+        window._epSttResultToSRT = function() { return ""; };
+        window._epParseSRT = function() { return []; };
+        window._epSrtTimeToSeconds = function() { return 0; };
+        window._epLoadTranscriptText = function() {};
+        window._epOnTranscriptChange = function() {};
+        window._epReadTranscriptFromProjectFile = function() { return null; };
+        window._epReadCaptionsFromProjectFile = function() { return null; };
+        window._epSrtSegmentsToSttResult = function() { return null; };
+        window._epRenderTranscriptFromSegments = function() {};
+        window._epBindCollapsibles = function() {};
+        window._epMP_ANTICIPATION_SECS = 0.35;
+    </script>
+
+    <!-- Load UI modules for testing their exported functions -->
+    <script src="../client/js/ui-supertexts.js"></script>
+
+    <!-- Test suite -->
+    <script src="tests.js"></script>
+</body>
+</html>
