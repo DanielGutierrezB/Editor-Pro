@@ -13,21 +13,19 @@ function _loadDoc(centralName, localFallback) {
   if (fs.existsSync(centralPath)) {
     return fs.readFileSync(centralPath, 'utf8');
   }
-  const localPath = path.join(LIB_DIR, localFallback);
-  if (fs.existsSync(localPath)) {
-    return fs.readFileSync(localPath, 'utf8');
+  if (localFallback) {
+    const localPath = path.join(LIB_DIR, localFallback);
+    if (fs.existsSync(localPath)) {
+      return fs.readFileSync(localPath, 'utf8');
+    }
   }
-  console.warn(`[prompts] Missing: ${centralName} and ${localFallback}`);
+  console.warn(`[prompts] Missing: ${centralName}`);
   return '';
 }
 
 const SYSTEM_PROMPT_DOC = _loadDoc('system.md', 'SYSTEM_PROMPT.md');
-const STYLE_GUIDE_DOC = _loadDoc('style-guide.md', 'STYLE_GUIDE.md');
-const DESIGN_FUNDAMENTALS_DOC = _loadDoc('design-fundamentals.md', 'DESIGN_FUNDAMENTALS.md');
-const COMPANY_DESIGN_SYSTEM = _loadDoc('company-design-system.md', '');
 const AVAILABLE_PACKAGES = _loadDoc('available-packages.md', '');
 const QUALITY_RULES = _loadDoc('quality-rules.md', '');
-const AUDIO_CUES = _loadDoc('audio-cues.md', '');
 
 // Load templates
 function _loadTemplates() {
@@ -40,15 +38,9 @@ const TEMPLATES = _loadTemplates();
 
 const FULL_SYSTEM_PROMPT = [
   SYSTEM_PROMPT_DOC,
-  '\n\n---\n\n# Style Guide\n\n',
-  STYLE_GUIDE_DOC,
-  '\n\n---\n\n# Design Fundamentals\n\n',
-  DESIGN_FUNDAMENTALS_DOC,
-  COMPANY_DESIGN_SYSTEM ? '\n\n---\n\n# COMPANY DESIGN SYSTEM (OVERRIDES ALL ABOVE)\n\n' + COMPANY_DESIGN_SYSTEM : '',
   AVAILABLE_PACKAGES ? '\n\n---\n\n# AVAILABLE PACKAGES (USE THESE)\n\n' + AVAILABLE_PACKAGES : '',
   TEMPLATES ? '\n\n---\n\n# REFERENCE TEMPLATES (follow these patterns)\n\n' + TEMPLATES : '',
   QUALITY_RULES ? '\n\n---\n\n# QUALITY RULES (MUST FOLLOW)\n\n' + QUALITY_RULES : '',
-  AUDIO_CUES ? '\n\n---\n\n# AUDIO CUES\n\n' + AUDIO_CUES : '',
 ].join('');
 
 function _componentName(compositionId) {
@@ -250,7 +242,7 @@ ${transcriptSegment}
 - Example: if transcript starts at [30.0s] and something happens at [35.0s], that's frame = (35-30)*30 = 150
 - The FIRST visual section should start at frame 0
 - Sections should be sequential: Section 1 starts at 0, Section 2 starts where Section 1 ends, etc.
-- The **total animated content** (last frame with meaningful visuals) must reach at least frame ${Math.max(0, durationFrames - 45)} — do not end all motion at frame 60 if the composition is ${durationFrames} frames long (that causes a short video file and “empty” timeline tails in Premiere).
+- The **total animated content** (last frame with meaningful visuals) must reach at least frame ${Math.max(0, durationFrames - 45)} — do not end all motion at frame 60 if the composition is ${durationFrames} frames long (that causes a short video file and "empty" timeline tails in Premiere).
 - Align beats to the transcript: when the speaker introduces an idea at timestamp T, the corresponding visual should appear at frame (T - firstTimestamp) × 30, not tens of seconds earlier.
 
 ## MULTI-SECTION STRUCTURE (IMPORTANT)

@@ -3,9 +3,8 @@
 These rules improve the professional quality of generated motions.
 
 ## 1. Smooth Transitions Between Sections
-- Use TransitionSeries with fade() for transitions between sections when content is related
+- Use TransitionSeries with fade() for transitions between related sections
 - Hard cuts ONLY between completely different topics
-- When two sections share context (e.g. "Types of attacks" → "Phishing details"), use fade()/slide()
 - Transition duration: 10-15 frames (0.3-0.5s)
 
 ```tsx
@@ -35,7 +34,7 @@ import { fade } from '@remotion/transitions/fade';
 ## 3. Accent Color by Topic
 Assign different accent colors to different topics within a single motion:
 - Main topic → C.accent (#0ae98d green)
-- Comparison A → C.accent, Comparison B → C.orange
+- Comparison B → C.orange
 - Warning/danger → C.red
 - Secondary info → C.purple
 - Success/positive → C.green (same as accent)
@@ -47,7 +46,7 @@ Do NOT use the same accent color for everything. Vary by conceptual meaning.
 - Elements must occupy 70-85% of the safe area (1600×740 usable)
 - NEVER leave more than 30% empty space
 - If content is small, make elements BIGGER — not add decorative filler
-- Cards: min-width 500px. Icons: min 60px. Titles: min 36px font size.
+- Cards: min-width 500px. Icons: min 60px. Titles: min 36px font size
 - Center content vertically AND horizontally in the safe area
 
 ## 5. Text Hierarchy
@@ -64,47 +63,22 @@ Every section must have clear hierarchy:
 - Don't make the user wait — get content on screen fast
 
 ## 7. Reading Time Rule (CRITICAL)
-Every text on screen must have enough time to be READ before disappearing or being replaced.
+Every text on screen must have enough time to be READ before disappearing.
 
-**Minimum reading time formula:**
-- Count words in the text
-- reading_frames = words × 18 frames (≈0.6s per word at 30fps)
-- Minimum for ANY text: 60 frames (2 seconds)
+**Minimum reading time:**
 - Titles (1-4 words): 75 frames (2.5s)
 - Short text (5-8 words): 120 frames (4s)
 - Medium text (9-15 words): 180 frames (6s)
 - Long text (16+ words): 240 frames (8s)
-
-**Example:** "Sync multiple files easily" = 4 words → minimum 75 frames on screen
+- Minimum for ANY text: 60 frames (2 seconds)
 
 **NEVER remove a text before its reading time is complete.**
-If the section is shorter than the reading time, either:
-- Make the text shorter (fewer words)
-- Extend the section duration
 
 ## 8. Cumulative Content Rule (CRITICAL)
 When a section has multiple text elements or items:
 - NEW elements should ADD to the screen, NOT replace previous ones
 - Previous items stay visible (can dim to C.dim) while new ones appear highlighted
-- This gives viewers time to read earlier items while new ones arrive
-
-**Pattern — Additive reveal:**
-```tsx
-// Items accumulate on screen — each new one joins, previous stay
-{items.map((item, i) => {
-  const isActive = frame >= entryFrame[i];
-  const isLatest = i === currentIndex;
-  return isActive ? (
-    <div style={{
-      opacity: isLatest ? 1 : 0.6,
-      color: isLatest ? C.text : C.dim,
-      transform: `scale(${isLatest ? 1 : 0.95})`
-    }}>
-      {item.label}
-    </div>
-  ) : null;
-})}
-```
+- All items remain visible until the section ends
 
 **DO NOT:**
 - Replace one card with another (fade out → fade in)
@@ -115,11 +89,8 @@ When a section has multiple text elements or items:
 - Item 1 appears → stays visible
 - Item 2 appears below/beside → Item 1 dims slightly
 - Item 3 appears → Items 1,2 dim, Item 3 highlighted
-- All items remain visible until the section ends
 
 ## 9. Section Duration by Content
-Calculate minimum section duration based on how much content it shows:
-
 | Content | Min frames | Min seconds |
 |---------|-----------|-------------|
 | Title only | 75 | 2.5s |
@@ -130,4 +101,4 @@ Calculate minimum section duration based on how much content it shows:
 | Comparison (2 cards) | 240 | 8s |
 | Diagram (3+ nodes) | 300 | 10s |
 
-If the transcript section is shorter than the minimum, extend the motion to cover the needed reading time (overlap with the next few seconds of narration if necessary).
+If the transcript section is shorter than the minimum, extend the motion to cover the needed reading time.
