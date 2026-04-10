@@ -160,56 +160,79 @@ class RemotionManager {
    */
   _validateSyntax(tsxCode) {
     const errors = [];
-    const lines = tsxCode.split('\n');
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    // STEP 1: Strip JSX to pure JS so we can use Node's parser
+    // Replace JSX tags with placeholders so the JS parser doesn't choke on them
+    // This catches unterminated strings, brackets, template literals etc.
+    let jsCode = tsxCode;
+    // Strip JSX: <Component ... /> and <Component ...>...</Component>
+    // Replace with valid JS expressions
+    jsCode = jsCode.replace(/<[A-Z][^>]*\/>/g, 'null'); // self-closing
+    jsCode = jsCode.replace(/<\/[A-Za-z][^>]*>/g, ''); // closing tags
+    jsCode = jsCode.replace(/<[A-Za-z][^>]*>/g, '('); // opening tags → open paren
+    // Strip CSS-in-JS import statements that node can't parse
+    jsCode = jsCode.replace(/^import\s+["']@fontsource[^"']*["'];?\s*$/gm, '');
+    jsCode = jsCode.replace(/^import\s+["'][^"']*\.css["'];?\s*$/gm, '');
 
-      // Check for unterminated string literals (single and double quotes)
-      // Count unescaped quotes — odd number means unterminated
-      for (const q of ["'", '"']) {
-        const stripped = line.replace(/\\./g, '__'); // neutralize escapes
-        const count = (stripped.split(q).length - 1);
-        // Template literals (backtick) handled separately
-        if (count % 2 !== 0) {
-          // Could be a multi-line template or JSX — check for backtick context
-          if (!stripped.includes('`')) {
-            errors.push(`Line ${lineNum}: Unterminated ${q === '"' ? 'double' : 'single'}-quoted string`);
-          }
-        }
-      }
-
-      // Check for unterminated template literals within a single line
-      // (multi-line templates are valid, but a line starting a template with ` and having ${} but no closing ` is suspicious)
+    // STEP 2: Try to parse with Node's native parser
+    try {
+      // Use acorn-style check: wrap in async function to allow top-level await etc.
+      new Function('"use strict";\n' + jsCode);
+    } catch (parseErr) {
+      // Node parser caught a syntax error — extract useful info
+      const msg = parseErr.message || '';
+      errors.push('JS syntax error: ' + msg.split('\n')[0]);
     }
 
-    // Check bracket balance across the entire file
-    const brackets = { '(': 0, '[': 0, '{': 0, '<': 0 };
-    const closers = { ')': '(', ']': '[', '}': '{', '>': '<' };
+    // STEP 3: Additional TSX-specific checks
+    // Check all string types (single, double, backtick) balance
     let inString = false;
     let stringChar = '';
-    let inJsx = false;
+    let stringStartLine = 0;
 
+    const lines = tsxCode.split('\n');
     for (let i = 0; i < tsxCode.length; i++) {
       const ch = tsxCode[i];
       const prev = i > 0 ? tsxCode[i - 1] : '';
 
-      // Track string context (simplified)
       if (!inString && (ch === '"' || ch === "'" || ch === '`') && prev !== '\\') {
         inString = true;
         stringChar = ch;
+        stringStartLine = tsxCode.substring(0, i).split('\n').length;
         continue;
       }
       if (inString && ch === stringChar && prev !== '\\') {
         inString = false;
         continue;
       }
-      if (inString) continue;
+      // For single/double quotes: they can't span lines in JS/TSX
+      if (inString && (stringChar === '"' || stringChar === "'") && ch === '\n') {
+        errors.push(`Line ${stringStartLine}: Unterminated ${stringChar === '"' ? 'double' : 'single'}-quoted string`);
+        inString = false; // reset to continue checking
+      }
+    }
+    if (inString) {
+      errors.push(`Unterminated ${stringChar === '`' ? 'template literal' : 'string'} starting at line ${stringStartLine}`);
+    }
 
-      // Skip comments
+    // STEP 4: Bracket balance
+    inString = false;
+    stringChar = '';
+    const brackets = { '(': 0, '{': 0 };
+    const closers = { ')': '(', '}': '{' };
+
+    for (let i = 0; i < tsxCode.length; i++) {
+      const ch = tsxCode[i];
+      const prev = i > 0 ? tsxCode[i - 1] : '';
+
+      if (!inString && (ch === '"' || ch === "'" || ch === '`') && prev !== '\\') {
+        inString = true; stringChar = ch; continue;
+      }
+      if (inString && ch === stringChar && prev !== '\\') {
+        inString = false; continue;
+      }
+      if (inString) continue;
       if (ch === '/' && tsxCode[i + 1] === '/') {
-        // Skip to end of line
         const nl = tsxCode.indexOf('\n', i);
         i = nl === -1 ? tsxCode.length : nl;
         continue;
@@ -221,7 +244,6 @@ class RemotionManager {
 
     if (brackets['('] !== 0) errors.push(`Unbalanced parentheses: ${brackets['(']} unclosed`);
     if (brackets['{'] !== 0) errors.push(`Unbalanced braces: ${brackets['{']} unclosed`);
-    // Don't check < > balance — JSX self-closing tags make this unreliable
 
     return { valid: errors.length === 0, errors };
   }
