@@ -2772,6 +2772,12 @@ function importAndPlaceMotions(jsonPath) {
             }
 
             try { item.name = clip.clipName || ("MP_" + c); } catch(e) {}
+            // Set label color by motion type
+            try {
+                if (clip.labelColor !== undefined && clip.labelColor >= 0) {
+                    item.setColorLabel(clip.labelColor);
+                }
+            } catch(eLabel) {}
 
             var startTicks = String(Math.round(clip.startTimeSecs * TICKS_PER_SECOND));
             var track = seq.videoTracks[baseTrack];

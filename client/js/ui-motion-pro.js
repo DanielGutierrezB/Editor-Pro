@@ -229,6 +229,31 @@
         }
     }
 
+    // Premiere label color indices by motion type
+    // 0=Violet, 1=Iris, 2=Caribbean, 3=Lavender, 4=Cerulean, 5=Forest
+    // 6=Rose, 7=Mango, 8=Purple, 9=Blue, 10=Teal, 11=Magenta, 12=Tan, 13=Green, 14=Brown, 15=Yellow
+    function _mpLabelColorForType(type) {
+        var map = {
+            title: 4,        // Cerulean
+            reveal: 9,       // Blue
+            callout: 8,      // Purple
+            comparison: 7,   // Mango
+            beforeafter: 7,  // Mango
+            steps: 13,       // Green
+            icons: 10,       // Teal
+            cards: 2,        // Caribbean
+            diagram: 5,      // Forest
+            funnel: 5,       // Forest
+            chart: 15,       // Yellow
+            gauge: 15,       // Yellow
+            metrics: 15,     // Yellow
+            list: 10,        // Teal
+            timeline: 3,     // Lavender
+            ui: 12,          // Tan
+        };
+        return map[(type || "").toLowerCase()] !== undefined ? map[(type || "").toLowerCase()] : 4;
+    }
+
     function _mpBuildSeqPrefix() {
         var name = state.sequenceName || "";
         if (!name) return "mp";
@@ -481,7 +506,8 @@
                 for (var i = 0; i < arr.length; i++) {
                     var p = arr[i];
                     var pType = (p.type || p.tipo || "title").toLowerCase();
-                    var pId = String(i + 1) + "-" + pType + "-" + seqPrefix;
+                    var clipNum = String(i + 1).length < 2 ? "0" + (i + 1) : String(i + 1);
+                    var pId = clipNum + "-" + pType + "-" + seqPrefix;
                     proposals.push({
                         id: pId,
                         startTime: parseFloat(p.startTime || p.timestamp_start || p.start || 0),
@@ -997,7 +1023,8 @@
                 mp4Path: mediaPath,
                 startTimeSecs: mpStart,
                 durationSecs: mpDuration,
-                clipName: "MP: " + motion.id + "-v" + v.version
+                clipName: _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1),
+                labelColor: _mpLabelColorForType(motion.type)
             }]
         };
 
@@ -1055,8 +1082,9 @@
             durationSecs: mpComputeClipDurationSecs(motion, v),
             oldTrackIndex: motion.baseTrackIndex,
             newTrackIndex: motion.baseTrackIndex + (v.version - 1),
-            clipName: "MP: " + motionId + "-v" + v.version,
-            oldClipPattern: "MP: " + motionId
+            clipName: _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1),
+            labelColor: _mpLabelColorForType(motion.type),
+            oldClipPattern: _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0]
         };
 
         var tmpPath = _writeTempJson(payload, "mp_replace");
