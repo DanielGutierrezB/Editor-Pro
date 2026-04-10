@@ -356,6 +356,15 @@ class RemotionManager {
     if (srcFolder) {
       const files = fs.readdirSync(srcFolder).filter(f => f.endsWith('.tsx'));
       files.forEach(f => {
+        // Validate syntax BEFORE copying — don't let broken files from previous sessions poison the build
+        const content = fs.readFileSync(path.join(srcFolder, f), 'utf8');
+        const syntaxCheck = this._validateSyntax(content);
+        if (!syntaxCheck.valid) {
+          console.warn(`[RemotionManager] Skipping broken session file ${f}:`, syntaxCheck.errors);
+          // Also remove the broken file from the session to prevent it from re-infecting
+          try { fs.unlinkSync(path.join(srcFolder, f)); } catch(_e) {}
+          return; // skip this file
+        }
         fs.copyFileSync(path.join(srcFolder, f), path.join(this.compositionsDir, f));
       });
     }
