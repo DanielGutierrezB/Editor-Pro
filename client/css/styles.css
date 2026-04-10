@@ -654,8 +654,17 @@ html, body {
 .tool-card.fullscreen .tool-card-body {
     flex: 1;
     overflow-y: auto;
-    max-height: calc(100vh - 40px);
+    height: calc(100vh - 40px);
+    max-height: none;
     padding: 12px 16px 16px;
+}
+.tool-card.fullscreen .mp-proposal-card,
+.tool-card.fullscreen .mp-motion-card {
+    max-width: 100%;
+}
+.tool-card.fullscreen #mp-proposal-list {
+    max-height: none;
+    overflow: visible;
 }
 .tool-card.fullscreen .tool-card-header {
     position: sticky;
@@ -2950,14 +2959,40 @@ html, body {
     flex-wrap: wrap;
     margin-bottom: 2px;
 }
+/* Motion Pro type badge — base + Premiere label colors */
 .mp-type-badge {
+    display: inline-block;
     font-size: 9px;
-    font-weight: 600;
+    font-weight: 700;
     padding: 1px 6px;
     border-radius: 3px;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.5px;
     white-space: nowrap;
+    color: #fff;
+}
+.mp-type-badge[data-type="title"]       { background: #3498db; }       /* Cerulean */
+.mp-type-badge[data-type="reveal"]      { background: #8e44ad; }       /* Purple */
+.mp-type-badge[data-type="callout"]     { background: #e84393; }       /* Magenta */
+.mp-type-badge[data-type="comparison"]  { background: #e67e22; }       /* Mango */
+.mp-type-badge[data-type="beforeafter"] { background: #e74c3c; }       /* Rose */
+.mp-type-badge[data-type="steps"]       { background: #27ae60; }       /* Green */
+.mp-type-badge[data-type="icons"]       { background: #f1c40f; color: #333; } /* Yellow */
+.mp-type-badge[data-type="cards"]       { background: #00b894; }       /* Caribbean */
+.mp-type-badge[data-type="diagram"]     { background: #2d6a4f; }       /* Forest */
+.mp-type-badge[data-type="funnel"]      { background: #795548; }       /* Brown */
+.mp-type-badge[data-type="chart"]       { background: #9b59b6; }       /* Lavender */
+.mp-type-badge[data-type="gauge"]       { background: #e67e22; }       /* Mango */
+.mp-type-badge[data-type="metrics"]     { background: #6c5ce7; }       /* Violet */
+.mp-type-badge[data-type="list"]        { background: #00cec9; }       /* Teal */
+.mp-type-badge[data-type="timeline"]    { background: #a29bfe; }       /* Iris */
+.mp-type-badge[data-type="ui"]          { background: #b2bec3; }       /* Tan */
+
+.mp-clip-name {
+    font-size: 8px;
+    color: var(--text-muted);
+    margin-left: 4px;
+    font-family: monospace;
 }
 .mp-proposal-time {
     font-size: 9px;
