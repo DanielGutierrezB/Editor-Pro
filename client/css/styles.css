@@ -626,10 +626,12 @@ html, body {
     cursor: pointer;
     font-size: 12px;
     padding: 2px 4px;
-    margin-left: 4px;
+    margin-left: auto;
+    margin-right: 2px;
     border-radius: 3px;
     transition: color 150ms, background 150ms;
     line-height: 1;
+    flex-shrink: 0;
 }
 .btn-fullscreen:hover {
     color: var(--text-primary);
