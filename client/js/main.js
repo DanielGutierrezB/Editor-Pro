@@ -2084,6 +2084,13 @@
         var text = textarea.value.trim();
         state.transcript = text;
 
+        // Update transcript card title with status
+        var titleEl = document.querySelector('[data-tool="transcript"] .tool-card-title');
+        if (titleEl) {
+            titleEl.textContent = text ? "✅ Transcripción" : "📝 Transcripción";
+            titleEl.style.color = text ? "#0ae98d" : "";
+        }
+
         if (!text) {
             state.segments = [];
             document.getElementById("transcript-info").textContent = "Sin transcripción cargada";
