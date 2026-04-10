@@ -56,4 +56,10 @@ Campos adicionales POR PROPUESTA:
 - dataPoints: array de datos numéricos LITERALES mencionados (ej: ["73%", "$450"]). Array vacío si no hay.
 - accentColor: color accent sugerido — "green" (default), "orange" (warning), "red" (danger), "purple" (secondary), "blue" (info)
 
-Responde con JSON: {"proposals":[{startTime,endTime,type,description,priority,transcriptSegment,brands,dataPoints,accentColor}]}
+AGRUPACIÓN POR CONCEPTO:
+- Cada propuesta debe tener un campo `group` con el nombre del concepto/tema al que pertenece
+- Varios motions pueden pertenecer al mismo grupo si son parte del mismo concepto
+- El nombre del grupo debe ser corto (3-6 palabras) y descriptivo
+- Ejemplo: si el narrador habla de "tipos de campañas" durante 30 segundos y mencionas 3 motions sobre ese tema, los 3 llevan group: "Tipos de campañas"
+
+Responde con JSON: {"proposals":[{startTime,endTime,type,description,priority,transcriptSegment,brands,dataPoints,accentColor,group}]}
