@@ -30,6 +30,22 @@ class RemotionManager {
       tsxCode = validationResult.fixedCode;
     }
 
+    // Syntax pre-check: catch unterminated strings, brackets, etc.
+    const syntaxResult = this._validateSyntax(tsxCode);
+    if (!syntaxResult.valid) {
+      console.error(`[RemotionManager] Syntax errors in ${compositionId}:`, syntaxResult.errors);
+      // Attempt auto-fix for common issues
+      tsxCode = this._autoFixSyntax(tsxCode);
+      const recheck = this._validateSyntax(tsxCode);
+      if (!recheck.valid) {
+        console.error(`[RemotionManager] Could not auto-fix ${compositionId}, skipping registration`);
+        // Write the file but DON'T register in Root.tsx — this prevents it from breaking other renders
+        const filePath = path.join(this.compositionsDir, `${compositionId}.tsx`);
+        fs.writeFileSync(filePath, tsxCode, 'utf8');
+        return { filePath, syntaxError: true, errors: recheck.errors };
+      }
+    }
+
     const filePath = path.join(this.compositionsDir, `${compositionId}.tsx`);
     fs.writeFileSync(filePath, tsxCode, 'utf8');
 
@@ -138,6 +154,112 @@ class RemotionManager {
     return { valid: true, errors: [] };
   }
 
+  /**
+   * Basic syntax validation — catch issues BEFORE bundling so one bad file
+   * doesn't take down the entire Remotion project.
+   */
+  _validateSyntax(tsxCode) {
+    const errors = [];
+    const lines = tsxCode.split('\n');
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNum = i + 1;
+
+      // Check for unterminated string literals (single and double quotes)
+      // Count unescaped quotes — odd number means unterminated
+      for (const q of ["'", '"']) {
+        const stripped = line.replace(/\\./g, '__'); // neutralize escapes
+        const count = (stripped.split(q).length - 1);
+        // Template literals (backtick) handled separately
+        if (count % 2 !== 0) {
+          // Could be a multi-line template or JSX — check for backtick context
+          if (!stripped.includes('`')) {
+            errors.push(`Line ${lineNum}: Unterminated ${q === '"' ? 'double' : 'single'}-quoted string`);
+          }
+        }
+      }
+
+      // Check for unterminated template literals within a single line
+      // (multi-line templates are valid, but a line starting a template with ` and having ${} but no closing ` is suspicious)
+    }
+
+    // Check bracket balance across the entire file
+    const brackets = { '(': 0, '[': 0, '{': 0, '<': 0 };
+    const closers = { ')': '(', ']': '[', '}': '{', '>': '<' };
+    let inString = false;
+    let stringChar = '';
+    let inJsx = false;
+
+    for (let i = 0; i < tsxCode.length; i++) {
+      const ch = tsxCode[i];
+      const prev = i > 0 ? tsxCode[i - 1] : '';
+
+      // Track string context (simplified)
+      if (!inString && (ch === '"' || ch === "'" || ch === '`') && prev !== '\\') {
+        inString = true;
+        stringChar = ch;
+        continue;
+      }
+      if (inString && ch === stringChar && prev !== '\\') {
+        inString = false;
+        continue;
+      }
+      if (inString) continue;
+
+      // Skip comments
+      if (ch === '/' && tsxCode[i + 1] === '/') {
+        // Skip to end of line
+        const nl = tsxCode.indexOf('\n', i);
+        i = nl === -1 ? tsxCode.length : nl;
+        continue;
+      }
+
+      if (brackets.hasOwnProperty(ch)) brackets[ch]++;
+      if (closers[ch]) brackets[closers[ch]]--;
+    }
+
+    if (brackets['('] !== 0) errors.push(`Unbalanced parentheses: ${brackets['(']} unclosed`);
+    if (brackets['{'] !== 0) errors.push(`Unbalanced braces: ${brackets['{']} unclosed`);
+    // Don't check < > balance — JSX self-closing tags make this unreliable
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  /**
+   * Attempt to auto-fix common syntax issues in AI-generated TSX.
+   */
+  _autoFixSyntax(tsxCode) {
+    const lines = tsxCode.split('\n');
+    const fixedLines = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+
+      // Fix unterminated string literals: if a line has an odd number of
+      // unescaped quotes and doesn't continue on the next line, close it
+      for (const q of ['"', "'"]) {
+        const stripped = line.replace(/\\./g, '__');
+        const count = (stripped.split(q).length - 1);
+        if (count % 2 !== 0 && !stripped.includes('`')) {
+          // Find the last occurrence of the quote and check if string is unclosed
+          const lastIdx = line.lastIndexOf(q);
+          // Check if this is a dangling open quote near end of line
+          const afterQuote = line.slice(lastIdx + 1).trim();
+          if (afterQuote === '' || afterQuote === '>' || afterQuote === '/>') {
+            // Insert closing quote before the trailing characters
+            line = line.slice(0, lastIdx + 1) + line.slice(lastIdx + 1).replace(/^/, q);
+            console.log(`[RemotionManager] Auto-fixed unterminated ${q} on line ${i + 1}`);
+          }
+        }
+      }
+
+      fixedLines.push(line);
+    }
+
+    return fixedLines.join('\n');
+  }
+
   _calculateDuration(tsxCode, fallback) {
     // <Sequence from={X} durationInFrames={Y}> — max(from+dur), incl. saltos de línea entre atributos
     let maxEnd = 0;
@@ -186,6 +308,25 @@ class RemotionManager {
     }
 
     fs.writeFileSync(this.rootTsxPath, root, 'utf8');
+  }
+
+  /**
+   * Remove a broken composition from Root.tsx so it doesn't poison other renders.
+   */
+  _deregisterFromRoot(compositionId) {
+    if (!fs.existsSync(this.rootTsxPath)) return;
+    let root = fs.readFileSync(this.rootTsxPath, 'utf8');
+
+    const componentName = this._componentName(compositionId);
+    // Remove import line
+    const importRe = new RegExp(`^import\\s*\\{\\s*${componentName}\\s*\\}.*\\n?`, 'm');
+    root = root.replace(importRe, '');
+    // Remove composition line
+    const compRe = new RegExp(`^\\s*<Composition\\s+id="${compositionId.replace(/[-]/g, '\\-')}"[^>]*/>\\n?`, 'm');
+    root = root.replace(compRe, '');
+
+    fs.writeFileSync(this.rootTsxPath, root, 'utf8');
+    console.log(`[RemotionManager] Deregistered broken composition: ${compositionId}`);
   }
 
   _componentName(compositionId) {
@@ -254,11 +395,19 @@ class RemotionManager {
 
     fs.writeFileSync(this.rootTsxPath, root, 'utf8');
 
-    // Re-register all compositions currently in the dir
+    // Re-register all compositions currently in the dir (skip those with syntax errors)
     const files = fs.readdirSync(this.compositionsDir).filter(f => f.endsWith('.tsx'));
     files.forEach(f => {
       const id = f.replace('.tsx', '');
       const content = fs.readFileSync(path.join(this.compositionsDir, f), 'utf8');
+
+      // Validate syntax before registering — don't let a broken file poison Root.tsx
+      const syntaxCheck = this._validateSyntax(content);
+      if (!syntaxCheck.valid) {
+        console.warn(`[RemotionManager] Skipping ${id} during rebuild — syntax errors:`, syntaxCheck.errors);
+        return; // skip this file
+      }
+
       let totalFrames = 300;
 
       // Method 1: Traditional <Sequence from={X} durationInFrames={Y}>
@@ -365,7 +514,21 @@ class RemotionManager {
         }
         callback(null, { mp4Path: finalPath, compositionId });
       } else {
-        callback(new Error(`Render failed (code ${code}): ${stderr || stdout}`));
+        const errorMsg = stderr || stdout;
+        // If the error is a build/syntax error, find which .tsx file caused it
+        // and deregister it from Root.tsx so subsequent renders aren't blocked
+        const buildErrorMatch = errorMsg.match(/compositions\/([^:]+\.tsx):\d+:\d+: ERROR:/);
+        if (buildErrorMatch) {
+          const brokenFile = buildErrorMatch[1].replace('.tsx', '');
+          console.error(`[RemotionManager] Build error in ${brokenFile}, deregistering from Root.tsx`);
+          this._deregisterFromRoot(brokenFile);
+          // Also remove the broken file to prevent it from being re-registered
+          const brokenPath = path.join(this.compositionsDir, buildErrorMatch[1]);
+          if (fs.existsSync(brokenPath)) {
+            try { fs.unlinkSync(brokenPath); } catch(_e) {}
+          }
+        }
+        callback(new Error(`Render failed (code ${code}): ${errorMsg}`));
       }
     });
 
