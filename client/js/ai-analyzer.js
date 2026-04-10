@@ -74,16 +74,18 @@
             local: false,
             keyPlaceholder: "sk-or-...",
             models: [
-                { id: "google/gemini-2.5-pro-preview", label: "Gemini 2.5 Pro (Google)" },
-                { id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4 (Anthropic)" },
+                { id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4 (recomendado)" },
+                { id: "anthropic/claude-opus-4", label: "Claude Opus 4 (máxima calidad)" },
                 { id: "anthropic/claude-haiku-4", label: "Claude Haiku 4 (rápido)" },
+                { id: "google/gemini-2.5-pro-preview", label: "Gemini 2.5 Pro (Google)" },
+                { id: "google/gemini-2.5-flash-preview", label: "Gemini 2.5 Flash (rápido)" },
                 { id: "openai/gpt-4o-mini", label: "GPT-4o Mini (OpenAI)" },
                 { id: "openai/gpt-4o", label: "GPT-4o (OpenAI)" },
                 { id: "deepseek/deepseek-chat-v3-0324", label: "DeepSeek V3 (económico)" },
                 { id: "meta-llama/llama-4-maverick", label: "Llama 4 Maverick (Meta)" },
                 { id: "mistralai/mistral-medium-3", label: "Mistral Medium 3" }
             ],
-            defaultModel: "google/gemini-2.5-pro-preview"
+            defaultModel: "anthropic/claude-sonnet-4"
         }
     };
 
