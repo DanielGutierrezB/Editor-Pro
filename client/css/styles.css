@@ -3173,3 +3173,25 @@ html, body {
 }
 
 
+
+/* Custom tooltips for header buttons */
+.icon-btn[title], #version-label[title] {
+    position: relative;
+}
+.icon-btn[title]:hover::after, #version-label[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #222;
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 99999;
+    margin-top: 6px;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
