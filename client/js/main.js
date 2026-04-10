@@ -2687,6 +2687,26 @@
         } catch(e) {}
     }
 
+    // Show current version from git
+    function _showVersion() {
+        try {
+            var exec = require("child_process").exec;
+            var extensionPath = csInterface.getSystemPath("extension");
+            exec("cd '" + extensionPath + "' && git log --oneline -1 2>/dev/null",
+                { timeout: 5000 },
+                function(err, stdout) {
+                    var label = document.getElementById("version-label");
+                    if (label && stdout && stdout.trim()) {
+                        var hash = stdout.trim().substring(0, 7);
+                        label.textContent = "v" + hash;
+                        label.title = stdout.trim();
+                    }
+                }
+            );
+        } catch(e) {}
+    }
+    setTimeout(_showVersion, 1000);
+
     // Check on startup after 5 seconds
     setTimeout(_checkForUpdates, 5000);
 
