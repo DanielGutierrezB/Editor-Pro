@@ -299,7 +299,7 @@ import "@fontsource/dm-sans/500.css";
 import "@fontsource/dm-sans/600.css";
 import "@fontsource/dm-sans/700.css";
 import React from 'react';
-import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Img} from 'remotion';
+import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Img, Easing} from 'remotion';
 ```
 
 ### 2.3 Reusable Components (always include)
@@ -319,12 +319,15 @@ Usable area: 1600×740px. ALL content must be inside Safe.
 ```tsx
 const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CSSProperties}> = ({d,children,from='up',style}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const progress = spring({frame:frame-d,fps,config:{damping:14,mass:0.4}});
-  const y = from==='up'?interpolate(progress,[0,1],[200,0]):from==='down'?interpolate(progress,[0,1],[-200,0]):0;
-  const x = from==='left'?interpolate(progress,[0,1],[200,0]):from==='right'?interpolate(progress,[0,1],[-200,0]):0;
-  const sc = from==='pop'?interpolate(progress,[0,1],[0.9,1]):1;
-  return <div style={{transform:`translate(${x}px,${y}px) scale(${sc})`,opacity:interpolate(progress,[0,0.3],[0,1],{extrapolateRight:'clamp'}),...style}}>{children}</div>;
+  const progress = interpolate(frame-d, [0, 20], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const y = from==='up'?interpolate(progress,[0,1],[80,0]):from==='down'?interpolate(progress,[0,1],[-80,0]):0;
+  const x = from==='left'?interpolate(progress,[0,1],[80,0]):from==='right'?interpolate(progress,[0,1],[-80,0]):0;
+  const sc = from==='pop'?interpolate(progress,[0,1],[0.85,1]):1;
+  return <div style={{transform:`translate(${x}px,${y}px) scale(${sc})`,opacity:progress,...style}}>{children}</div>;
 };
 ```
 - `d` = delay in frames from section start
@@ -372,8 +375,8 @@ SafeArea component: left:160, top:180, right:160, bottom:160 → 1600×740 usabl
 export const MyMotion:React.FC = () => {
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>
-      <Sequence from={0} durationInFrames={150}><Section1/></Sequence>
-      <Sequence from={150} durationInFrames={200}><Section2/></Sequence>
+      <Sequence from={0} durationInFrames={150} premountFor={10}><Section1/></Sequence>
+      <Sequence from={150} durationInFrames={200} premountFor={10}><Section2/></Sequence>
       {/* ... more sections, NO overlaps */}
     </AbsoluteFill>
   );
@@ -458,13 +461,17 @@ export const MyMotion:React.FC = () => {
 - Optional subtle radial gradient glow behind text (C.accent at opacity 0.04)
 
 ### 2.8 Easing Curves
-| Type | Use |
-|---|---|
-| spring({damping:14, mass:0.4}) | PRIMARY — all entrances |
-| cubic-bezier(.16, 1, .3, 1) | Ease Out — smooth entries |
-| linear | ONLY for progress bars |
-| cubic-bezier(.7, 0, .84, 0) | Exits |
-| cubic-bezier(.34, 1.56, .64, 1) | Bounce (use sparingly) |
+| Type | Easing | Use |
+|---|---|---|
+| Crisp entrance (DEFAULT) | Easing.bezier(0.16, 1, 0.3, 1) | ALL element entrances |
+| Editorial fade | Easing.bezier(0.45, 0, 0.55, 1) | Slow transitions, title screens |
+| Playful overshoot | Easing.bezier(0.34, 1.56, 0.64, 1) | Emphasis moments ONLY |
+| Smooth exit | Easing.bezier(0.55, 0, 1, 0.45) | Element exits |
+| spring({damping:200}) | N/A | Smooth non-bouncy physics |
+| spring({damping:10}) | N/A | Bouncy emphasis ONLY |
+| linear | N/A | ONLY for progress bars — NEVER for entrances |
+
+**RULE: Easing.out for entrances, Easing.in for exits. NEVER use linear for element motion.**
 
 ### 2.9 Remotion Import Rules
 - Use `Img` from remotion for images
@@ -576,6 +583,8 @@ Every text must have enough time to be READ:
 - Long text (16+ words): min 240 frames (8s)
 - NEVER remove text before reading time is complete
 
+**Hold Time Rule**: After text finishes animating in, it must HOLD STILL for at least 45 frames (1.5s) before any exit animation. Viewers need time to READ. The text entrance animation duration does NOT count as reading time.
+
 ### 4.5 Cumulative Content Rule (CRITICAL)
 When a section has multiple items:
 - NEW elements ADD to the screen, do NOT replace previous ones
@@ -617,6 +626,13 @@ When a section has multiple items:
 18. ❌ Replace one card with another (fade out → fade in) — use additive reveal instead
 19. ❌ Show text for < 2 seconds then remove it
 20. ❌ Full browser chrome in UI mockups — isolated elements only
+21. ❌ Missing extrapolation clamping — ALWAYS use extrapolateLeft:'clamp', extrapolateRight:'clamp'
+22. ❌ Static elements with no animation — EVERY element needs entrance animation
+23. ❌ All elements appear simultaneously — ALWAYS stagger by 5-8 frames
+24. ❌ Using spring bounce for everything — spring({damping:200}) for normal motion, bounce (damping<15) ONLY for emphasis
+25. ❌ Forgetting premountFor on Sequences — ALWAYS add premountFor={10}
+26. ❌ Using Math.random() — use random() from 'remotion' instead
+27. ❌ Same animation duration for everything — vary: titles 25-35f, body 15-25f, backgrounds 40-60f
 
 ---
 
@@ -655,3 +671,9 @@ When a section has multiple items:
 ### Remotion
 - NO Audio, NO Html5Audio — visual-only compositions
 - Use `Img` from remotion for images
+
+### Interpolation
+- ALL interpolate() calls MUST include extrapolateLeft:'clamp', extrapolateRight:'clamp'
+- Derive timing from useCurrentFrame() — NEVER from CSS transitions or setTimeout
+- Prefer Easing.bezier over spring for predictable timing
+- When multiple properties share timing, create ONE progress variable and derive all from it

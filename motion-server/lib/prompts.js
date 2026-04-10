@@ -60,7 +60,8 @@ const TYPE_INSTRUCTIONS = {
 - Each card: 500-620px wide, C.card background, border-radius 12px
 - Card headers with lucide-react icon + accent color, body with comparison points
 - Use different accent colors (C.accent vs C.orange)
-- Use TransitionSeries or staggered Sequences for the 3-part reveal`,
+- Use TransitionSeries or staggered Sequences for the 3-part reveal
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   steps: `Create a STEP/PROGRESS animation (MULTI-SECTION):
 - Show ONE step at a time, centered, with a lucide-react icon (60-80px)
@@ -69,14 +70,16 @@ const TYPE_INSTRUCTIONS = {
 - Use TransitionSeries with fade() for smooth step-to-step transitions
 - Active step: border + boxShadow glow, fontWeight 700
 - Stagger elements within each step: 12-15 frames
-- 3-5 steps typical, each step lasts 90-150 frames (3-5 seconds)`,
+- 3-5 steps typical, each step lasts 90-150 frames (3-5 seconds)
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   icons: `Create an ICON REVEAL animation (2-4 items):
 - 2-4 items displayed horizontally with gap: 140-160px
 - Each item: circle background (180-220px), SVG geometric icon inside (100-140px)
 - Label below each icon: 20-24px, fontWeight 700
 - Items enter with stagger: 12-15 frames between each
-- Use different accent colors per icon`,
+- Use different accent colors per icon
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   chart: `Create a CHART animation:
 - Bar chart OR line chart based on the data
@@ -84,21 +87,24 @@ const TYPE_INSTRUCTIONS = {
 - Line charts: max width 1100px, marginLeft 100px, draw animation 120-150 frames
 - ALWAYS include axis labels (X and Y)
 - Title: 30-42px, marginBottom 60px minimum
-- Values shown above bars or at data points`,
+- Values shown above bars or at data points
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   title: `Create a TITLE/INTRO screen:
 - Large centered SVG icon (100-140px) at top
 - Title: 56-64px, fontWeight 700
 - Subtitle: 24-28px, fontWeight 400, color C.dim
 - Decorative separator line: 50px wide, 2px height, accent color
-- Elements enter with stagger from center (pop animation)`,
+- Elements enter with stagger from center (pop animation)
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   cards: `Create a CARD LAYOUT (horizontal flow):
 - 2-3 cards arranged horizontally with SVG arrows between them
 - Each card: 500-620px wide, C.card background, solid border
 - Arrow connectors: SVG paths between cards
 - For long text: use SHORT labels (max 8-10 words), never gray placeholder bars
-- Cards enter with stagger from left to right`,
+- Cards enter with stagger from left to right
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   diagram: `Create a FLOW DIAGRAM (MULTI-SECTION):
 - Flow boxes: 480-560px wide, connected by arrows using lucide-react ArrowRight
@@ -107,7 +113,8 @@ const TYPE_INSTRUCTIONS = {
 - Section 1: first box appears. Section 2: arrow + second box. Section 3: arrow + third box.
 - Connection arrows appear WITH the next box, not before
 - Use TransitionSeries with fade() between stages
-- Each stage lasts 120-180 frames (4-6 seconds)`,
+- Each stage lasts 120-180 frames (4-6 seconds)
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   ui: `Create a UI MOCKUP animation:
 - Show ONLY the relevant UI element per section, centered
@@ -116,7 +123,8 @@ const TYPE_INSTRUCTIONS = {
 - Active field: accent border + subtle glow
 - For body text: use SHORT descriptive text (max 8-10 words), never gray placeholder bars
 - Generic data: "John Doe", "john@email.com"
-- NO full browser chrome — just the isolated element`,
+- NO full browser chrome — just the isolated element
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   timeline: `Create a TIMELINE animation (MULTI-SECTION, sequential events):
 - Horizontal line as the spine with progressive draw-on (interpolate width from 0 to 100%)
@@ -124,15 +132,17 @@ const TYPE_INSTRUCTIONS = {
 - Each node: circle (80-100px) with lucide-react icon + label below
 - Each node gets its own Sequence block, timed to when the narrator mentions that event
 - Line grows continuously while nodes pop in at the right moment
-- This type is NATURALLY LONG — let it span the full narration duration`,
+- This type is NATURALLY LONG — let it span the full narration duration
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   reveal: `Create a REVEAL/DRAW-ON animation:
 - Use @remotion/paths evolvePath to draw SVG paths progressively
 - Main concept revealed through animated path tracing
 - Can reveal text character by character (typing effect)
 - Or reveal a diagram/icon by drawing its strokes
-- Trail from @remotion/motion-blur is FRAGILE — avoid unless explicitly needed. If used, ALL props required: <Trail layers={8} lagInFrames={0.02} trailOpacity={0.6}>. NEVER omit trailOpacity.
-- Background elements can use noise2D from @remotion/noise for subtle organic movement`,
+- Use opacity and scale transitions for reveals. Avoid @remotion/motion-blur Trail component.
+- Background elements can use noise2D from @remotion/noise for subtle organic movement
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   list: `Create an ANIMATED LIST (vertical items):
 - 3-8 items stacked vertically, each entering from bottom with stagger
@@ -140,7 +150,8 @@ const TYPE_INSTRUCTIONS = {
 - Use TransitionSeries so items flow in smoothly
 - Optional: number/bullet before each item
 - Items can have a subtle highlight bar that fills as the narrator mentions them
-- Use Rect from @remotion/shapes for highlight backgrounds`,
+- Use Rect from @remotion/shapes for highlight backgrounds
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   metrics: `Create a METRICS/KPI dashboard:
 - 2-4 big numbers displayed prominently
@@ -148,7 +159,8 @@ const TYPE_INSTRUCTIONS = {
 - Use Circle or Pie from @remotion/shapes for circular progress indicators
 - Optional trend arrow (lucide-react TrendingUp/TrendingDown)
 - Numbers animate from 0 to final value over 30-40 frames
-- Cards with C.card background, border-radius 12px, subtle glow`,
+- Cards with C.card background, border-radius 12px, subtle glow
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   beforeafter: `Create a BEFORE/AFTER comparison (split screen):
 - Split layout: left side (wrong way, C.red accent) | vertical divider | right side (correct way, C.accent)
@@ -158,7 +170,8 @@ const TYPE_INSTRUCTIONS = {
 - Max content width per side: 700px
 - Left side uses C.red or C.orange tones, right uses C.accent/C.green
 - Each side can have a card, text block, or icon-based content
-- Use Sequence blocks: Section 1 = left appears, Section 2 = divider + right appears`,
+- Use Sequence blocks: Section 1 = left appears, Section 2 = divider + right appears
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   funnel: `Create a FUNNEL/PIPELINE visualization (stages with flow):
 - 3-5 stages arranged vertically, each as a card with icon + label + optional metric
@@ -168,7 +181,8 @@ const TYPE_INSTRUCTIONS = {
 - Future stages: outlined card (transparent bg, C.border border)
 - Past stages: standard card, dimmed (opacity 0.6)
 - Stage entry animation: 12-frame stagger per stage, entering from top with spring
-- Use Sequence blocks to reveal stages progressively as narrator mentions them`,
+- Use Sequence blocks to reveal stages progressively as narrator mentions them
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   gauge: `Create a GAUGE/BENCHMARK visualization (metric vs target):
 - Large number centered (96-200px font, animated counting up from 0 using interpolate)
@@ -178,7 +192,8 @@ const TYPE_INSTRUCTIONS = {
 - Label below: "Meta: X%" in C.dim text, fontSize 24
 - Color logic: C.accent if value >= target, C.red if value < target * 0.7, C.orange if between
 - Suffix (%, $, etc.) displayed next to the large number
-- Optional: secondary metric or comparison text below the gauge`,
+- Optional: secondary metric or comparison text below the gauge
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   callout: `Create a CALLOUT/KEY PHRASE visualization:
 - Large centered text (48-64px, fontWeight 700, color C.text or C.accent)
@@ -188,7 +203,8 @@ const TYPE_INSTRUCTIONS = {
 - Background: very subtle radial gradient glow behind text at zIndex -1
   - background: "radial-gradient(circle at 50% 50%, rgba(10,233,141,0.04), transparent 70%)"
 - Text should be impactful — this is the KEY TAKEAWAY the narrator is emphasizing
-- Keep it simple: one phrase, big and centered, with elegant decoration`,
+- Keep it simple: one phrase, big and centered, with elegant decoration
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 };
 
 function getGenerationPrompt({ transcriptSegment, type, description, durationFrames, compositionId, brandfetchKey }) {
@@ -217,7 +233,7 @@ import "@fontsource/dm-sans/500.css";
 import "@fontsource/dm-sans/600.css";
 import "@fontsource/dm-sans/700.css";
 import React from 'react';
-import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Img} from 'remotion';
+import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Img, Easing} from 'remotion';
 // Import icons as needed from lucide-react (see available-packages.md for full list)
 // import { Shield, Lock, Key, Globe, Server, Database, CheckCircle, ArrowRight } from 'lucide-react';
 // Import transitions if using TransitionSeries
@@ -237,12 +253,15 @@ const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({c
 
 const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CSSProperties}> = ({d,children,from='up',style}) => {
   const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const progress = spring({frame:frame-d,fps,config:{damping:14,mass:0.4}});
-  const y = from==='up'?interpolate(progress,[0,1],[200,0]):from==='down'?interpolate(progress,[0,1],[-200,0]):0;
-  const x = from==='left'?interpolate(progress,[0,1],[200,0]):from==='right'?interpolate(progress,[0,1],[-200,0]):0;
-  const sc = from==='pop'?interpolate(progress,[0,1],[0.9,1]):1;
-  return <div style={{transform:\`translate(\${x}px,\${y}px) scale(\${sc})\`,opacity:interpolate(progress,[0,0.3],[0,1],{extrapolateRight:'clamp'}),...style}}>{children}</div>;
+  const progress = interpolate(frame-d, [0, 20], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const y = from==='up'?interpolate(progress,[0,1],[80,0]):from==='down'?interpolate(progress,[0,1],[-80,0]):0;
+  const x = from==='left'?interpolate(progress,[0,1],[80,0]):from==='right'?interpolate(progress,[0,1],[-80,0]):0;
+  const sc = from==='pop'?interpolate(progress,[0,1],[0.85,1]):1;
+  return <div style={{transform:\`translate(\${x}px,\${y}px) scale(\${sc})\`,opacity:progress,...style}}>{children}</div>;
 };
 
 const Fd:React.FC<{children:React.ReactNode;fi?:number;fo?:number;dur:number}> = ({children,fi=10,fo=10,dur}) => {
@@ -255,7 +274,9 @@ const Fd:React.FC<{children:React.ReactNode;fi?:number;fo?:number;dur:number}> =
 export const ${compName}:React.FC = () => {
   return (
     <AbsoluteFill style={{backgroundColor:C.bg,fontFamily:"'DM Sans',sans-serif"}}>
-      {/* Sequence blocks go here */}
+      <Sequence from={0} durationInFrames={150} premountFor={10}><Section1/></Sequence>
+      <Sequence from={150} durationInFrames={200} premountFor={10}><Section2/></Sequence>
+      {/* ... more sections, NO overlaps */}
     </AbsoluteFill>
   );
 };
@@ -313,7 +334,7 @@ ${transcriptSegment}
 19. LAST SECTION PERSISTENCE: The last visual section must use <Fd dur={totalDuration} fi={10} fo={1}> so it stays visible until the very end. Never let the last section fade out early.
 20. Z-INDEX LAYERING: When stacking elements, text/titles must ALWAYS be on top. Use position:'relative' and zIndex to control layering. Never place a background box OVER text content. If you need a text overlay, use a semi-transparent background (C.card with opacity 0.9) BEHIND the text, not on top. Stack order: background → decorative elements → cards/boxes → text/icons.
 21. IMPORT SAFETY: Only import from these packages:
-    - 'remotion' (AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Img, Audio, staticFile)
+    - 'remotion' (AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Img, Audio, staticFile, Easing, random)
     - 'lucide-react' (any icon)
     - '@remotion/transitions' (TransitionSeries, linearTiming)
     - '@remotion/transitions/fade' (fade)
@@ -323,6 +344,11 @@ ${transcriptSegment}
     - '@remotion/noise' (noise2D, noise3D)
     - '@remotion/motion-blur' (Trail)
     DO NOT import from any other package. DO NOT use named exports that don't exist in these packages.
+22. INTERPOLATION CLAMPING: ALL interpolate() calls MUST include { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }. Missing clamping causes visual glitches (opacity > 1, positions overshoot).
+23. STAGGER: Never show all elements at once. Stagger entrances by 5-8 frames between elements. First element at d=0, second at d=6, third at d=12, etc.
+24. HOLD TIME: After text finishes animating in, it must hold still for at least 45 frames (1.5s) before exit. Reading time ≠ animation time.
+25. PREMOUNT: ALL <Sequence> components MUST include premountFor={10} to prevent pop-in artifacts.
+26. EASING DIRECTION: Use Easing.out or Easing.bezier(0.16,1,0.3,1) for entrances. Use Easing.in for exits. NEVER use linear easing for element motion.
 
 Output the COMPLETE TSX file. No explanations before or after the code.`;
 
@@ -359,7 +385,7 @@ ${currentTsx}
 5. ALL text must use fontFamily:"'DM Sans',sans-serif" — corporate font
 6. ALL content inside <Safe> — nothing outside safe zone
 7. Background: solid C.bg only. NO audio. Colors from C only.
-8. Spring config: {damping:14, mass:0.4} as defined in the design docs
+8. E component uses Easing.bezier(0.16, 1, 0.3, 1) with clamping — keep as defined in template
 9. Keep same timing/duration unless feedback changes it
 10. Frame 0 = start of clip. Sections are RELATIVE to frame 0, not absolute timeline time
 
