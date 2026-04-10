@@ -31,16 +31,14 @@ class RemotionManager {
   }
 
   _calculateDuration(tsxCode, fallback) {
-    // Method 1: <Sequence from={X} durationInFrames={Y}> — use max(from+dur)
+    // <Sequence from={X} durationInFrames={Y}> — max(from+dur), incl. saltos de línea entre atributos
     let maxEnd = 0;
-    const fromDurMatches = tsxCode.match(/<Sequence\s+from=\{(\d+)\}\s+durationInFrames=\{(\d+)\}/g) || [];
-    fromDurMatches.forEach(m => {
-      const match = m.match(/from=\{(\d+)\}\s+durationInFrames=\{(\d+)\}/);
-      if (match) {
-        const end = parseInt(match[1]) + parseInt(match[2]);
-        if (end > maxEnd) maxEnd = end;
-      }
-    });
+    const reSeq = /<Sequence[\s\S]*?from=\{(\d+)\}[\s\S]*?durationInFrames=\{(\d+)\}/g;
+    let m;
+    while ((m = reSeq.exec(tsxCode)) !== null) {
+      const end = parseInt(m[1], 10) + parseInt(m[2], 10);
+      if (end > maxEnd) maxEnd = end;
+    }
 
     // Method 2: TransitionSeries — sum all durationInFrames (sequential)
     if (maxEnd === 0 && tsxCode.indexOf('TransitionSeries') !== -1) {
@@ -198,7 +196,8 @@ class RemotionManager {
     if (!fs.existsSync(rendersDir)) {
       fs.mkdirSync(rendersDir, { recursive: true });
     }
-    const outputPath = path.join(rendersDir, `${compositionId}.mov`);
+    // H.264 + yuv420p: Premiere suele fallar al leer fotogramas en ProRes .mov generado por Remotion (sustituye frames / franjas rayadas).
+    const outputPath = path.join(rendersDir, `${compositionId}.mp4`);
 
     const npxPath = execSync('which npx', { encoding: 'utf8' }).trim();
     const args = [
@@ -206,8 +205,8 @@ class RemotionManager {
       path.join(this.projectPath, 'src', 'index.ts'),
       compositionId,
       outputPath,
-      '--codec=prores',
-      '--prores-profile=hq',
+      '--codec=h264',
+      '--pixel-format=yuv420p',
       '--muted',
       '--image-format=png',
     ];
@@ -225,8 +224,12 @@ class RemotionManager {
     proc.stderr.on('data', (data) => { stderr += data.toString(); });
 
     proc.on('close', (code) => {
-      const altPath = outputPath + '.mov';
-      const finalPath = fs.existsSync(outputPath) ? outputPath : fs.existsSync(altPath) ? altPath : null;
+      const altPath = outputPath + '.mp4';
+      const finalPath = fs.existsSync(outputPath)
+        ? outputPath
+        : fs.existsSync(altPath)
+          ? altPath
+          : null;
       if (code === 0 && finalPath) {
         // Write README in session root if this is a project folder
         if (customOutputDir) {
@@ -238,7 +241,7 @@ class RemotionManager {
                 '======================================',
                 '',
                 'Estructura:',
-                '  renders/   → Videos renderizados (.mov ProRes, importados a Premiere)',
+                '  renders/   → Videos renderizados (.mp4 H.264, importados a Premiere)',
                 '  src/       → Código fuente editable (.tsx Remotion/React)',
                 '  feedback/  → Imágenes de referencia capturadas',
                 '  FEEDBACK.md → Log de feedback enviado',

@@ -17,6 +17,12 @@
                 <span id="seq-meta" class="layer-count"></span>
                 <span class="seq-dropdown-arrow">▾</span>
             </button>
+            <button id="btn-reload" class="icon-btn" title="Recargar panel" onclick="location.reload()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+                    <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+                </svg>
+            </button>
             <button id="btn-settings" class="icon-btn" title="Configuración IA">
                 <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
                     <path d="M6.2 1.5L6.7 3.2C7 3.3 7.2 3.4 7.5 3.6L9.2 3L10.4 5.2L8.9 6.5C8.95 6.8 8.97 7.1 8.95 7.4L10.4 8.7L9.2 10.9L7.5 10.3C7.2 10.5 7 10.6 6.7 10.7L6.2 12.4H3.8L3.3 10.7C3 10.6 2.8 10.5 2.5 10.3L0.8 10.9L-0.4 8.7L1.1 7.4C1.05 7.1 1.03 6.8 1.05 6.5L-0.4 5.2L0.8 3L2.5 3.6C2.8 3.4 3 3.3 3.3 3.2L3.8 1.5H6.2Z" transform="translate(2.5 1)" stroke="currentColor" stroke-width="1.1" fill="none"/>
@@ -426,21 +432,80 @@
                     </div>
                 </div>
 
-                <div class="action-bar">
+                <div class="btn-row">
                     <button id="btn-supertexts2" class="btn-analyze btn-analyze-alt" title="Analiza la transcripción y genera supertextos como gráficos MOGRT">
-                        <span class="btn-analyze-text">Generar Supertextos</span>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M2 4h8M2 8h10M2 12h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            <circle cx="13" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                        <span>Generar Supertextos</span>
                     </button>
+                    <button id="btn-st2-batch" class="btn-analyze btn-st2-batch" title="Analizar y crear supertextos en múltiples secuencias">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <rect x="1" y="2" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                            <rect x="1" y="7" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                            <rect x="1" y="12" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                        </svg>
+                        <span>Batch Todas</span>
+                    </button>
+                </div>
+
+                <!-- Batch Mode Panel -->
+                <div id="st2-batch-panel" class="hidden" style="margin-top:8px">
+                    <div class="batch-header">
+                        <span class="batch-title">Secuencias abiertas con transcript</span>
+                        <span id="st2-batch-count" style="font-size:10px;color:var(--text-muted)">0</span>
+                    </div>
+                    <div class="batch-select-all">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--text-secondary)">
+                            <input type="checkbox" id="st2-batch-select-all" checked>
+                            Seleccionar todas
+                        </label>
+                    </div>
+                    <div id="st2-batch-list" class="batch-list" style="max-height:350px"></div>
+                    <div id="st2-batch-progress" class="progress-bar hidden" style="margin-bottom:6px">
+                        <div class="progress-track"><div id="st2-batch-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                        <span id="st2-batch-progress-text" class="progress-text">Preparando...</span>
+                    </div>
+                    <div class="btn-row" style="margin-top:6px">
+                        <button id="btn-st2-batch-analyze" class="btn-analyze btn-st2-batch" style="flex:1">
+                            <span>Analizar Todas</span>
+                        </button>
+                        <button id="btn-st2-batch-create" class="btn-analyze btn-analyze-alt hidden" style="flex:1">
+                            <span>Crear Todas</span>
+                        </button>
+                    </div>
+                    <button id="btn-st2-batch-cancel" class="btn-back-nav" style="margin-top:6px;background:rgba(255,255,255,0.04);border-color:var(--border);color:var(--text-secondary)">Cerrar Batch</button>
                 </div>
                 <div id="st2-progress" class="progress-bar hidden">
                     <div class="progress-track"><div id="st2-progress-fill" class="progress-fill" style="width:0%"></div></div>
                     <span id="st2-progress-text" class="progress-text">Analizando transcripción...</span>
                 </div>
                 <div id="st2-results" class="hidden">
+                    <div id="st2-batch-nav" class="st2-batch-nav hidden">
+                        <button id="btn-st2-bnav-prev" class="btn-batch-nav" title="Secuencia anterior">&#8592;</button>
+                        <button id="btn-st2-bnav-back" class="btn-back-nav">Volver a Batch</button>
+                        <button id="btn-st2-bnav-next" class="btn-batch-nav" title="Siguiente secuencia">&#8594;</button>
+                    </div>
                     <div id="st2-summary" class="result-summary"></div>
                     <div class="result-actions">
                         <button id="btn-st2-select-all" class="btn btn-sm btn-ghost" title="Seleccionar / deseleccionar todos">Seleccionar todos</button>
                         <button id="btn-st2-create-graphics" class="btn btn-sm btn-success" title="Inserta gráficos MOGRT en la línea de tiempo">🎬 Crear Gráficos</button>
                         <button id="btn-st2-export" class="btn btn-sm btn-ghost" title="Copiar al portapapeles">📋 Copiar</button>
+                    </div>
+                    <div class="result-actions" style="margin-top:4px;align-items:center">
+                        <select id="st2-exclude-track" class="select-input" style="width:60px;font-size:10px;padding:3px 4px">
+                            <option value="0">V1</option>
+                            <option value="1">V2</option>
+                            <option value="2" selected>V3</option>
+                            <option value="3">V4</option>
+                            <option value="4">V5</option>
+                            <option value="5">V6</option>
+                            <option value="6">V7</option>
+                            <option value="7">V8</option>
+                        </select>
+                        <button id="btn-st2-exclude-track" class="btn btn-sm btn-ghost" title="Deseleccionar supertextos que caen sobre clips en la pista seleccionada">Excluir pista</button>
+                        <span id="st2-exclude-info" style="font-size:9px;color:var(--text-muted)"></span>
                     </div>
                     <div id="st2-list" class="supertext-list"></div>
                 </div>

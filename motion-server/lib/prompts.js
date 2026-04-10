@@ -250,6 +250,8 @@ ${transcriptSegment}
 - Example: if transcript starts at [30.0s] and something happens at [35.0s], that's frame = (35-30)*30 = 150
 - The FIRST visual section should start at frame 0
 - Sections should be sequential: Section 1 starts at 0, Section 2 starts where Section 1 ends, etc.
+- The **total animated content** (last frame with meaningful visuals) must reach at least frame ${Math.max(0, durationFrames - 45)} — do not end all motion at frame 60 if the composition is ${durationFrames} frames long (that causes a short video file and “empty” timeline tails in Premiere).
+- Align beats to the transcript: when the speaker introduces an idea at timestamp T, the corresponding visual should appear at frame (T - firstTimestamp) × 30, not tens of seconds earlier.
 
 ## MULTI-SECTION STRUCTURE (IMPORTANT)
 - This composition should have MULTIPLE internal sections that evolve with the narration

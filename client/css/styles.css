@@ -1926,6 +1926,8 @@ html, body {
 .btn-row .btn-analyze { flex:1; font-size:12px; padding:10px 12px; }
 .btn-batch { background:linear-gradient(135deg,#60a5fa,#3b82f6); box-shadow:0 2px 12px rgba(59,130,246,0.2),inset 0 1px 0 rgba(255,255,255,0.1); }
 .btn-batch:hover { box-shadow:0 6px 20px rgba(59,130,246,0.35),inset 0 1px 0 rgba(255,255,255,0.15); }
+.btn-st2-batch { background:linear-gradient(135deg,#60a5fa,#34d399); box-shadow:0 2px 12px rgba(52,211,153,0.2),inset 0 1px 0 rgba(255,255,255,0.1); }
+.btn-st2-batch:hover { box-shadow:0 6px 20px rgba(52,211,153,0.35),inset 0 1px 0 rgba(255,255,255,0.15); }
 
 /* ─── Batch Section ─── */
 .batch-header { display:flex; align-items:center; justify-content:space-between; padding:8px 0; }
@@ -1944,6 +1946,27 @@ html, body {
 .batch-stat-pill.keep { background:var(--keep-bg); color:var(--keep-color); border:1px solid var(--keep-border); }
 .batch-stat-pill.remove { background:var(--remove-bg); color:var(--remove-color); border:1px solid var(--remove-border); }
 .batch-stat-pill.comment { background:var(--comment-bg); color:var(--comment-color); border:1px solid var(--comment-border); }
+.batch-stat-pill.st2-title { background:rgba(129,140,248,0.12); color:var(--accent-bright); border:1px solid rgba(129,140,248,0.25); }
+.batch-stat-pill.st2-bullet { background:rgba(52,211,153,0.12); color:var(--success); border:1px solid rgba(52,211,153,0.25); }
+.batch-stat-pill.st2-step { background:rgba(96,165,250,0.12); color:var(--info); border:1px solid rgba(96,165,250,0.25); }
+.batch-stat-pill.st2-highlight { background:rgba(250,204,21,0.12); color:#facc15; border:1px solid rgba(250,204,21,0.25); }
+.batch-stat-pill.st2-definition { background:rgba(251,191,36,0.12); color:var(--warning); border:1px solid rgba(251,191,36,0.25); }
+.batch-stat-pill.st2-data { background:rgba(244,114,182,0.12); color:var(--highlight); border:1px solid rgba(244,114,182,0.25); }
+.batch-stat-pill.st2-summary { background:rgba(167,139,250,0.12); color:#a78bfa; border:1px solid rgba(167,139,250,0.25); }
+.batch-stat-pill.st2-total { background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.3); font-weight:700; }
+.batch-stat-pill.st2-error { background:rgba(248,113,113,0.12); color:var(--error); border:1px solid rgba(248,113,113,0.25); }
+.batch-stat-pill.st2-pending { background:rgba(255,255,255,0.05); color:var(--text-muted); border:1px solid var(--border); }
+.batch-stat-pill.st2-analyzing { background:rgba(96,165,250,0.15); color:#60a5fa; border:1px solid rgba(96,165,250,0.3); animation:st2pulse 1.5s ease-in-out infinite; }
+@keyframes st2pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.batch-seq-item.st2-done { cursor:pointer; }
+.batch-seq-item.st2-done:hover { border-color:rgba(52,211,153,0.4); }
+.batch-seq-item .st2b-create-btn { flex-shrink:0; font-size:9px; font-weight:700; padding:3px 8px; border-radius:3px; border:1px solid rgba(52,211,153,0.3); background:rgba(52,211,153,0.1); color:#34d399; cursor:pointer; transition:all 150ms; }
+.batch-seq-item .st2b-create-btn:hover { background:rgba(52,211,153,0.2); border-color:rgba(52,211,153,0.5); }
+.st2-batch-nav { display:flex; gap:4px; margin-bottom:8px; }
+.st2-batch-nav .btn-back-nav { background:linear-gradient(135deg,rgba(52,211,153,0.12),rgba(96,165,250,0.12)); border-color:rgba(52,211,153,0.25); color:#34d399; }
+.st2-batch-nav .btn-back-nav:hover { background:linear-gradient(135deg,rgba(52,211,153,0.22),rgba(96,165,250,0.22)); border-color:rgba(52,211,153,0.45); }
+.st2-batch-nav .btn-batch-nav { background:rgba(52,211,153,0.1); border-color:rgba(52,211,153,0.25); color:#34d399; }
+.st2-batch-nav .btn-batch-nav:hover { background:rgba(52,211,153,0.2); border-color:rgba(52,211,153,0.45); }
 .batch-results-list { display:flex; flex-direction:column; gap:4px; margin-top:8px; max-height:400px; overflow-y:auto; }
 .batch-result-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-surface); }
 .batch-result-item.success { border-color:var(--success-border); background:var(--success-bg); }

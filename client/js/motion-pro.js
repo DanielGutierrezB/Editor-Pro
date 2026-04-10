@@ -246,6 +246,7 @@
                     compositionId: result.compositionId,
                     tsxPath: result.tsxPath,
                     mp4Path: renderResult.mp4Path,
+                    mediaDurationSec: typeof renderResult.mediaDurationSec === "number" ? renderResult.mediaDurationSec : null,
                     status: "rendered",
                     feedback: "",
                     createdAt: new Date().toISOString()
@@ -316,6 +317,7 @@
                     compositionId: result.compositionId,
                     tsxPath: result.tsxPath,
                     mp4Path: renderResult.mp4Path,
+                    mediaDurationSec: typeof renderResult.mediaDurationSec === "number" ? renderResult.mediaDurationSec : null,
                     status: "rendered",
                     feedback: feedback,
                     createdAt: new Date().toISOString()

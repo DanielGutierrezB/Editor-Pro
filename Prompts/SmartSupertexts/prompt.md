@@ -1,46 +1,54 @@
-Analiza la siguiente transcripción de una clase educativa grabada en video.
+Analiza la siguiente transcripción de una clase educativa grabada en video (típicamente plano medio: presentador a la derecha, fondo limpio a la izquierda).
 
 TRANSCRIPCIÓN COMPLETA (los tiempos entre corchetes están en SEGUNDOS, ej: [30.0s - 35.0s] significa segundo 30 al 35):
 {TRANSCRIPT}
 
-Tu tarea es identificar los MOMENTOS CLAVE donde vale la pena mostrar un SUPERTEXTO en pantalla para ayudar al estudiante a retener la información esencial.
+Tu tarea es proponer SUPERTEXTOS que acompañen al profesor **de forma casi continua**. Cada idea, concepto, dato, regla, ejemplo o conclusión que el profesor verbalice puede traducirse a un texto breve en pantalla que expanda, resuma o refuerce lo dicho. **No dejes tiempos vacíos**: si el profesor está hablando de algo que aporta al aprendizaje, debe haber un supertexto acompañándolo.
 
-Los supertextos deben ser:
-- TÍTULOS DE TEMAS: Cuando se introduce un nuevo tema o concepto
-- BULLET POINTS: Ideas clave que merecen ser resaltadas
-- PASO A PASO: Cuando se explican procedimientos o procesos numerados
-- DEFINICIONES: Cuando se define un término o concepto importante
-- DATOS CLAVE: Estadísticas, URLs, nombres técnicos que vale la pena leer
-- HIGHLIGHTS: Palabras o frases pivotales que merecen énfasis visual (momentos clave, frases memorables, conceptos centrales)
-- RESUMEN: Frases de cierre o conclusión de un tema
+COMPOSICIÓN Y LECTURA (MUY IMPORTANTE — encaja con MOGRT de 2 líneas y leading ~39px):
+- El texto en pantalla suele ir en el **tercio izquierdo**; el presentador ocupa la zona derecha. **No escribas una sola línea muy larga** que se meta en la cara del presentador.
+- Si una idea necesita más de **~40 caracteres** en una línea, divide en **dos líneas** usando salto explícito: en el JSON pon el carácter **\n** entre líneas (ej: `"línea corta\nsegunda línea"`). El MOGRT soporta hasta 2 líneas con salto `\n`.
+- Si puedes decir lo mismo en **menos palabras** sin perder sentido, hazlo. Ofrece **variante breve**; el aire visual importa tanto como la frase completa.
+- Palabras clave del profesor (CTR, CPA, Meta, funnel…) pueden ir solas en una línea si ganan claridad.
+- Máximo aproximado **~90 caracteres totales** por supertexto (en 1 o 2 líneas).
 
-AGRUPACIÓN (campo 'group'):
-- Usa 'group' SOLO cuando el profesor enumera una lista explícita (ej: '3 ventajas...', 'los pasos son...')
-- En ese caso: un title corto + cada elemento como bullet, todos con el mismo 'group'
-- Items que NO son parte de una lista NO llevan 'group' — van independientes
-- definitions, data, summary que van solos NUNCA llevan 'group'
+TIPOS DE SUPERTEXTO:
+- TÍTULOS DE TEMAS: nuevo bloque o sección
+- BULLETS: ideas clave
+- PASO A PASO: procedimientos numerados
+- DEFINICIONES: términos nuevos
+- DATOS CLAVE: números, URLs, nombres técnicos
+- HIGHLIGHTS: frases memorables o reglas ("no toques la campaña…")
+- RESUMEN: cierres de bloque
 
-REGLAS CRÍTICAS sobre tiempos:
-- Los valores 'time' y 'endTime' DEBEN ser números en SEGUNDOS (float)
-- Deben coincidir con los tiempos de la transcripción
-- Ejemplo: si el texto aparece en [150.0s - 155.0s], time=150.0
-- NO uses formato mm:ss, usa SOLO segundos como número decimal
-- Cada supertexto debe ser CONCISO (máximo 8-10 palabras)
-- No saturar: máximo 1 supertexto cada 20-30 segundos
-- Priorizar lo que un estudiante necesita recordar
-- Duración recomendada entre 3 y 6 segundos
+AGRUPACIÓN (campo 'group') — DETECCIÓN EXHAUSTIVA DE LISTAS:
+- Usa 'group' cuando el profesor enumera una lista, ya sea:
+  · Explícita con número: "hay tres cosas…", "cuatro pasos…", "cinco errores…"
+  · Inline por comas: "contexto, hallazgo, interpretación y acción" → SON 4 BULLETS, no 2
+  · Secuencial: "lo primero… lo segundo… lo tercero…"
+- **REGLA CRÍTICA**: si el profesor dice "A, B, C y D", TODOS los elementos (A, B, C, D) deben aparecer como bullets separados. NO omitas ninguno. Cuenta los elementos de la frase y verifica que tu JSON tiene exactamente esa cantidad de bullets en el grupo.
+- Un title corto + cada elemento como bullet con el mismo 'group'
+- Cada bullet del grupo es un item separado en el JSON (para que aparezca como clip independiente)
+- El 'time' de cada bullet debe coincidir con el momento en que el profesor DICE ese elemento específico
+- Items fuera de lista enumerada NO llevan 'group'
 
-REGLAS PEDAGÓGICAS DE RITMO (MUY IMPORTANTE):
-- El 'time' debe ser el momento EXACTO en que el profesor DICE el concepto (el sistema aplica anticipación automáticamente para que el elemento ya esté visible cuando lo diga)
-- Para LISTAS y BULLETS dentro de un grupo:
-  · Si el profesor los dice RÁPIDO (menos de 3 segundos entre cada uno), los tiempos deben estar cercanos entre sí — el sistema los mostrará como un bloque simultáneo
-  · Si el profesor los dice ESPACIADOS (más de 3 segundos entre cada uno), cada bullet debe tener su propio 'time' distinto — aparecerán uno a uno acompañando la narración
-- El 'endTime' debe reflejar cuándo el profesor TERMINA de hablar del concepto; el sistema añade tiempo extra de lectura automáticamente
-- Piensa como un diseñador instruccional: el estudiante necesita VER el elemento mientras lo ESCUCHA y tener un momento para ABSORBERLO después
-- Para conceptos complejos o definiciones, prefiere endTimes más largos (5-6 seg) para dar tiempo de procesamiento
-- Los highlights y datos clave deben aparecer con timing ajustado al momento exacto del énfasis del profesor
+RITMO Y CANTIDAD (cobertura máxima, no cuota baja):
+- **Filosofía: si el profesor lo dice y aporta, merece un supertexto.** No te limites a "momentos clave" aislados — acompaña el discurso de forma continua, como subtítulos pedagógicos enriquecidos.
+- El alumno debería poder seguir la clase SOLO con los supertextos y entender la estructura completa del contenido.
+- Propón textos que **expandan** (añaden contexto visual a lo que se dice), **resuman** (sintetizan una explicación larga en una frase), o **refuercen** (repiten la palabra clave textualmente).
+- **No dejes huecos mayores a ~15 s** sin supertexto, salvo que el profesor haga una pausa real o cuente una anécdota sin valor pedagógico.
+- Si dos momentos consecutivos son casi el mismo mensaje, **fusiónalo** en un solo supertexto más largo.
+- Listas tipo "A • B • C" en una frase: preferir **título + bullets** con `group` (cada bullet un item separado en el JSON), no todo en un solo texto.
+- **Ejemplo concreto**: si el profesor dice "La estructura es contexto, hallazgo, interpretación y acción", debes generar: 1 title ("Estructura de análisis") + 4 bullets ("1. Contexto", "2. Hallazgo", "3. Interpretación", "4. Acción") todos con el mismo group. Si además el profesor luego explica cada uno con ejemplos, cada explicación merece su propio supertexto independiente.
+
+REGLAS DE TIEMPO:
+- 'time' y 'endTime' en SEGUNDOS (float), alineados con la transcripción
+- 'time' = cuando el profesor enfatiza el concepto (el panel aplica anticipación)
+- 'endTime' = hasta cuando sigue siendo relevante leer en pantalla
+- Duración típica de un supertexto: **5–15 s** (el suficiente para leerlo cómodamente)
+- Para grupos/listas: todos los bullets comparten el mismo endTime (salen juntos)
 
 Responde ÚNICAMENTE con JSON válido, SIN markdown.
 
 FORMATO:
-{"supertexts":[{"time":10.0,"endTime":15.0,"text":"Configuración del agente","type":"title","importance":"high","reason":"Nuevo tema"},{"time":30.0,"endTime":35.0,"text":"3 ventajas clave","type":"title","group":1,"importance":"high","reason":"Introduce lista"},{"time":36.0,"endTime":41.0,"text":"1. Te contacta automáticamente","type":"bullet","group":1,"reason":"Primera ventaja"},{"time":42.0,"endTime":47.0,"text":"2. Funciona en Telegram","type":"bullet","group":1,"reason":"Segunda ventaja"},{"time":60.0,"endTime":65.0,"text":"openclose.ai","type":"data","reason":"URL oficial"},{"time":80.0,"endTime":84.0,"text":"Tu agente trabaja por ti","type":"highlight","reason":"Frase clave del concepto"},{"time":90.0,"endTime":95.0,"text":"sudo + comando en terminal","type":"step","reason":"Paso técnico"}],"summary":"","totalFound":0}
+{"supertexts":[{"time":10.0,"endTime":20.0,"text":"Configuración del agente","type":"title","importance":"high","reason":"Nuevo tema"},{"time":43.5,"endTime":55.0,"text":"3 escenarios en Meta","type":"title","importance":"high","reason":"Título de la lista","group":"escenarios-meta"},{"time":44.0,"endTime":55.0,"text":"No gasta","type":"bullet","importance":"high","reason":"Primer escenario","group":"escenarios-meta"},{"time":47.0,"endTime":55.0,"text":"Gasta sin convertir","type":"bullet","importance":"high","reason":"Segundo escenario","group":"escenarios-meta"},{"time":50.0,"endTime":55.0,"text":"Convierte caro","type":"bullet","importance":"high","reason":"Tercer escenario","group":"escenarios-meta"},{"time":62.0,"endTime":75.0,"text":"Creativo → CTR → CPC → CPA\nTodo empieza desde el creativo","type":"highlight","importance":"high","reason":"Cadena de métricas clave"}],"summary":"","totalFound":0}

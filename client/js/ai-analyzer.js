@@ -91,8 +91,11 @@
         this.provider = "ollama";
         this.keys = { anthropic: "", openai: "", google: "", openrouter: "" };
         this.model = PROVIDERS.ollama.defaultModel;
-        this.maxTokens = 8192;
+        // Salidas JSON largas (Motion-Pro, supertextos en clases largas)
+        this.maxTokens = 16384;
         this.ollamaUrl = "http://localhost:11434";
+        /** Tiempo máximo por petición HTTP (ms). Clases largas + Ollama local pueden tardar mucho. */
+        this.requestTimeoutMs = 900000;
     }
 
     AIAnalyzer.PROVIDERS = PROVIDERS;
@@ -233,6 +236,10 @@
     // ─── Generic send method ─────────────────────────────────────
 
     AIAnalyzer.prototype.abort = function() {
+        if (this._activeTimeoutId) {
+            try { clearTimeout(this._activeTimeoutId); } catch(e) {}
+            this._activeTimeoutId = null;
+        }
         if (this._activeRequest) {
             try { this._activeRequest.abort(); } catch(e) {}
             this._activeRequest = null;
@@ -243,7 +250,16 @@
     AIAnalyzer.prototype._send = function(systemMsg, userPrompt, callback, images) {
         var self = this;
         self._aborted = false;
+        var timeoutMs = self.requestTimeoutMs || 900000;
+        var sendFinished = false;
+        self._activeTimeoutId = null;
         var wrappedCallback = function(result) {
+            if (sendFinished) return;
+            sendFinished = true;
+            if (self._activeTimeoutId) {
+                try { clearTimeout(self._activeTimeoutId); } catch(e) {}
+                self._activeTimeoutId = null;
+            }
             self._activeRequest = null;
             if (self._aborted) return;
             callback(result);
@@ -294,6 +310,16 @@
                 });
                 break;
         }
+
+        var onTimeout = function() {
+            try { if (self._activeRequest && self._activeRequest.abort) self._activeRequest.abort(); } catch(e) {}
+            wrappedCallback({
+                error: "Tiempo de espera agotado (" + Math.round(timeoutMs / 60000) + " min). " +
+                    "Si usas Ollama en local con una clase muy larga, prueba un modelo más rápido, " +
+                    "usa Gemini/GPT en la nube en Ajustes, o divide la transcripción."
+            });
+        };
+        self._activeTimeoutId = setTimeout(onTimeout, timeoutMs);
 
         if (this.provider === "ollama") {
             this._activeRequest = this._requestOllama(body, wrappedCallback);

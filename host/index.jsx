@@ -846,7 +846,7 @@ function getAllProjectSequences() {
         }
 
         // Discover open tabs by closing each active tab and recording its ID.
-        // This only touches already-open sequences — never opens closed ones.
+        // openIds is collected in REVERSE tab order (last closed = leftmost tab).
         var openIds = [];
         var safety = 200;
         while (safety-- > 0) {
@@ -868,13 +868,14 @@ function getAllProjectSequences() {
             } catch(e) { break; }
         }
 
-        // Reopen all tabs in original order
-        for (var r = 0; r < openIds.length; r++) {
+        // Reopen in REVERSE order so the first-closed (rightmost) opens first,
+        // and the last-closed (leftmost) opens last → preserves original tab order.
+        for (var r = openIds.length - 1; r >= 0; r--) {
             app.project.openSequence(openIds[r]);
             $.sleep(50);
         }
 
-        // Restore original active sequence
+        // Restore the originally active tab on top
         if (activeId) {
             $.sleep(100);
             app.project.openSequence(activeId);
@@ -901,6 +902,23 @@ function getAllProjectSequences() {
         return JSON.stringify({ success: true, sequences: results, probeReliable: (openIds.length > 0) });
     } catch(e) {
         return JSON.stringify({ error: "Error al listar secuencias: " + e.message });
+    }
+}
+
+function listProjectSequences() {
+    try {
+        var results = [];
+        for (var i = 0; i < app.project.sequences.numSequences; i++) {
+            var seq = app.project.sequences[i];
+            if (seq.name.indexOf("_Backup_") >= 0 || seq.name.indexOf("_Fail") >= 0) continue;
+            results.push({
+                name: seq.name,
+                sequenceID: seq.sequenceID
+            });
+        }
+        return JSON.stringify({ success: true, sequences: results });
+    } catch(e) {
+        return JSON.stringify({ error: e.message });
     }
 }
 
@@ -1035,6 +1053,36 @@ function discoverMethods(obj, label) {
 
 function secsToTicks(seconds) {
     return String(Math.round(parseFloat(seconds) * TICKS_PER_SECOND));
+}
+
+function getClipRangesOnTrack(trackIndex) {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: "No hay secuencia activa." });
+        var idx = parseInt(trackIndex);
+        if (isNaN(idx) || idx < 0 || idx >= seq.videoTracks.numTracks) {
+            return JSON.stringify({ error: "Pista V" + (idx + 1) + " no encontrada." });
+        }
+        var track = seq.videoTracks[idx];
+        var ranges = [];
+        var skipped = 0;
+        for (var i = 0; i < track.clips.numItems; i++) {
+            var clip = track.clips[i];
+            var enabled = true;
+            try { enabled = !clip.disabled; } catch(_e) {
+                try { enabled = clip.enabled !== false; } catch(_e2) {}
+            }
+            if (!enabled) { skipped++; continue; }
+            ranges.push({
+                start: parseFloat(clip.start.seconds),
+                end: parseFloat(clip.end.seconds),
+                name: (function() { try { return clip.name; } catch(_e) { return ""; } })()
+            });
+        }
+        return JSON.stringify({ success: true, ranges: ranges, trackIndex: idx, clipCount: ranges.length, skippedDisabled: skipped });
+    } catch(e) {
+        return JSON.stringify({ error: "Error leyendo pista: " + e.message });
+    }
 }
 
 // ─── Execute Cuts (Main Entry) ───────────────────────────────
@@ -1630,13 +1678,174 @@ function selectFolder() {
     }
 }
 
+/**
+ * Convierte "\\n" literal (dos caracteres) en saltos reales y unifica a \\r,
+ * que es lo que suelen respetar los controles de texto de MOGRT / AE en Premiere.
+ */
+function _normalizeMogrtNewlines(s) {
+    if (s === undefined || s === null) return "";
+    var t = String(s);
+    t = t.replace(/\\r\\n/g, "\n");
+    t = t.replace(/\\n/g, "\n");
+    t = t.replace(/\\r/g, "\n");
+    t = t.replace(/\r\n/g, "\n");
+    t = t.replace(/\r/g, "\n");
+    t = t.replace(/\n/g, "\r");
+    return t;
+}
+
+function _mogrtOneLineName(s) {
+    if (s === undefined || s === null) return "";
+    var t = String(s);
+    t = t.replace(/\\r\\n/g, " ");
+    t = t.replace(/\\n/g, " ");
+    t = t.replace(/\\r/g, " ");
+    t = t.replace(/[\r\n]+/g, " ");
+    return t;
+}
+
+/**
+ * Añade "Dip to Black" al FINAL del clip MOGRT.
+ * Dip to Black es una transición de salida pura (fade a negro), no un cross entre clips.
+ * Usa QE DOM. Falla silenciosamente.
+ *
+ * addTransition(transition, atStart, duration):
+ *   atStart = false → al FINAL del clip;  atStart = true → al inicio.
+ *   Probamos ambas si la primera no queda donde queremos.
+ */
+function _addOutDissolve(seq, trackIdx, startSecs, durFrames) {
+    try {
+        app.enableQE();
+        var qeSeq = qe.project.getActiveSequence();
+        if (!qeSeq) return;
+        var qeTrack = qeSeq.getVideoTrackAt(trackIdx);
+        if (!qeTrack) return;
+
+        var numItems = qeTrack.numItems;
+        for (var qi = numItems - 1; qi >= 0; qi--) {
+            var qeClip = qeTrack.getItemAt(qi);
+            if (!qeClip) continue;
+            var qeStart;
+            try { qeStart = parseFloat(qeClip.start.secs); } catch(_e) {
+                try { qeStart = parseFloat(qeClip.start); } catch(_e2) { continue; }
+            }
+            if (Math.abs(qeStart - startSecs) < 1.5) {
+                var dip = qe.project.getVideoTransitionByName("Dip to Black");
+                if (!dip) dip = qe.project.getVideoTransitionByName("Fundido a negro");
+                if (!dip) dip = qe.project.getVideoTransitionByName("Cross Dissolve");
+                if (!dip) return;
+
+                var df = durFrames || 20;
+                var durTC = "00;00;00;" + (df < 10 ? "0" + df : String(df));
+                // false = end of clip
+                qeClip.addTransition(dip, false, durTC);
+                return;
+            }
+        }
+    } catch(_eDissolve) {}
+}
+
+/**
+ * Fija el fin de un clip MOGRT buscándolo en track.clips[] por startTime.
+ * El objeto devuelto por importMGT() NO permite fijar .end en MOGRTs;
+ * hay que localizarlo en la pista (igual que Motion-Pro lo hace con éxito).
+ *
+ * @param {Sequence} seq
+ * @param {number}   trackIdx    — índice de la pista de vídeo
+ * @param {number}   startSecs   — segundo de inicio del clip en la secuencia
+ * @param {number}   endSecs     — segundo de fin deseado (absoluto)
+ * @returns {boolean} true si el end cambió
+ */
+function _setMogrtClipEnd(seq, trackIdx, startSecs, endSecs) {
+    var track = seq.videoTracks[trackIdx];
+    if (!track) return false;
+    var endTicks = String(Math.round(endSecs * TICKS_PER_SECOND));
+
+    for (var ci = track.clips.numItems - 1; ci >= 0; ci--) {
+        var tc = track.clips[ci];
+        var tcStart;
+        try { tcStart = parseFloat(tc.start.seconds); } catch (_e) { continue; }
+        if (Math.abs(tcStart - startSecs) < 1.0) {
+            // Intento A: ticks string (funciona para clips regulares y Motion-Pro)
+            try { tc.end = endTicks; } catch (_ea) {}
+            $.sleep(100);
+            // Verificar
+            try {
+                var after = parseFloat(tc.end.seconds);
+                if (Math.abs(after - endSecs) < 1.5) return true;
+            } catch (_ev) {}
+            // Intento B: .end.ticks directo
+            try { tc.end.ticks = endTicks; } catch (_eb) {}
+            $.sleep(100);
+            try {
+                var after2 = parseFloat(tc.end.seconds);
+                if (Math.abs(after2 - endSecs) < 1.5) return true;
+            } catch (_ev2) {}
+            // Intento C: segundos
+            try { tc.end = endSecs; } catch (_ec) {}
+            return true;
+        }
+    }
+    return false;
+}
+
 function _trySetTextValue(param, newText) {
-    // Strategy 1: parse as JSON, modify textEditValue
+    // Strategy 1: parse as JSON, modify textEditValue + fontTextRunLength + strDB
+    // fontTextRunLength MUST match the new text length; if it stays at the old
+    // default (e.g. 29 chars) AE will only style/animate that many characters,
+    // causing words beyond that limit to render with wrong position/size.
     try {
         var raw = param.getValue();
         if (typeof raw === "object" || (typeof raw === "string" && raw.charAt(0) === "{")) {
             var obj = (typeof raw === "string") ? JSON.parse(raw) : raw;
+            var newLen = newText.length;
+
             obj.textEditValue = newText;
+
+            // Update font run lengths to cover the entire new text
+            if (obj.fontTextRunLength && obj.fontTextRunLength.length) {
+                if (obj.fontTextRunLength.length === 1) {
+                    obj.fontTextRunLength = [newLen];
+                } else {
+                    obj.fontTextRunLength = [newLen];
+                    obj.capPropTextRunCount = 1;
+                }
+            }
+
+            // Sync all font arrays to single run covering full text
+            if (obj.fontEditValue && obj.fontEditValue.length > 1) {
+                obj.fontEditValue = [obj.fontEditValue[0]];
+            }
+            if (obj.fontSizeEditValue && obj.fontSizeEditValue.length > 1) {
+                obj.fontSizeEditValue = [obj.fontSizeEditValue[0]];
+            }
+            if (obj.fontFSBoldValue && obj.fontFSBoldValue.length > 1) {
+                obj.fontFSBoldValue = [obj.fontFSBoldValue[0]];
+            }
+            if (obj.fontFSItalicValue && obj.fontFSItalicValue.length > 1) {
+                obj.fontFSItalicValue = [obj.fontFSItalicValue[0]];
+            }
+            if (obj.fontFSAllCapsValue && obj.fontFSAllCapsValue.length > 1) {
+                obj.fontFSAllCapsValue = [obj.fontFSAllCapsValue[0]];
+            }
+            if (obj.fontFSSmallCapsValue && obj.fontFSSmallCapsValue.length > 1) {
+                obj.fontFSSmallCapsValue = [obj.fontFSSmallCapsValue[0]];
+            }
+
+            // strDB variants
+            if (obj.value && obj.value.strDB && obj.value.strDB.length) {
+                var si;
+                for (si = 0; si < obj.value.strDB.length; si++) {
+                    if (obj.value.strDB[si]) obj.value.strDB[si].str = newText;
+                }
+            }
+            if (obj.strDB && obj.strDB.length) {
+                var sj;
+                for (sj = 0; sj < obj.strDB.length; sj++) {
+                    if (obj.strDB[sj]) obj.strDB[sj].str = newText;
+                }
+            }
+
             param.setValue(JSON.stringify(obj), true);
             return true;
         }
@@ -1652,6 +1861,7 @@ function _trySetTextValue(param, newText) {
 }
 
 function _setMGTText(trackItem, newText, itemIdx, errors) {
+    newText = _normalizeMogrtNewlines(newText);
     // --- Approach A: getMGTComponent (preferred, returns Essential Properties) ---
     try {
         if (typeof trackItem.getMGTComponent === "function") {
@@ -1835,28 +2045,36 @@ function insertSupertextMOGRTs(jsonPath) {
                 }
 
                 inserted++;
-                $.sleep(500);
 
-                // Duration
-                try {
-                    var duration = endSecs - startSecs;
-                    if (duration > 0) {
-                        trackItem.end = trackItem.start.seconds + duration;
-                    }
-                } catch(eDur) {
-                    errors.push("Item " + i + ": no se pudo ajustar duración — " + eDur.message);
-                }
+                // El MOGRT necesita tiempo para inicializar su Dynamic Link con AE
+                $.sleep(1000);
 
-                // Text
+                // 1. Texto — primero para no perder la referencia
                 var didSetText = _setMGTText(trackItem, st.text, i, errors);
                 if (didSetText) textSet++;
+                $.sleep(200);
 
-                // Clip name with type prefix for timeline readability
+                // 2. Duración: buscar el clip en la pista y fijar .end ahí
+                //    (importMGT devuelve un objeto que NO permite fijar .end en MOGRTs)
+                try {
+                    var duration = endSecs - startSecs;
+                    if (duration > 0.01) {
+                        if (!_setMogrtClipEnd(seq, targetTrack, startSecs, endSecs)) {
+                            errors.push("Item " + i + ": no se pudo fijar duración (" + duration.toFixed(1) + "s) en pista " + targetTrack);
+                        }
+                    }
+                } catch(eDur) {
+                    errors.push("Item " + i + ": excepción ajustando duración — " + eDur.message);
+                }
+
+                // 3. Nombre legible en timeline
                 var typeTag = (st.type || "").toUpperCase();
-                try { trackItem.name = "[" + typeTag + "] " + st.text; } catch(eName) {}
+                try { trackItem.name = "[" + typeTag + "] " + _mogrtOneLineName(st.text); } catch(eName) {}
 
+                // 4. Disolvencia de salida (Cross Dissolve al final del clip)
+                _addOutDissolve(seq, targetTrack, startSecs, 20);
 
-                // Bullet Y position offset
+                // 5. Bullet Y position offset
                 var bulletPosY = parseFloat(st.bulletPositionY) || 0;
                 if (bulletPosY !== 0) {
                     _setClipPositionY(trackItem, bulletPosY, errors, i);
@@ -1895,7 +2113,6 @@ function replaceMOGRTClip(jsonPath) {
         var data = JSON.parse(content);
         var targetTime = parseFloat(data.time);
         var endTime = parseFloat(data.endTime);
-        var newText = data.text;
         var mogrtPath = data.mogrtPath;
         var trackIndex = data.trackIndex;
 
@@ -1934,25 +2151,31 @@ function replaceMOGRTClip(jsonPath) {
         var trackItem = seq.importMGT(mogrtFile.fsName, timeTicks, trackIndex, 0);
         if (!trackItem) return JSON.stringify({ error: "importMGT retornó null." });
 
-        $.sleep(500);
+        $.sleep(1000);
 
-        // Duration
+        var errors = [];
+        _setMGTText(trackItem, data.text, 0, errors);
+        $.sleep(200);
+
         try {
             if (!isNaN(endTime)) {
-                var dur = endTime - targetTime;
-                if (dur > 0) trackItem.end = trackItem.start.seconds + dur;
+                var durRep = endTime - targetTime;
+                if (durRep > 0.01) {
+                    if (!_setMogrtClipEnd(seq, trackIndex, targetTime, endTime)) {
+                        errors.push("No se pudo fijar fin de clip (reemplazo, dur " + durRep.toFixed(1) + "s)");
+                    }
+                }
             }
         } catch(eDur) {}
 
-        // Text
-        var errors = [];
-        _setMGTText(trackItem, newText, 0, errors);
-
         // Name with type prefix and color (best-effort)
         var typeTag = (data.type || "").toUpperCase();
-        try { trackItem.name = "[" + typeTag + "] " + newText; } catch(e) {}
+        try { trackItem.name = "[" + typeTag + "] " + _mogrtOneLineName(data.text); } catch(e) {}
 
-        return JSON.stringify({ success: true, removed: removed, trackIndex: trackIndex });
+        // Disolvencia de salida
+        _addOutDissolve(seq, trackIndex, targetTime, 20);
+
+        return JSON.stringify({ success: true, removed: removed, trackIndex: trackIndex, errors: errors });
     } catch(e) {
         return JSON.stringify({ error: "Error en replaceMOGRTClip: " + e.message });
     }
@@ -2414,6 +2637,7 @@ function _findProjectItemByPath(searchPath, bin) {
 }
 
 var _mpBaseTrack = -1;
+var _mpLastSequenceId = "";
 
 function importAndPlaceMotions(jsonPath) {
     try {
@@ -2431,6 +2655,15 @@ function importAndPlaceMotions(jsonPath) {
 
         var seq = app.project.activeSequence;
         if (!seq) return JSON.stringify({ error: "No hay secuencia activa." });
+
+        // Otra secuencia = índices de pista inválidos: volver a crear pista Motion-Pro
+        try {
+            var sid = seq.sequenceID;
+            if (sid && sid !== _mpLastSequenceId) {
+                _mpLastSequenceId = sid;
+                _mpBaseTrack = -1;
+            }
+        } catch(eSid) {}
 
         var bin = _getOrCreateMotionBin();
         if (!bin) return JSON.stringify({ error: "No se pudo crear bin Motion-Pro." });
@@ -2469,17 +2702,20 @@ function importAndPlaceMotions(jsonPath) {
                 false
             );
 
-            $.sleep(1000);
-
             var item = null;
-            if (bin.children && bin.children.numItems > countBefore) {
-                item = bin.children[bin.children.numItems - 1];
+            var wait;
+            for (wait = 0; wait < 25; wait++) {
+                $.sleep(250);
+                if (bin.children && bin.children.numItems > countBefore) {
+                    item = bin.children[bin.children.numItems - 1];
+                }
+                if (!item) {
+                    item = _findProjectItemByPath(mp4File.fsName, bin);
+                }
+                if (item) break;
             }
             if (!item) {
-                item = _findProjectItemByPath(mp4File.fsName, bin);
-            }
-            if (!item) {
-                errors.push("Imported but could not find item: " + clip.mp4Path);
+                errors.push("Imported but could not find item (timeout): " + clip.mp4Path);
                 continue;
             }
 
@@ -2492,18 +2728,26 @@ function importAndPlaceMotions(jsonPath) {
                 continue;
             }
 
+            var placed = false;
             try {
                 track.overwriteClip(item, startTicks);
-                inserted++;
-            } catch(e) {
+                placed = true;
+            } catch(eOw) {
                 try {
-                    track.insertClip(item, startTicks);
-                    inserted++;
-                } catch(e2) {
-                    errors.push("Place error on clip " + c + ": " + e.message + " / " + e2.message);
-                    continue;
+                    // API documentada: insertClip(projectItem, time, vTrackIndex, aTrackIndex)
+                    track.insertClip(item, startTicks, baseTrack, 0);
+                    placed = true;
+                } catch(e4) {
+                    try {
+                        track.insertClip(item, startTicks);
+                        placed = true;
+                    } catch(e2) {
+                        errors.push("Place error on clip " + c + ": " + eOw.message + " | " + e4.message + " | " + e2.message);
+                        continue;
+                    }
                 }
             }
+            if (placed) inserted++;
             $.sleep(300);
 
             // Set clip duration to match the MP4 source
@@ -2579,10 +2823,15 @@ function replaceMotionOnTrack(jsonPath) {
         if (!mp4File.exists) return JSON.stringify({ error: "MP4 not found: " + data.mp4Path });
 
         app.project.importFiles([mp4File.fsName], true, bin, false);
-        $.sleep(500);
 
-        var item = _findProjectItemByPath(mp4File.fsName, bin);
-        if (!item) return JSON.stringify({ error: "Could not find imported item." });
+        var item = null;
+        var w;
+        for (w = 0; w < 25; w++) {
+            $.sleep(250);
+            item = _findProjectItemByPath(mp4File.fsName, bin);
+            if (item) break;
+        }
+        if (!item) return JSON.stringify({ error: "Could not find imported item (timeout)." });
 
         try { item.name = data.clipName || "MP_replaced"; } catch(e) {}
 
@@ -2592,8 +2841,16 @@ function replaceMotionOnTrack(jsonPath) {
 
         try {
             track.overwriteClip(item, startTicks);
-        } catch(e) {
-            track.insertClip(item, startTicks);
+        } catch(eOw) {
+            try {
+                track.insertClip(item, startTicks, newTrackIdx, 0);
+            } catch(e4) {
+                try {
+                    track.insertClip(item, startTicks);
+                } catch(e2) {
+                    return JSON.stringify({ error: "Place error: " + eOw.message + " | " + e4.message + " | " + e2.message });
+                }
+            }
         }
 
         // Set clip end to match source duration

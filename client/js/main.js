@@ -47,7 +47,7 @@
         aiAdjustments: [],
         aiSuggestionStates: {},
         markersPlaced: false,
-        transcribeFolder: "",
+        transcribeFolder: (function() { try { return localStorage.getItem("editorpro_transcript_folder") || ""; } catch(_e) { return ""; } })(),
         lastWhisperResult: null,
         // Motion-Pro state
         mpAnalyzing: false,
@@ -64,6 +64,11 @@
     // ─── Init ────────────────────────────────────────────────────
     function init() {
         var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+
+        // Re-evaluar host/index.jsx para cargar funciones nuevas sin cerrar el panel
+        var hostPath = extensionPath + "/host/index.jsx";
+        csInterface.evalScript('$.evalFile("' + hostPath.replace(/\\/g, "/").replace(/"/g, '\\"') + '")');
+
         engine = new SpellCheckEngine({ extensionPath: extensionPath, uiLanguage: "es" });
         aiAnalyzer = new AIAnalyzer();
         stt = new SpeechToText();
@@ -209,6 +214,7 @@
         on("btn-st2-select-all", "click", toggleSelectAllSupertexts2);
         on("btn-st2-create-graphics", "click", createSupertext2Graphics);
         on("btn-st2-export", "click", exportSupertexts2);
+        on("btn-st2-exclude-track", "click", st2ExcludeByTrack);
         on("btn-st2-prompt-toggle", "click", function() { togglePromptEditorById("st2"); });
         on("btn-st2-prompt-save", "click", function() { savePromptById("st2"); });
         on("btn-st2-prompt-reset", "click", function() { resetPromptById("st2"); });
@@ -224,6 +230,20 @@
 
         on("mogrt-config-toggle", "click", toggleMOGRTConfig);
         on("btn-mogrt-folder", "click", loadMOGRTFolder);
+
+        // Smart Supertexts — Batch
+        on("btn-st2-batch", "click", st2BatchOpen);
+        on("btn-st2-batch-analyze", "click", st2BatchAnalyzeAll);
+        on("btn-st2-batch-create", "click", st2BatchCreateAll);
+        on("btn-st2-batch-cancel", "click", st2BatchClose);
+        on("btn-st2-bnav-prev", "click", st2BatchNavPrev);
+        on("btn-st2-bnav-next", "click", st2BatchNavNext);
+        on("btn-st2-bnav-back", "click", st2BatchNavBack);
+        var st2BSelAll = document.getElementById("st2-batch-select-all");
+        if (st2BSelAll) st2BSelAll.addEventListener("change", function() {
+            var checked = this.checked;
+            document.querySelectorAll(".st2b-check").forEach(function(cb) { cb.checked = checked; });
+        });
 
         initPromptEditor();
 
@@ -347,6 +367,7 @@
                     return;
                 }
                 var newSeqName = data.name || "";
+                var isFirstLoad = _lastSeqName === "" && newSeqName !== "";
                 var changed = newSeqName && newSeqName !== _lastSeqName && _lastSeqName !== "";
 
                 if (changed) {
@@ -361,9 +382,14 @@
                 if (data.markerCount > 0) meta.push(data.markerCount + " markers");
                 document.getElementById("seq-meta").textContent = meta.join(" · ");
 
-                if (changed) {
+                if (changed && _st2BatchCurrentNav < 0) {
                     restoreSequenceState(newSeqName);
                     mpSwitchToSequence();
+                } else if (isFirstLoad) {
+                    // Primera carga tras reload: auto-cargar transcript si no hay uno activo
+                    if (!state.transcript && (!state.segments || state.segments.length === 0)) {
+                        autoLoadTranscriptForSequence(newSeqName);
+                    }
                 }
             } catch(e) {}
         });
@@ -371,7 +397,10 @@
         csInterface.evalScript("getTranscribeFolder()", function(result) {
             try {
                 var data = JSON.parse(result);
-                if (data.success) state.transcribeFolder = data.path;
+                if (data.success && data.path) {
+                    state.transcribeFolder = data.path;
+                    _saveLastTranscriptFolder(data.path + "/dummy");
+                }
             } catch(e) {}
         });
     }
@@ -383,7 +412,6 @@
                     var data = JSON.parse(result);
                     if (data.error || !data.name) return;
                     if (data.name !== _lastSeqName && _lastSeqName !== "") {
-                        saveCurrentSequenceState();
                         _lastSeqName = data.name;
                         state.sequenceName = data.name;
                         document.getElementById("seq-name").textContent = data.name;
@@ -391,6 +419,8 @@
                         if (data.textClipCount > 0) meta.push(data.textClipCount + " textos");
                         if (data.markerCount > 0) meta.push(data.markerCount + " markers");
                         document.getElementById("seq-meta").textContent = meta.join(" · ");
+                        if (_st2BatchCurrentNav >= 0) return;
+                        saveCurrentSequenceState();
                         restoreSequenceState(data.name);
                     } else if (!_lastSeqName) {
                         _lastSeqName = data.name;
@@ -553,7 +583,10 @@
             state.detectionResult = cached.detectionResult || null;
             state.clipResults = cached.clipResults || {};
             state.textClips = cached.textClips || [];
-            state.supertexts2 = cached.supertexts2 || [];
+            state.supertexts2 = (cached.supertexts2 || []).map(function(st) {
+                normalizeSt2Fields(st);
+                return st;
+            });
             state.es2Highlights = cached.es2Highlights || [];
             state.es2Suggestions = cached.es2Suggestions || [];
             state.es2Errors = cached.es2Errors || [];
@@ -665,9 +698,37 @@
         }
     }
 
-    function autoLoadTranscriptForSequence(seqName) {
-        if (!state.transcribeFolder || !seqName || !fs || !path) return;
-        var jsonPath = path.join(state.transcribeFolder, seqName + ".json");
+    /** Guarda la carpeta del último transcript importado para auto-cargar en el futuro. */
+    function _saveLastTranscriptFolder(filePath) {
+        if (!filePath || !path) return;
+        try {
+            var dir = path.dirname(filePath);
+            if (dir && dir !== ".") {
+                localStorage.setItem("editorpro_transcript_folder", dir);
+                if (!state.transcribeFolder) state.transcribeFolder = dir;
+            }
+        } catch (_e) {}
+    }
+
+    function _getTranscriptFolders() {
+        var folders = [];
+        if (state.transcribeFolder) folders.push(state.transcribeFolder);
+        try {
+            var saved = localStorage.getItem("editorpro_transcript_folder");
+            if (saved && folders.indexOf(saved) === -1) folders.push(saved);
+        } catch (_e) {}
+        return folders;
+    }
+
+    /** Busca un JSON o SRT que coincida con el nombre de la secuencia en las carpetas conocidas. */
+    function _tryLoadTranscriptFromFolder(folder, seqName) {
+        if (!folder || !seqName || !fs || !path) return false;
+
+        // Normalizar nombre: quitar caracteres que no estén en nombres de archivo típicos
+        var baseName = seqName.replace(/[\/\\:*?"<>|]/g, "_");
+
+        // Probar JSON
+        var jsonPath = path.join(folder, baseName + ".json");
         try {
             if (fs.existsSync(jsonPath)) {
                 var parsed = parseTranscriptJson(jsonPath);
@@ -678,14 +739,15 @@
                     applySttResultToRecordingNotes(parsed, true);
                     hideElement("recording-empty");
                     var srt = sttResultToSRT(parsed);
-                    loadTranscriptText(srt, seqName + ".json");
-                    showToast("Transcript cargado: " + seqName, "success");
-                    return;
+                    loadTranscriptText(srt, baseName + ".json");
+                    showToast("Transcript auto-cargado: " + baseName, "success");
+                    return true;
                 }
             }
-        } catch(e) {}
+        } catch (_e) {}
 
-        var srtPath = path.join(state.transcribeFolder, seqName + ".srt");
+        // Probar SRT
+        var srtPath = path.join(folder, baseName + ".srt");
         try {
             if (fs.existsSync(srtPath)) {
                 var content = fs.readFileSync(srtPath, "utf8");
@@ -697,13 +759,64 @@
                     refreshTraerTranscriptButtons();
                     applySttResultToRecordingNotes(sttResult, true);
                     hideElement("recording-empty");
-                    var srt = sttResultToSRT(sttResult);
-                    loadTranscriptText(srt, seqName + ".srt");
-                    showToast("Transcript cargado: " + seqName, "success");
-                    return;
+                    var srt2 = sttResultToSRT(sttResult);
+                    loadTranscriptText(srt2, baseName + ".srt");
+                    showToast("Transcript auto-cargado: " + baseName, "success");
+                    return true;
                 }
             }
-        } catch(e) {}
+        } catch (_e) {}
+
+        // Buscar por coincidencia parcial en la carpeta
+        try {
+            var files = fs.readdirSync(folder);
+            var seqLower = baseName.toLowerCase();
+            for (var fi = 0; fi < files.length; fi++) {
+                var fname = files[fi];
+                var fnameLower = fname.toLowerCase();
+                if ((fnameLower.endsWith(".json") || fnameLower.endsWith(".srt")) &&
+                    fnameLower.indexOf(seqLower) !== -1) {
+                    var fullPath = path.join(folder, fname);
+                    if (fnameLower.endsWith(".json")) {
+                        var p2 = parseTranscriptJson(fullPath);
+                        if (p2 && p2.words && p2.words.length > 5) {
+                            state.sttResult = p2;
+                            state.lastWhisperResult = p2;
+                            refreshTraerTranscriptButtons();
+                            applySttResultToRecordingNotes(p2, true);
+                            hideElement("recording-empty");
+                            loadTranscriptText(sttResultToSRT(p2), fname);
+                            showToast("Transcript auto-cargado: " + fname, "success");
+                            return true;
+                        }
+                    } else {
+                        var c2 = fs.readFileSync(fullPath, "utf8");
+                        var s2 = parseSRT(c2);
+                        if (s2 && s2.length > 3) {
+                            var st2 = srtSegmentsToSttResult(s2);
+                            state.sttResult = st2;
+                            state.lastWhisperResult = st2;
+                            refreshTraerTranscriptButtons();
+                            applySttResultToRecordingNotes(st2, true);
+                            hideElement("recording-empty");
+                            loadTranscriptText(sttResultToSRT(st2), fname);
+                            showToast("Transcript auto-cargado: " + fname, "success");
+                            return true;
+                        }
+                    }
+                }
+            }
+        } catch (_e) {}
+
+        return false;
+    }
+
+    function autoLoadTranscriptForSequence(seqName) {
+        if (!seqName || !fs || !path) return;
+        var folders = _getTranscriptFolders();
+        for (var fi = 0; fi < folders.length; fi++) {
+            if (_tryLoadTranscriptFromFolder(folders[fi], seqName)) return;
+        }
     }
 
     // ─── Info Modal ─────────────────────────────────────────────
@@ -786,6 +899,7 @@
             hideElement("recording-empty");
             var srt = sttResultToSRT(parsed);
             loadTranscriptText(srt, path.basename(file.path));
+            _saveLastTranscriptFolder(file.path);
             showToast("Transcript JSON cargado (" + parsed.words.length + " palabras)", "success");
         } catch(e) {
             showToast("Error al leer JSON: " + e.message, "error");
@@ -1397,14 +1511,52 @@
 
     var ST2_TYPES = ["title", "bullet", "step", "definition", "data", "summary", "highlight"];
     var ST2_BULLET_SPACING = 70;
+    var ST2_EXTRA_LINE_SPACING = 45;
+
+    /**
+     * Formatea el texto para el MOGRT:
+     * - bullets/steps: si la línea ya empieza con número (1., 2.) no la toca;
+     *   si no trae marcador, le pone "• " al inicio.
+     * - Nunca todo mayúsculas.
+     */
+    /**
+     * Formatea texto para MOGRT.
+     * Solo añade "• " si el item pertenece a un grupo (isGrouped=true) y su tipo es bullet/step.
+     * Items independientes (sin grupo) no reciben bullet — son frases/títulos autónomos.
+     */
+    function _st2FormatText(text, type, isGrouped) {
+        var t = normalizeSupertextNewlines(text || "");
+        if (isGrouped && (type === "bullet" || type === "step")) {
+            var lines = t.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+            if (lines.length > 0) {
+                var first = lines[0].trim();
+                if (!/^\d+[\.\)\-]/.test(first) && !/^[•·►▸▹‣⁃\-–—]/.test(first)) {
+                    lines[0] = "• " + first;
+                }
+            }
+            t = lines.join("\n");
+        }
+        if (t === t.toUpperCase() && t.length > 3) {
+            t = t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+        }
+        return t;
+    }
+
+    /** Cuenta líneas visibles en un texto (cada \n agrega una línea). */
+    function _st2LineCount(text) {
+        if (!text) return 1;
+        var s = normalizeSupertextNewlines(text);
+        var lines = s.split(/\r?\n/).length;
+        return Math.max(1, lines);
+    }
 
     // ── Pedagogical timing constants ──
     // Anticipation: elements enter BEFORE the narrator says them so they're
     // already fully visible on-screen when the word is spoken.
     var ST2_ANTICIPATION_SECS = 1.0;
-    // When grouped bullets are closer than this threshold, they appear
-    // together (batch); beyond it they stagger in one-by-one.
-    var ST2_BATCH_THRESHOLD_SECS = 3.0;
+    // Solo aparecen juntos si son prácticamente simultáneos (< 0.3s).
+    // Si no, cada bullet entra cuando el profesor lo dice.
+    var ST2_BATCH_THRESHOLD_SECS = 0.3;
     // Minimum reading buffer added after last mention so the viewer has
     // time to absorb the text before it exits.
     var ST2_READING_BUFFER_SECS = 1.5;
@@ -1413,8 +1565,8 @@
     // Minimum on-screen duration for any element (avoids flash appearances).
     var ST2_MIN_DURATION_SECS = 3.0;
 
-    // Motion Pro anticipation offset applied to timeline placement.
-    var MP_ANTICIPATION_SECS = 0.8;
+    // Motion Pro: ligero adelanto respecto al audio (demasiado = el gráfico “va por delante” del profesor).
+    var MP_ANTICIPATION_SECS = 0.35;
 
     function loadMOGRTConfig() {
         try {
@@ -1533,6 +1685,606 @@
 
     function getSupertext2PromptContext() { return getPromptContext("st2"); }
 
+    // ═══════════════════════════════════════════════════════════════
+    // SMART SUPERTEXTS — BATCH MODE
+    // ═══════════════════════════════════════════════════════════════
+
+    var _st2BatchResults = {};
+    var _st2BatchQueue = [];
+    var _st2BatchCancelled = false;
+    var _st2BatchCurrentNav = -1;
+    var ST2_BATCH_CONCURRENCY = 3;
+
+    // ── Open: scan open sequences with transcripts ─────────────
+
+    function st2BatchOpen() {
+        if (!checkAIReady()) return;
+        _st2BatchResults = {};
+        _st2BatchQueue = [];
+        _st2BatchCancelled = false;
+        _st2BatchCurrentNav = -1;
+        hideElement("btn-st2-batch-create");
+        hideElement("st2-batch-progress");
+        hideElement("st2-results");
+        hideElement("st2-batch-nav");
+        showElement("st2-batch-panel");
+
+        var listEl = document.getElementById("st2-batch-list");
+        listEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:12px;text-align:center">Buscando secuencias...</div>';
+
+        csInterface.evalScript("getAllProjectSequences()", function(res) {
+            try {
+                var data = JSON.parse(res);
+                var seqs = data.sequences || [];
+                var folders = _getTranscriptFolders();
+                var withTranscript = [];
+
+                for (var si = 0; si < seqs.length; si++) {
+                    if (!seqs[si].isOpen) continue;
+                    var sname = seqs[si].name;
+                    var hasT = _st2BatchFindTranscript(folders, sname);
+                    if (hasT) {
+                        withTranscript.push({ name: sname, id: seqs[si].sequenceID, transcriptPath: hasT });
+                    }
+                }
+
+                withTranscript.sort(function(a, b) { return a.name.localeCompare(b.name); });
+                _st2BatchQueue = withTranscript;
+
+                var countEl = document.getElementById("st2-batch-count");
+                if (countEl) countEl.textContent = withTranscript.length + " encontradas";
+
+                if (withTranscript.length === 0) {
+                    listEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:12px;text-align:center">No se encontraron secuencias abiertas con transcript. Importa al menos un transcript primero.</div>';
+                    return;
+                }
+
+                _st2BatchRenderCards();
+            } catch(e) {
+                listEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:12px">Error: ' + e.message + '</div>';
+            }
+        });
+    }
+
+    // ── Card rendering (cutter-style) ──────────────────────────
+
+    function _st2BatchRenderCards() {
+        var listEl = document.getElementById("st2-batch-list");
+        listEl.innerHTML = "";
+
+        for (var wi = 0; wi < _st2BatchQueue.length; wi++) {
+            var s = _st2BatchQueue[wi];
+            var r = _st2BatchResults[s.name];
+
+            var item = document.createElement("div");
+            item.className = "batch-seq-item" + (r && r.supertexts ? " st2-done" : "");
+            item.dataset.seqName = s.name;
+
+            var cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.className = "batch-seq-checkbox st2b-check";
+            cb.checked = true;
+            cb.dataset.seqName = s.name;
+            cb.dataset.seqId = s.id;
+            cb.dataset.transcript = s.transcriptPath;
+            cb.addEventListener("click", function(e) { e.stopPropagation(); });
+
+            var info = document.createElement("div");
+            info.className = "batch-seq-info";
+
+            var nameEl = document.createElement("div");
+            nameEl.className = "batch-seq-name";
+            nameEl.textContent = s.name;
+            info.appendChild(nameEl);
+
+            var meta = document.createElement("div");
+            meta.className = "batch-seq-meta";
+            meta.dataset.seqName = s.name;
+            info.appendChild(meta);
+
+            var stats = document.createElement("div");
+            stats.className = "batch-seq-stats";
+            stats.dataset.seqName = s.name;
+
+            if (r && r.supertexts) {
+                _st2BatchFillCardPills(stats, meta, r);
+            } else if (r && r.error) {
+                var errPill = document.createElement("span");
+                errPill.className = "batch-stat-pill st2-error";
+                errPill.textContent = "Error";
+                stats.appendChild(errPill);
+                meta.textContent = r.error.substring(0, 50);
+            } else {
+                var pendPill = document.createElement("span");
+                pendPill.className = "batch-stat-pill st2-pending";
+                pendPill.textContent = "Pendiente";
+                stats.appendChild(pendPill);
+                meta.textContent = path.basename(s.transcriptPath);
+            }
+
+            item.appendChild(cb);
+            item.appendChild(info);
+            item.appendChild(stats);
+
+            if (r && r.supertexts && r.supertexts.length > 0) {
+                var createBtn = document.createElement("button");
+                createBtn.className = "st2b-create-btn";
+                createBtn.textContent = "Crear";
+                createBtn.dataset.seqName = s.name;
+                createBtn.addEventListener("click", function(e) {
+                    e.stopPropagation();
+                    _st2BatchCreateSingle(this.dataset.seqName);
+                });
+                item.appendChild(createBtn);
+
+                (function(seqName) {
+                    item.addEventListener("click", function(e) {
+                        if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") return;
+                        _st2BatchNavigateTo(seqName);
+                    });
+                })(s.name);
+            }
+
+            listEl.appendChild(item);
+        }
+    }
+
+    function _st2BatchFillCardPills(statsEl, metaEl, r) {
+        var sts = r.supertexts;
+        var types = {};
+        sts.forEach(function(st) { types[st.type] = (types[st.type] || 0) + 1; });
+
+        var totalPill = document.createElement("span");
+        totalPill.className = "batch-stat-pill st2-total";
+        totalPill.textContent = sts.length;
+        statsEl.appendChild(totalPill);
+
+        var typeKeys = Object.keys(types).sort();
+        for (var ti = 0; ti < typeKeys.length; ti++) {
+            var t = typeKeys[ti];
+            var pill = document.createElement("span");
+            pill.className = "batch-stat-pill st2-" + t;
+            pill.textContent = types[t] + " " + t;
+            statsEl.appendChild(pill);
+        }
+
+        var checked = sts.filter(function(st) { return st.checked; }).length;
+        metaEl.textContent = checked + "/" + sts.length + " seleccionados";
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────
+
+    function _st2BatchFindTranscript(folders, seqName) {
+        if (!seqName || !fs || !path) return null;
+        var baseName = seqName.replace(/[\/\\:*?"<>|]/g, "_");
+        for (var fi = 0; fi < folders.length; fi++) {
+            var folder = folders[fi];
+            // Coincidencia exacta: nombreSecuencia.json o .srt
+            var jp = path.join(folder, baseName + ".json");
+            if (fs.existsSync(jp)) return jp;
+            var sp = path.join(folder, baseName + ".srt");
+            if (fs.existsSync(sp)) return sp;
+        }
+        return null;
+    }
+
+    /**
+     * Carga un transcript y lo devuelve en el formato "[X.Xs - Y.Ys] texto"
+     * que es el mismo que buildTimedTranscript() produce para análisis individual.
+     */
+    function _st2BatchLoadTranscript(filePath) {
+        if (!filePath || !fs) return null;
+        try {
+            var segments = null;
+
+            if (filePath.toLowerCase().endsWith(".json")) {
+                var parsed = parseTranscriptJson(filePath);
+                if (parsed && parsed.words && parsed.words.length > 5) {
+                    var srt = sttResultToSRT(parsed);
+                    segments = parseSRT(srt);
+                }
+                if (!segments || segments.length < 3) {
+                    var raw = fs.readFileSync(filePath, "utf8");
+                    var data = JSON.parse(raw);
+                    if (data.segments && data.segments.length > 0 && data.segments[0].words) {
+                        segments = [];
+                        for (var si = 0; si < data.segments.length; si++) {
+                            var seg = data.segments[si];
+                            var words = seg.words || [];
+                            var text = words.map(function(w) { return w.text || ""; }).join(" ").trim();
+                            if (text) {
+                                segments.push({
+                                    startTime: seg.start || 0,
+                                    endTime: (seg.start || 0) + (seg.duration || 5),
+                                    text: text
+                                });
+                            }
+                        }
+                    }
+                }
+            } else {
+                var content = fs.readFileSync(filePath, "utf8");
+                segments = parseSRT(content);
+            }
+
+            if (segments && segments.length > 3) {
+                return segments.map(function(s) {
+                    return "[" + s.startTime.toFixed(1) + "s - " + s.endTime.toFixed(1) + "s] " + s.text;
+                }).join("\n");
+            }
+            return null;
+        } catch(_e) { return null; }
+    }
+
+    function _st2BatchSetProgress(pct, text) {
+        var fill = document.getElementById("st2-batch-progress-fill");
+        var label = document.getElementById("st2-batch-progress-text");
+        if (fill) fill.style.width = Math.min(pct, 100) + "%";
+        if (label) label.textContent = text || "";
+    }
+
+    function _st2BatchUpdateCardStatus(seqName, pillClass, pillText) {
+        var card = document.querySelector('.batch-seq-item[data-seq-name="' + seqName.replace(/"/g, '\\"') + '"]');
+        if (!card) return;
+        var stats = card.querySelector(".batch-seq-stats");
+        if (stats) {
+            stats.innerHTML = "";
+            var r = _st2BatchResults[seqName];
+            if (r && r.supertexts && r.supertexts.length > 0) {
+                var meta = card.querySelector(".batch-seq-meta");
+                _st2BatchFillCardPills(stats, meta, r);
+            } else {
+                var pill = document.createElement("span");
+                pill.className = "batch-stat-pill " + pillClass;
+                pill.textContent = pillText;
+                stats.appendChild(pill);
+            }
+        }
+
+        // Make card clickable + add Create button when analysis succeeds
+        var r2 = _st2BatchResults[seqName];
+        if (r2 && r2.supertexts && r2.supertexts.length > 0 && !card.classList.contains("st2-done")) {
+            card.classList.add("st2-done");
+
+            if (!card.querySelector(".st2b-create-btn")) {
+                var createBtn = document.createElement("button");
+                createBtn.className = "st2b-create-btn";
+                createBtn.textContent = "Crear";
+                createBtn.dataset.seqName = seqName;
+                createBtn.addEventListener("click", function(e) {
+                    e.stopPropagation();
+                    _st2BatchCreateSingle(this.dataset.seqName);
+                });
+                card.appendChild(createBtn);
+            }
+
+            (function(sn) {
+                card.addEventListener("click", function(e) {
+                    if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") return;
+                    _st2BatchNavigateTo(sn);
+                });
+            })(seqName);
+        }
+    }
+
+    var _st2BatchRunning = false;
+
+    function st2BatchClose() {
+        if (_st2BatchRunning) {
+            _st2BatchCancelled = true;
+            _st2BatchRunning = false;
+            _st2BatchSetCancelBtn(false);
+            showToast("Proceso detenido", "info");
+            hideElement("st2-batch-progress");
+            enableBtn("btn-st2-batch-analyze");
+            enableBtn("btn-st2-batch-create");
+            return;
+        }
+        _st2BatchCancelled = true;
+        _st2BatchCurrentNav = -1;
+        hideElement("st2-batch-panel");
+        hideElement("st2-batch-nav");
+    }
+
+    function _st2BatchSetCancelBtn(running) {
+        var btn = document.getElementById("btn-st2-batch-cancel");
+        if (!btn) return;
+        if (running) {
+            btn.textContent = "Detener";
+            btn.style.borderColor = "rgba(248,113,113,0.4)";
+            btn.style.color = "#f87171";
+        } else {
+            btn.textContent = "Cerrar Batch";
+            btn.style.borderColor = "";
+            btn.style.color = "";
+        }
+    }
+
+    // ── Parallel Analysis ──────────────────────────────────────
+
+    function st2BatchAnalyzeAll() {
+        var checks = document.querySelectorAll(".st2b-check:checked");
+        if (checks.length === 0) { showToast("Selecciona al menos una secuencia", "info"); return; }
+        if (!checkAIReady()) return;
+
+        _st2BatchCancelled = false;
+        _st2BatchRunning = true;
+        _st2BatchSetCancelBtn(true);
+        disableBtn("btn-st2-batch-analyze");
+        hideElement("btn-st2-batch-create");
+        showElement("st2-batch-progress");
+
+        var queue = [];
+        checks.forEach(function(cb) {
+            queue.push({ name: cb.dataset.seqName, id: cb.dataset.seqId, transcript: cb.dataset.transcript });
+        });
+
+        var total = queue.length;
+        var completed = 0;
+        var nextIdx = 0;
+
+        function onItemDone() {
+            completed++;
+            var pct = Math.round((completed / total) * 100);
+            _st2BatchSetProgress(pct, completed + "/" + total + " analizadas");
+
+            if (_st2BatchCancelled || completed >= total) {
+                _st2BatchRunning = false;
+                _st2BatchSetCancelBtn(false);
+                hideElement("st2-batch-progress");
+                enableBtn("btn-st2-batch-analyze");
+                _st2BatchRenderCards();
+                var totalST = 0;
+                for (var k in _st2BatchResults) {
+                    if (_st2BatchResults[k].supertexts) totalST += _st2BatchResults[k].supertexts.length;
+                }
+                if (totalST > 0) showElement("btn-st2-batch-create");
+                showToast(completed + " secuencias analizadas — " + totalST + " supertextos", "success");
+                return;
+            }
+            launchNext();
+        }
+
+        function launchNext() {
+            while (nextIdx < total && (nextIdx - completed) < ST2_BATCH_CONCURRENCY) {
+                launchOne(nextIdx);
+                nextIdx++;
+            }
+        }
+
+        function launchOne(idx) {
+            if (_st2BatchCancelled) return;
+            var item = queue[idx];
+            _st2BatchUpdateCardStatus(item.name, "st2-analyzing", "Analizando...");
+
+            var timedTranscript = _st2BatchLoadTranscript(item.transcript);
+            if (!timedTranscript) {
+                _st2BatchUpdateCardStatus(item.name, "st2-error", "Sin transcript");
+                _st2BatchResults[item.name] = { error: "No transcript", seqId: item.id };
+                onItemDone();
+                return;
+            }
+
+            // Capturar el fin del transcript ANTES del análisis (no depender de state)
+            var txEnd = _st2ExtractTranscriptEnd(timedTranscript);
+
+            aiAnalyzer.analyzeSupertexts(timedTranscript, getSupertext2PromptContext(), function(result) {
+                if (_st2BatchCancelled) return;
+
+                if (result.error) {
+                    _st2BatchUpdateCardStatus(item.name, "st2-error", "Error");
+                    _st2BatchResults[item.name] = { error: result.error, seqId: item.id };
+                } else {
+                    var supertexts = (result.supertexts || []).map(function(st) {
+                        if (st.type) st.type = st.type.toLowerCase().replace(/_/g, "").replace("bulletpoint", "bullet").replace("datapoint", "data");
+                        if (ST2_TYPES.indexOf(st.type) === -1) st.type = "bullet";
+                        normalizeSt2Fields(st);
+                        st.checked = true;
+                        return st;
+                    });
+                    supertexts = _st2CapEndTimes(supertexts, txEnd);
+                    _st2BatchResults[item.name] = { supertexts: supertexts, seqId: item.id, transcript: item.transcript };
+                    _st2BatchUpdateCardStatus(item.name, "st2-total", supertexts.length + " supertextos");
+                }
+                onItemDone();
+            });
+        }
+
+        launchNext();
+    }
+
+    // ── Navigation: edit per class ─────────────────────────────
+
+    function _st2BatchGetAnalyzedNames() {
+        var names = [];
+        for (var qi = 0; qi < _st2BatchQueue.length; qi++) {
+            var n = _st2BatchQueue[qi].name;
+            if (_st2BatchResults[n] && _st2BatchResults[n].supertexts) names.push(n);
+        }
+        return names;
+    }
+
+    function _st2BatchNavigateTo(seqName) {
+        var r = _st2BatchResults[seqName];
+        if (!r || !r.supertexts) return;
+
+        // Save current edits if navigating away
+        _st2BatchSaveCurrentEdits();
+
+        var analyzed = _st2BatchGetAnalyzedNames();
+        _st2BatchCurrentNav = analyzed.indexOf(seqName);
+
+        // Activate sequence in Premiere
+        csInterface.evalScript('openSequenceById("' + r.seqId.replace(/"/g, '\\"') + '")', function() {});
+
+        // Load results into ST2 view
+        state.supertexts2 = r.supertexts;
+        renderSupertext2Results({ summary: r.supertexts.length + " supertextos — " + seqName });
+
+        // Show nav bar + results, hide batch panel
+        hideElement("st2-batch-panel");
+        hideElement("st2-empty");
+        showElement("st2-results");
+        _st2BatchUpdateNav();
+        showElement("st2-batch-nav");
+    }
+
+    function _st2BatchSaveCurrentEdits() {
+        if (_st2BatchCurrentNav < 0) return;
+        var analyzed = _st2BatchGetAnalyzedNames();
+        var name = analyzed[_st2BatchCurrentNav];
+        if (name && _st2BatchResults[name]) {
+            _st2BatchResults[name].supertexts = state.supertexts2;
+        }
+    }
+
+    function _st2BatchUpdateNav() {
+        var analyzed = _st2BatchGetAnalyzedNames();
+        var prevBtn = document.getElementById("btn-st2-bnav-prev");
+        var nextBtn = document.getElementById("btn-st2-bnav-next");
+        if (prevBtn) prevBtn.className = "btn-batch-nav" + (_st2BatchCurrentNav <= 0 ? " disabled" : "");
+        if (nextBtn) nextBtn.className = "btn-batch-nav" + (_st2BatchCurrentNav >= analyzed.length - 1 ? " disabled" : "");
+    }
+
+    function st2BatchNavPrev() {
+        var analyzed = _st2BatchGetAnalyzedNames();
+        if (_st2BatchCurrentNav > 0) {
+            _st2BatchNavigateTo(analyzed[_st2BatchCurrentNav - 1]);
+        }
+    }
+
+    function st2BatchNavNext() {
+        var analyzed = _st2BatchGetAnalyzedNames();
+        if (_st2BatchCurrentNav < analyzed.length - 1) {
+            _st2BatchNavigateTo(analyzed[_st2BatchCurrentNav + 1]);
+        }
+    }
+
+    function st2BatchNavBack() {
+        _st2BatchSaveCurrentEdits();
+        _st2BatchCurrentNav = -1;
+        hideElement("st2-batch-nav");
+        hideElement("st2-results");
+        _st2BatchRenderCards();
+        showElement("st2-batch-panel");
+    }
+
+    // ── Per-class create ───────────────────────────────────────
+
+    function _st2BatchCreateSingle(seqName) {
+        var r = _st2BatchResults[seqName];
+        if (!r || !r.supertexts || r.supertexts.length === 0) return;
+
+        _st2BatchUpdateCardStatus(seqName, "st2-analyzing", "Creando...");
+
+        csInterface.evalScript('openSequenceById("' + r.seqId.replace(/"/g, '\\"') + '")', function() {
+            setTimeout(function() {
+                var selected = r.supertexts.filter(function(st) { return st.checked; });
+                if (selected.length === 0) {
+                    _st2BatchUpdateCardStatus(seqName, "st2-error", "Nada seleccionado");
+                    return;
+                }
+                state.supertexts2 = r.supertexts;
+                var trackIdx = state.mogrtTrackIndex === "auto" ? -1 : parseInt(state.mogrtTrackIndex);
+                var items = buildST2Payload(selected);
+                var payload = { baseTrackIndex: trackIdx, supertexts: items };
+
+                var tmpFile = path.join(os.tmpdir(), "EditorPro_ST2_Batch_" + Date.now() + ".json");
+                fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
+                var safePath = tmpFile.replace(/\\/g, "/");
+
+                csInterface.evalScript('insertSupertextMOGRTs("' + escExtend(safePath) + '")', function(res) {
+                    try {
+                        var data = JSON.parse(res);
+                        var ins = data.inserted || 0;
+                        _st2BatchUpdateCardStatus(seqName, "st2-total", ins + " creados ✓");
+                        showToast(seqName + ": " + ins + " gráficos insertados", "success");
+                    } catch(e) {
+                        _st2BatchUpdateCardStatus(seqName, "st2-error", "Error");
+                        showToast("Error: " + e.message, "error");
+                    }
+                });
+            }, 1500);
+        });
+    }
+
+    // ── Bulk create all ────────────────────────────────────────
+
+    function st2BatchCreateAll() {
+        var names = [];
+        for (var k in _st2BatchResults) {
+            var r = _st2BatchResults[k];
+            if (r && r.supertexts && r.supertexts.length > 0) {
+                var checked = r.supertexts.filter(function(st) { return st.checked; }).length;
+                if (checked > 0) names.push(k);
+            }
+        }
+        names.sort();
+
+        if (names.length === 0) { showToast("Sin supertextos seleccionados para crear", "info"); return; }
+
+        _st2BatchCancelled = false;
+        _st2BatchRunning = true;
+        _st2BatchSetCancelBtn(true);
+        disableBtn("btn-st2-batch-create");
+        disableBtn("btn-st2-batch-analyze");
+        showElement("st2-batch-progress");
+
+        var total = names.length;
+        var current = 0;
+        var totalInserted = 0;
+
+        function processNext() {
+            if (_st2BatchCancelled || current >= total) {
+                _st2BatchRunning = false;
+                _st2BatchSetCancelBtn(false);
+                hideElement("st2-batch-progress");
+                enableBtn("btn-st2-batch-create");
+                enableBtn("btn-st2-batch-analyze");
+                _st2BatchRenderCards();
+                showToast(totalInserted + " gráficos creados en " + current + " secuencias", "success");
+                return;
+            }
+
+            var seqName = names[current];
+            var r = _st2BatchResults[seqName];
+            var pct = Math.round((current / total) * 100);
+            _st2BatchSetProgress(pct, (current + 1) + "/" + total + " — " + seqName);
+            _st2BatchUpdateCardStatus(seqName, "st2-analyzing", "Creando...");
+
+            csInterface.evalScript('openSequenceById("' + r.seqId.replace(/"/g, '\\"') + '")', function() {
+                setTimeout(function() {
+                    state.supertexts2 = r.supertexts;
+                    var selected = r.supertexts.filter(function(st) { return st.checked; });
+                    var trackIdx = state.mogrtTrackIndex === "auto" ? -1 : parseInt(state.mogrtTrackIndex);
+                    var items = buildST2Payload(selected);
+                    var payload = { baseTrackIndex: trackIdx, supertexts: items };
+
+                    var tmpFile = path.join(os.tmpdir(), "EditorPro_ST2_Batch_" + Date.now() + ".json");
+                    fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
+                    var safePath = tmpFile.replace(/\\/g, "/");
+
+                    csInterface.evalScript('insertSupertextMOGRTs("' + escExtend(safePath) + '")', function(res) {
+                        try {
+                            var data = JSON.parse(res);
+                            var ins = data.inserted || 0;
+                            totalInserted += ins;
+                            _st2BatchUpdateCardStatus(seqName, "st2-total", ins + " creados ✓");
+                        } catch(e) {
+                            _st2BatchUpdateCardStatus(seqName, "st2-error", "Error");
+                        }
+                        current++;
+                        setTimeout(processNext, 500);
+                    });
+                }, 1500);
+            });
+        }
+
+        processNext();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+
     function startSupertexts2() {
         if (state.analyzing) return;
         if (!checkAIReady()) return;
@@ -1606,12 +2358,14 @@
                     return;
                 }
 
-                state.supertexts2 = (result.supertexts || []).map(function(st) {
+                var mapped = (result.supertexts || []).map(function(st) {
                     st.checked = true;
                     if (st.type) st.type = st.type.toLowerCase().replace(/_/g, "").replace("bulletpoint", "bullet").replace("datapoint", "data");
                     if (ST2_TYPES.indexOf(st.type) === -1) st.type = "bullet";
+                    normalizeSt2Fields(st);
                     return st;
                 });
+                state.supertexts2 = _st2CapEndTimes(mapped, 0);
                 renderSupertext2Results(result);
                 showElement("st2-results");
                 showToast(state.supertexts2.length + " supertextos detectados", "success");
@@ -1624,7 +2378,7 @@
 
     function renderSupertext2Results(result) {
         var summary = document.getElementById("st2-summary");
-        summary.innerHTML = esc(result.summary || state.supertexts2.length + " momentos clave identificados");
+        summary.innerHTML = escSupertextHtml(result.summary || state.supertexts2.length + " momentos clave identificados");
 
         var list = document.getElementById("st2-list");
         list.innerHTML = "";
@@ -1730,14 +2484,14 @@
                 '</label>' +
                 '<div class="st-time">' + formatTimeFull(st.time) + '</div>' +
                 '<div class="st-content">' +
-                    '<div class="st-text">' + esc(st.text) + '</div>' +
+                    '<div class="st-text">' + escSupertextHtml(st.text) + '</div>' +
                     '<div class="st-meta-row">' +
                         '<span class="st-type-badge ' + typeClass + '" data-idx="' + idx + '">' + esc(curType) + '</span>' +
                         '<select class="st2-type-select" data-idx="' + idx + '">' + typeOptions + '</select>' +
                         '<span style="font-size:9px;color:var(--text-muted)">' + dur.toFixed(1) + 's</span>' +
                         '<button class="btn btn-xs btn-ghost st2-replace-btn hidden" data-idx="' + idx + '" title="Reemplazar clip en timeline">↻</button>' +
                     '</div>' +
-                    (st.reason ? '<div style="font-size:9px;color:var(--text-muted);margin-top:2px">' + esc(st.reason) + '</div>' : '') +
+                    (st.reason ? '<div style="font-size:9px;color:var(--text-muted);margin-top:2px">' + escSupertextHtml(st.reason) + '</div>' : '') +
                 '</div>';
 
             var sel = el.querySelector(".st2-type-select");
@@ -1835,6 +2589,73 @@
         btn.textContent = allChecked ? "Deseleccionar todos" : "Seleccionar todos (" + checkedCount + "/" + state.supertexts2.length + ")";
     }
 
+    function st2ExcludeByTrack() {
+        var sel = document.getElementById("st2-exclude-track");
+        var infoEl = document.getElementById("st2-exclude-info");
+        if (!sel) return;
+        var trackIdx = parseInt(sel.value);
+        if (infoEl) infoEl.textContent = "Leyendo pista V" + (trackIdx + 1) + "...";
+
+        csInterface.evalScript('getClipRangesOnTrack(' + trackIdx + ')', function(res) {
+            if (!res || res === "EvalScript error." || res.indexOf("is not") !== -1) {
+                showToast("Cierra y abre el panel para cargar la función (host no actualizado)", "error");
+                if (infoEl) infoEl.textContent = "Recargar panel";
+                return;
+            }
+            try {
+                var data = JSON.parse(res);
+                if (data.error) {
+                    showToast(data.error, "error");
+                    if (infoEl) infoEl.textContent = "";
+                    return;
+                }
+                var ranges = data.ranges || [];
+                var skipped = data.skippedDisabled || 0;
+                if (ranges.length === 0) {
+                    var msg0 = "0 clips habilitados en V" + (trackIdx + 1);
+                    if (skipped > 0) msg0 += " (" + skipped + " deshabilitados)";
+                    showToast(msg0, "info");
+                    if (infoEl) infoEl.textContent = msg0;
+                    return;
+                }
+
+                var excluded = 0;
+                for (var si = 0; si < state.supertexts2.length; si++) {
+                    var st = state.supertexts2[si];
+                    var stEnd = st.endTime || st.time + 5;
+                    for (var ri = 0; ri < ranges.length; ri++) {
+                        if (st.time < ranges[ri].end && stEnd > ranges[ri].start) {
+                            if (st.checked) { st.checked = false; excluded++; }
+                            break;
+                        }
+                    }
+                }
+
+                document.querySelectorAll(".st2-check").forEach(function(chk) {
+                    var idx = parseInt(chk.dataset.idx);
+                    if (!isNaN(idx) && state.supertexts2[idx]) {
+                        chk.checked = state.supertexts2[idx].checked;
+                        var row = chk.closest(".supertext-item");
+                        if (row) {
+                            row.classList.toggle("st-checked", state.supertexts2[idx].checked);
+                            row.classList.toggle("st-unchecked", !state.supertexts2[idx].checked);
+                        }
+                    }
+                });
+
+                updateSelectAll2Label();
+                var infoMsg = excluded + " excluidos por V" + (trackIdx + 1) + " (" + ranges.length + " clips habilitados";
+                if (skipped > 0) infoMsg += ", " + skipped + " deshabilitados ignorados";
+                infoMsg += ")";
+                if (infoEl) infoEl.textContent = infoMsg;
+                showToast(excluded + " supertextos excluidos por V" + (trackIdx + 1), excluded > 0 ? "success" : "info");
+            } catch(e) {
+                showToast("Error: " + e.message, "error");
+                if (infoEl) infoEl.textContent = "";
+            }
+        });
+    }
+
     function _st2Anticipate(timeSecs) {
         return Math.max(0, timeSecs - ST2_ANTICIPATION_SECS);
     }
@@ -1871,11 +2692,31 @@
         return [{ items: cascade, batchTime: null }];
     }
 
+    /**
+     * Si todos los items de un grupo tienen el mismo time (la IA no asignó tiempos individuales),
+     * los escalona automáticamente con un offset de ~1.5s entre cada uno.
+     */
+    var ST2_AUTO_STAGGER_SECS = 1.5;
+    function _st2AutoStagger(cascade) {
+        if (cascade.length < 2) return;
+        var allSame = true;
+        for (var s = 1; s < cascade.length; s++) {
+            if (Math.abs(cascade[s].time - cascade[0].time) > 0.5) { allSame = false; break; }
+        }
+        if (allSame) {
+            var baseTime = cascade[0].time;
+            for (var s2 = 1; s2 < cascade.length; s2++) {
+                cascade[s2].time = baseTime + s2 * ST2_AUTO_STAGGER_SECS;
+            }
+        }
+    }
+
     function buildST2Payload(selected) {
         var sorted = selected.slice().sort(function(a, b) { return a.time - b.time; });
 
         var items = [];
         var processed = {};
+        var cascadeCounter = 0;
         var i = 0;
         while (i < sorted.length) {
             var st = sorted[i];
@@ -1892,34 +2733,41 @@
                     }
                 }
 
+                _st2AutoStagger(cascade);
+
                 var lastItem = cascade[cascade.length - 1];
                 var rawCascadeEnd = lastItem.endTime || lastItem.time + 5;
                 var allText = cascade.map(function(c) { return c.text; }).join(" ");
                 var cascadeEnd = rawCascadeEnd + _st2ReadingBuffer(allText);
                 var cascadeLen = cascade.length;
                 var titleSpacing = ST2_BULLET_SPACING * 0.4;
+                var cascId = "c" + (cascadeCounter++);
 
-                var batches = _st2SmartBatch(cascade);
-                var batch = batches[0];
+                // Calcular posiciones Y acumuladas teniendo en cuenta líneas por ítem
+                var cascYOffsets = [];
+                var accumY = 0;
+                for (var cy = cascadeLen - 1; cy >= 0; cy--) {
+                    cascYOffsets[cy] = -accumY;
+                    var lines = _st2LineCount(cascade[cy].text);
+                    accumY += ST2_BULLET_SPACING + (lines - 1) * ST2_EXTRA_LINE_SPACING;
+                }
+                if (cascYOffsets[0] !== undefined) cascYOffsets[0] -= titleSpacing;
 
                 for (var c = 0; c < cascadeLen; c++) {
                     var cst = cascade[c];
                     var cType = cst.type || "bullet";
-                    var posY = -ST2_BULLET_SPACING * (cascadeLen - 1 - c);
-                    if (c === 0) posY -= titleSpacing;
 
-                    var entryTime = batch.batchTime !== null
-                        ? _st2Anticipate(batch.batchTime)
-                        : _st2Anticipate(cst.time);
+                    var entryTime = _st2Anticipate(cst.time);
 
                     items.push({
                         time: entryTime,
                         endTime: _st2EnsureMinDuration(entryTime, cascadeEnd),
-                        text: cst.text,
+                        text: _st2FormatText(cst.text, cType, true),
                         type: cType,
                         mogrtPath: state.mogrtPaths[cType] || state.mogrtPaths.bullet || "",
                         bulletTrackOffset: c,
-                        bulletPositionY: posY
+                        bulletPositionY: cascYOffsets[c],
+                        _cascadeId: cascId
                     });
                 }
                 i++;
@@ -1937,35 +2785,42 @@
                     j++;
                 }
 
+                _st2AutoStagger(bGroup);
+
                 var bLast = bGroup[bGroup.length - 1];
                 var rawBGroupEnd = bLast.endTime || bLast.time + 5;
                 var bAllText = bGroup.map(function(b) { return b.text; }).join(" ");
                 var bGroupEnd = rawBGroupEnd + _st2ReadingBuffer(bAllText);
                 var bGroupLen = bGroup.length;
+                var bCascId = "c" + (cascadeCounter++);
 
-                var bBatches = _st2SmartBatch(bGroup);
-                var bBatch = bBatches[0];
+                var bYOffsets = [];
+                var bAccumY = 0;
+                for (var by = bGroupLen - 1; by >= 0; by--) {
+                    bYOffsets[by] = -bAccumY;
+                    var bLines = _st2LineCount(bGroup[by].text);
+                    bAccumY += ST2_BULLET_SPACING + (bLines - 1) * ST2_EXTRA_LINE_SPACING;
+                }
 
                 for (var g = 0; g < bGroupLen; g++) {
-                    var bEntryTime = bBatch.batchTime !== null
-                        ? _st2Anticipate(bBatch.batchTime)
-                        : _st2Anticipate(bGroup[g].time);
+                    var bEntryTime = _st2Anticipate(bGroup[g].time);
 
                     items.push({
                         time: bEntryTime,
                         endTime: _st2EnsureMinDuration(bEntryTime, bGroupEnd),
-                        text: bGroup[g].text,
+                        text: _st2FormatText(bGroup[g].text, "bullet", true),
                         type: "bullet",
                         mogrtPath: state.mogrtPaths.bullet || "",
                         bulletTrackOffset: g,
-                        bulletPositionY: -ST2_BULLET_SPACING * (bGroupLen - 1 - g)
+                        bulletPositionY: bYOffsets[g],
+                        _cascadeId: bCascId
                     });
                 }
                 i = j;
                 continue;
             }
 
-            // Independent item
+            // Independent item (no cascade)
             var type = st.type || "title";
             var rawEnd = st.endTime || st.time + 5;
             var readBuf = _st2ReadingBuffer(st.text);
@@ -1975,15 +2830,106 @@
             items.push({
                 time: entryIndep,
                 endTime: endIndep,
-                text: st.text,
+                text: _st2FormatText(st.text, type, false),
                 type: type,
                 mogrtPath: state.mogrtPaths[type] || "",
                 bulletTrackOffset: 0,
-                bulletPositionY: 0
+                bulletPositionY: 0,
+                _cascadeId: "s" + (cascadeCounter++)
             });
             i++;
         }
+
+        _st2TrimOverlaps(items);
+
         return items;
+    }
+
+    var ST2_OVERLAP_GAP_SECS = 0.8;
+
+    /** Fin de la transcripción (tope absoluto para endTimes de supertextos). */
+    function _st2TranscriptEndSec() {
+        var best = 0;
+        // Fuente 1: último segmento de la transcripción
+        if (state.segments && state.segments.length > 0) {
+            var last = state.segments[state.segments.length - 1];
+            var e = last.endTime || last.startTime || 0;
+            if (e > best) best = e;
+        }
+        // Fuente 2: si tenemos sttResult con palabras, tomar la última
+        if (state.sttResult && state.sttResult.words && state.sttResult.words.length > 0) {
+            var lastW = state.sttResult.words[state.sttResult.words.length - 1];
+            var we = lastW.end || lastW.start || 0;
+            if (we > best) best = we;
+        }
+        // Fuente 3: último TIME (no endTime) de los supertextos — el último momento que la IA anotó
+        if (state.supertexts2 && state.supertexts2.length > 0) {
+            var maxTime = 0;
+            for (var si = 0; si < state.supertexts2.length; si++) {
+                var t = state.supertexts2[si].time || 0;
+                if (t > maxTime) maxTime = t;
+            }
+            var fromST = maxTime + 10;
+            if (fromST > best) best = fromST;
+        }
+        return best;
+    }
+
+    /**
+     * Recorta solapamientos entre CASCADAS/GRUPOS DISTINTOS.
+     * Items de la misma cascada (_cascadeId) comparten endTime a propósito
+     * porque van en pistas diferentes: NO se recortan entre sí.
+     */
+    function _st2TrimOverlaps(items) {
+        if (!items || items.length === 0) return;
+
+        // 1. Tope absoluto: nada pasa del fin de la transcripción + 2 s
+        var txEnd = _st2TranscriptEndSec();
+        if (txEnd > 0) {
+            var absMax = txEnd + 2;
+            for (var ai = 0; ai < items.length; ai++) {
+                if (items[ai].endTime > absMax) {
+                    items[ai].endTime = Math.max(items[ai].time + ST2_MIN_DURATION_SECS, absMax);
+                }
+            }
+        }
+
+        if (items.length < 2) return;
+
+        // 2. Agrupar por _cascadeId (una cascada = un bloque visual que sale junto)
+        var cascadeMap = {};
+        var cascadeOrder = [];
+        for (var ci = 0; ci < items.length; ci++) {
+            var cid = items[ci]._cascadeId || ("_" + ci);
+            if (!cascadeMap[cid]) {
+                cascadeMap[cid] = { items: [], minTime: Infinity, maxEnd: 0 };
+                cascadeOrder.push(cid);
+            }
+            var entry = cascadeMap[cid];
+            entry.items.push(items[ci]);
+            if (items[ci].time < entry.minTime) entry.minTime = items[ci].time;
+            if (items[ci].endTime > entry.maxEnd) entry.maxEnd = items[ci].endTime;
+        }
+
+        // Ordenar cascadas por su tiempo más temprano
+        cascadeOrder.sort(function(a, b) { return cascadeMap[a].minTime - cascadeMap[b].minTime; });
+
+        // 3. Para cada cascada, si su endTime se mete en la siguiente, recortar
+        for (var mi = 0; mi < cascadeOrder.length - 1; mi++) {
+            var cur = cascadeMap[cascadeOrder[mi]];
+            var nxt = cascadeMap[cascadeOrder[mi + 1]];
+            var nextStart = nxt.minTime;
+            var maxEnd = nextStart - ST2_OVERLAP_GAP_SECS;
+
+            if (cur.maxEnd > maxEnd) {
+                var cappedEnd = Math.max(cur.minTime + ST2_MIN_DURATION_SECS, maxEnd);
+                for (var mj = 0; mj < cur.items.length; mj++) {
+                    if (cur.items[mj].endTime > cappedEnd) {
+                        cur.items[mj].endTime = cappedEnd;
+                    }
+                }
+            }
+        }
     }
 
     function createSupertext2Graphics() {
@@ -2066,7 +3012,7 @@
         var payload = {
             time: st.time,
             endTime: st.endTime || st.time + 5,
-            text: st.text,
+            text: _st2FormatText(st.text, type, st.group !== undefined && st.group !== null),
             type: type,
             mogrtPath: mogrtPath,
             trackIndex: trackIdx
@@ -3575,6 +4521,7 @@
             try {
                 var content = fs.readFileSync(file.path, "utf8");
                 loadTranscriptText(content, file.name);
+                _saveLastTranscriptFolder(file.path);
             } catch(e) {
                 showToast("Error al leer archivo: " + e.message, "error");
             }
@@ -3963,6 +4910,63 @@
     function esc(str) {
         if (!str) return "";
         return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    /** El modelo a veces devuelve "\\n" como dos caracteres (backslash + n) en lugar de salto real. */
+    function normalizeSupertextNewlines(str) {
+        if (str === undefined || str === null) return "";
+        var s = String(str);
+        s = s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n");
+        return s;
+    }
+
+    function normalizeSt2Fields(st) {
+        if (!st) return st;
+        if (st.text != null) st.text = normalizeSupertextNewlines(st.text);
+        if (st.reason != null) st.reason = normalizeSupertextNewlines(st.reason);
+        return st;
+    }
+
+    function _st2ExtractTranscriptEnd(timedTranscript) {
+        if (!timedTranscript) return 0;
+        var matches = timedTranscript.match(/\[\d+\.?\d*s\s*-\s*(\d+\.?\d*)s\]/g);
+        if (!matches || matches.length === 0) return 0;
+        var last = matches[matches.length - 1];
+        var m = last.match(/-\s*(\d+\.?\d*)s\]/);
+        return m ? parseFloat(m[1]) : 0;
+    }
+
+    function _st2CapEndTimes(supertexts, transcriptEndSec) {
+        if (!supertexts || supertexts.length === 0) return supertexts;
+
+        var cap = transcriptEndSec || 0;
+        if (cap <= 0) cap = _st2TranscriptEndSec();
+
+        if (cap <= 0) {
+            var times = supertexts.map(function(st) { return st.time; }).sort(function(a, b) { return a - b; });
+            var p90idx = Math.floor(times.length * 0.9);
+            cap = times[p90idx] + 15;
+        }
+
+        if (cap <= 0) return supertexts;
+
+        var filtered = [];
+        for (var i = 0; i < supertexts.length; i++) {
+            if (supertexts[i].time <= cap + 5) {
+                if (supertexts[i].endTime > cap + 5) {
+                    supertexts[i].endTime = cap + 5;
+                }
+                filtered.push(supertexts[i]);
+            }
+        }
+        return filtered;
+    }
+
+    /** Texto de supertexto en HTML: escapa y muestra saltos de línea (no el literal \\n). */
+    function escSupertextHtml(str) {
+        if (str === undefined || str === null) return "";
+        var s = normalizeSupertextNewlines(str);
+        return s.split(/\r?\n/).map(function(line) { return esc(line); }).join("<br>");
     }
     function escAttr(str) {
         if (!str) return "";
@@ -6516,8 +7520,34 @@
         var btn = document.getElementById("btn-mp-analyze");
         var warn = document.getElementById("mp-no-transcript");
         var hasTranscript = state.transcript && state.transcript.trim().length > 0;
+        if (state.mpAnalyzing) return;
         if (btn) btn.classList.toggle("btn-disabled", !hasTranscript);
         if (warn) warn.classList.toggle("hidden", hasTranscript);
+    }
+
+    var _mpAnalysisHeartbeat = null;
+    var _mpAnalysisCancelled = false;
+
+    function mpClearMotionAnalysisHeartbeat() {
+        if (_mpAnalysisHeartbeat) {
+            clearInterval(_mpAnalysisHeartbeat);
+            _mpAnalysisHeartbeat = null;
+        }
+    }
+
+    function mpSetMotionAnalyzeButtonMode(analyzing) {
+        var btn = document.getElementById("btn-mp-analyze");
+        if (!btn) return;
+        var textEl = btn.querySelector(".btn-analyze-text");
+        if (analyzing) {
+            btn.classList.remove("btn-disabled");
+            btn.classList.add("btn-analyze-cancel");
+            if (textEl) textEl.textContent = "Detener análisis";
+        } else {
+            btn.classList.remove("btn-analyze-cancel");
+            if (textEl) textEl.textContent = "Analizar para Motions";
+            mpUpdateAnalyzeButton();
+        }
     }
 
     function _mpBuildSeqPrefix() {
@@ -6688,7 +7718,17 @@
     }
 
     function mpStartAnalysis() {
-        if (state.mpAnalyzing) return;
+        if (state.mpAnalyzing) {
+            _mpAnalysisCancelled = true;
+            aiAnalyzer.abort();
+            mpClearMotionAnalysisHeartbeat();
+            state.mpAnalyzing = false;
+            hideElement("mp-analyze-progress");
+            refreshMPHeaderProgressVisibility();
+            mpSetMotionAnalyzeButtonMode(false);
+            showToast("Análisis detenido", "info");
+            return;
+        }
         if (!state.transcript || state.transcript.trim().length === 0) {
             showToast("Carga una transcripción primero", "error");
             return;
@@ -6698,7 +7738,9 @@
             return;
         }
 
+        _mpAnalysisCancelled = false;
         state.mpAnalyzing = true;
+        mpSetMotionAnalyzeButtonMode(true);
 
         motionPro.proposals = [];
         motionPro.motions = [];
@@ -6717,12 +7759,24 @@
         if (controlSection) controlSection.style.display = "none";
 
         showElement("mp-analyze-progress");
-        mpSetProgress("mp-analyze", 20, "Analizando transcripción...");
+        mpSetProgress("mp-analyze", 15, "Analizando transcripción… (puede tardar varios minutos en clases largas)");
+
+        var tick = 0;
+        mpClearMotionAnalysisHeartbeat();
+        _mpAnalysisHeartbeat = setInterval(function() {
+            tick++;
+            var elapsed = tick * 15;
+            var pct = Math.min(15 + tick * 3, 42);
+            mpSetProgress("mp-analyze", pct, "Analizando… ~" + elapsed + "s — si tarda demasiado, prueba IA en la nube en Ajustes o pulsa Detener");
+        }, 15000);
 
         var timedTranscript = buildTimedTranscript();
 
         aiAnalyzer.analyzeMotionProposals(timedTranscript, getPromptContext("mp"), function(result) {
+            mpClearMotionAnalysisHeartbeat();
+            if (_mpAnalysisCancelled) return;
             state.mpAnalyzing = false;
+            mpSetMotionAnalyzeButtonMode(false);
             hideElement("mp-analyze-progress");
             refreshMPHeaderProgressVisibility();
 
@@ -6908,6 +7962,15 @@
         var countEl = document.getElementById("mp-proposal-count");
         if (countEl) countEl.textContent = proposals.length;
         mpUpdateSelectionCount();
+        mpUpdateMotionProEmptyState();
+    }
+
+    function mpUpdateMotionProEmptyState() {
+        var empty = document.getElementById("mp-empty");
+        if (!empty || !motionPro) return;
+        var has = (motionPro.proposals && motionPro.proposals.length > 0) ||
+            (motionPro.motions && motionPro.motions.length > 0);
+        empty.classList.toggle("hidden", !!has);
     }
 
     function mpUpdateSelectionCount() {
@@ -7007,6 +8070,7 @@
             var controlSection = document.getElementById("mp-control-section");
             if (controlSection) controlSection.style.display = "none";
         }
+        mpUpdateMotionProEmptyState();
     }
 
     function mpStartGeneration() {
@@ -7145,10 +8209,25 @@
         if (s.indexOf("%") !== -1) {
             try { s = decodeURIComponent(s); } catch(e) {}
         }
-        try {
-            if (path) s = path.normalize(s);
-        } catch(e) {}
         return s;
+    }
+
+    /** Paths embedded in ExtendScript string literals — escape \\ and " */
+    function mpEscapePathForEvalScript(p) {
+        if (p === undefined || p === null) return "";
+        return String(p).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    }
+
+    /** Duración del clip en timeline: no mayor que el vídeo real (evita franja rayada). Resta ~2 frames por redondeo contenedor/Premiere. */
+    var MP_TIMELINE_FPS = 30;
+    function mpComputeClipDurationSecs(motion, v) {
+        var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
+        var proposalDur = Math.max(0.1, motion.endTime - mpStart);
+        if (v && typeof v.mediaDurationSec === "number" && v.mediaDurationSec > 0.05) {
+            var safeMedia = Math.max(0.05, v.mediaDurationSec - 2 / MP_TIMELINE_FPS);
+            return Math.min(proposalDur, safeMedia);
+        }
+        return proposalDur;
     }
 
     function mpPlaceSingleInTimeline(motionId, callback) {
@@ -7158,7 +8237,7 @@
         if (!v || !v.mp4Path) { if (callback) callback(); return; }
 
         var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
-        var mpDuration = motion.endTime - mpStart;
+        var mpDuration = mpComputeClipDurationSecs(motion, v);
         var mediaPath = mpNormalizeMediaPath(v.mp4Path);
 
         var payload = {
@@ -7173,7 +8252,7 @@
         var tmpPath = _writeTempJson(payload, "mp_place");
         if (!tmpPath) { if (callback) callback(); return; }
 
-        csInterface.evalScript('importAndPlaceMotions("' + tmpPath.replace(/\\/g, "\\\\") + '")', function(res) {
+        csInterface.evalScript('importAndPlaceMotions("' + mpEscapePathForEvalScript(tmpPath) + '")', function(res) {
             if (res === undefined || res === null || (typeof res === "string" && res.trim() === "")) {
                 console.warn("[Motion-Pro] Place: evalScript returned empty");
                 showToast("Motion-Pro: Premiere no respondió al colocar el clip. Activa la secuencia correcta y recarga el panel (Cmd+R en el panel).", "error");
@@ -7217,9 +8296,11 @@
         if (!motion) return;
         var v = version;
 
+        var mpStartRep = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
         var payload = {
-            mp4Path: v.mp4Path,
-            startTimeSecs: Math.max(0, motion.startTime - MP_ANTICIPATION_SECS),
+            mp4Path: mpNormalizeMediaPath(v.mp4Path),
+            startTimeSecs: mpStartRep,
+            durationSecs: mpComputeClipDurationSecs(motion, v),
             oldTrackIndex: motion.baseTrackIndex,
             newTrackIndex: motion.baseTrackIndex + (v.version - 1),
             clipName: "MP: " + motionId + "-v" + v.version,
@@ -7229,7 +8310,7 @@
         var tmpPath = _writeTempJson(payload, "mp_replace");
         if (!tmpPath) return;
 
-        csInterface.evalScript('replaceMotionOnTrack("' + tmpPath.replace(/\\/g, "\\\\") + '")', function(res) {
+        csInterface.evalScript('replaceMotionOnTrack("' + mpEscapePathForEvalScript(tmpPath) + '")', function(res) {
             try {
                 var result = JSON.parse(res);
                 if (result.error) {
@@ -7557,6 +8638,7 @@
                 });
             })(m.id, m.startTime);
         }
+        mpUpdateMotionProEmptyState();
     }
 
     function mpSetProgress(prefix, pct, text) {

@@ -44,6 +44,10 @@ REGLA DE COBERTURA:
 - Solo dejar al profesor sin motion en: saludos iniciales, anécdotas personales, pausas naturales
 - Si el video dura 90 segundos, debería haber motions cubriendo al menos 60-70 segundos
 
+CLASES MUY LARGAS (transcripciones de muchos minutos):
+- Si el JSON de salida sería enorme, prioriza **bloques temáticos completos** (fusiona sub-bloques débiles) y mantén entre **~25 y 45 propuestas** como tope práctico — mejor menos motions sólidos que cientos de fragmentos
+- Cada propuesta sigue siendo un motion **largo** con varias secciones internas cuando el tema lo merece
+
 Tipos de visual y cuándo usar cada uno:
 - Comparaciones (A vs B) → type: 'comparison'
 - Procesos paso a paso → type: 'steps' (IDEAL para secciones de 15-30s con múltiples pasos)

@@ -1,9 +1,64 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const RemotionManager = require('../lib/remotion-manager');
+
+/**
+ * Duración útil (s): el mínimo entre contenedor y pista de vídeo, para no alargar el clip en timeline por metadata inflada.
+ */
+function probeVideoDurationSec(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  const candidates = [];
+  try {
+    const outFmt = execFileSync(
+      'ffprobe',
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', filePath],
+      { encoding: 'utf8', timeout: 120000, maxBuffer: 1024 * 1024 }
+    );
+    const d0 = parseFloat(String(outFmt).trim());
+    if (Number.isFinite(d0) && d0 > 0.05) candidates.push(d0);
+  } catch (_e) {}
+  try {
+    const outSt = execFileSync(
+      'ffprobe',
+      [
+        '-v', 'error',
+        '-select_streams', 'v:0',
+        '-show_entries', 'stream=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1',
+        filePath,
+      ],
+      { encoding: 'utf8', timeout: 120000, maxBuffer: 1024 * 1024 }
+    );
+    const d1 = parseFloat(String(outSt).trim());
+    if (Number.isFinite(d1) && d1 > 0.05) candidates.push(d1);
+  } catch (_e) {}
+  if (candidates.length === 0) return null;
+  return Math.min.apply(null, candidates);
+}
+
+/** Reescribe el mp4 con moov al inicio (sin re-codificar); mejora lectura en Premiere. */
+function faststartMp4InPlace(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return;
+  const tmp = filePath + '.__fst.mp4';
+  try {
+    execFileSync(
+      'ffmpeg',
+      ['-y', '-i', filePath, '-c', 'copy', '-movflags', '+faststart', tmp],
+      { encoding: 'utf8', timeout: 600000, maxBuffer: 10 * 1024 * 1024 }
+    );
+    if (fs.existsSync(tmp)) {
+      fs.unlinkSync(filePath);
+      fs.renameSync(tmp, filePath);
+    }
+  } catch (_e) {
+    try {
+      if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+    } catch (_e2) {}
+  }
+}
 
 router.post('/', (req, res) => {
   const { compositionId, outputDir, sessionDir } = req.body;
@@ -26,9 +81,14 @@ router.post('/', (req, res) => {
     if (err) {
       return res.status(500).json({ error: 'Render error: ' + err.message });
     }
+    try {
+      faststartMp4InPlace(result.mp4Path);
+    } catch (_e) {}
+    const mediaDurationSec = probeVideoDurationSec(result.mp4Path);
     res.json({
       compositionId: result.compositionId,
       mp4Path: result.mp4Path,
+      mediaDurationSec: mediaDurationSec,
       status: 'rendered',
     });
   }, outputDir || null);
