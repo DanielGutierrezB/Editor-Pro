@@ -2662,22 +2662,49 @@
     window._epToggleSettings = toggleSettings;
 
     // ─── Auto-update on reload ───────────────────────────────────
+    var _updateAvailable = false;
+    var _originalReloadHTML = "";
+
+    function _checkForUpdates() {
+        try {
+            var exec = require("child_process").exec;
+            var extensionPath = csInterface.getSystemPath("extension");
+            exec("cd '" + extensionPath + "' && git fetch origin fixes 2>&1 && git diff --stat HEAD origin/fixes",
+                { timeout: 15000 },
+                function(err, stdout) {
+                    if (stdout && stdout.trim() && stdout.indexOf("files changed") !== -1) {
+                        _updateAvailable = true;
+                        var btn = document.getElementById("btn-reload");
+                        if (btn) {
+                            _originalReloadHTML = btn.innerHTML;
+                            btn.innerHTML = "⬇️";
+                            btn.title = "Update disponible — click para actualizar";
+                            btn.style.animation = "pulse-update 1.5s infinite";
+                        }
+                    }
+                }
+            );
+        } catch(e) {}
+    }
+
+    // Check on startup after 5 seconds
+    setTimeout(_checkForUpdates, 5000);
+
     window.checkAndReload = function() {
         var btn = document.getElementById("btn-reload");
-        var originalHTML = btn.innerHTML;
+        var originalHTML = _originalReloadHTML || btn.innerHTML;
         btn.innerHTML = "⏳";
         btn.title = "Verificando updates...";
+        btn.style.animation = "";
         
         try {
             var exec = require("child_process").exec;
             var extensionPath = csInterface.getSystemPath("extension");
             
-            // Check for updates and pull
             exec("cd '" + extensionPath + "' && git fetch origin fixes 2>&1 && git diff --stat HEAD origin/fixes", 
                 { timeout: 15000 }, 
                 function(err, stdout) {
                     if (stdout && stdout.trim() && stdout.indexOf("files changed") !== -1) {
-                        // There are updates — pull them
                         btn.innerHTML = "⬇️";
                         btn.title = "Descargando update...";
                         exec("cd '" + extensionPath + "' && git pull origin fixes 2>&1",
@@ -2695,7 +2722,6 @@
                             }
                         );
                     } else {
-                        // No updates — just reload
                         btn.innerHTML = "✅";
                         btn.title = "Sin updates — recargando...";
                         setTimeout(function() { location.reload(); }, 300);
@@ -2703,7 +2729,6 @@
                 }
             );
         } catch(e) {
-            // Git not available — just reload
             location.reload();
         }
     };
