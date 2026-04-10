@@ -18,6 +18,7 @@
                 <span class="seq-dropdown-arrow">▾</span>
             </button>
             <span id="version-label" style="font-size:10px; color:#666; margin-right:6px; cursor:default;" title="Versión actual">v—</span>
+            <button id="btn-save-log" class="icon-btn" title="Guardar log de debug" style="font-size:12px;padding:2px 4px;">💾</button>
             <button id="btn-reload" class="icon-btn" title="Recargar panel (verifica updates)" onclick="checkAndReload()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
@@ -1191,6 +1192,7 @@
     <input type="file" id="audio-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.webm,.mp4" style="display:none">
 
     <!-- Scripts -->
+    <script src="js/logger.js"></script>
     <script src="js/CSInterface.js"></script>
     <script src="js/spellcheck-engine.js"></script>
     <script src="js/context-rules.js"></script>

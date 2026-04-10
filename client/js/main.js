@@ -70,6 +70,7 @@
 
     // ─── Init ────────────────────────────────────────────────────
     function init() {
+        if (window.EPLogger) EPLogger.log("main", "init-start", "Editor-Pro initializing");
         var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
 
         // Re-evaluar host/index.jsx para cargar funciones nuevas sin cerrar el panel
@@ -119,6 +120,25 @@
                 panel.classList.add("hidden");
             }
         });
+
+        if (window.EPLogger) EPLogger.log("main", "init-complete", "provider=" + state.settings.aiProvider + " model=" + state.settings.aiModel + " stt=" + state.settings.sttProvider);
+    }
+
+    function saveDebugLog() {
+        if (!window.EPLogger) { showToast("Logger no disponible", "error"); return; }
+        var downloadsDir;
+        try {
+            downloadsDir = path.join(os.homedir(), "Downloads");
+        } catch(e) {
+            showToast("No se pudo determinar la carpeta Downloads", "error");
+            return;
+        }
+        var saved = EPLogger.saveToFile(downloadsDir);
+        if (saved) {
+            showToast("Log guardado: " + saved, "success");
+        } else {
+            showToast("Error al guardar log", "error");
+        }
     }
 
     function loadSavedSettings() {
@@ -160,6 +180,7 @@
     }
 
     function bindEvents() {
+        on("btn-save-log", "click", saveDebugLog);
         on("btn-settings", "click", toggleSettings);
         on("btn-save-api-key", "click", saveApiKey);
         on("btn-ollama-refresh", "click", checkOllamaConnection);
@@ -434,6 +455,7 @@
                 var changed = newSeqName && newSeqName !== _lastSeqName && _lastSeqName !== "";
 
                 if (changed) {
+                    if (window.EPLogger) EPLogger.log("main", "sequence-change", _lastSeqName + " → " + newSeqName);
                     saveCurrentSequenceState();
                 }
 
@@ -2475,6 +2497,7 @@
                 if (wasHidden) {
                     body.classList.remove("hidden");
                     if (icon) icon.textContent = "▾";
+                    if (window.EPLogger) EPLogger.log("main", "tool-open", hdr.getAttribute("data-tool") || "unknown");
                 }
 
                 refreshAllHeaderProgress();

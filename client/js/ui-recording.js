@@ -506,6 +506,7 @@
             showToast("Carga un archivo de audio primero", "error");
             return;
         }
+        if (window.EPLogger) EPLogger.log("recording", "stt-start", "provider=" + state.settings.sttProvider + " audio=" + state.audioFileName);
         if (!stt.isConfigured()) {
             var prov = state.settings.sttProvider;
             if (prov === "whisper_local") {
@@ -546,14 +547,17 @@
 
             if (result.error) {
                 if (result.error === "Transcripción cancelada.") {
+                    if (window.EPLogger) EPLogger.log("recording", "stt-cancelled", "");
                     showToast("Transcripción detenida", "info");
                 } else {
+                    if (window.EPLogger) EPLogger.error("recording", "stt-complete", result.error);
                     showToast("Error STT: " + result.error, "error");
                 }
                 showElement("recording-empty");
                 return;
             }
 
+            if (window.EPLogger) EPLogger.log("recording", "stt-complete", (result.words ? result.words.length : 0) + " words");
             state.sttResult = result;
             state.lastWhisperResult = result;
 
@@ -722,6 +726,7 @@
 
         var detection = recorder.detectSegments();
         state.detectionResult = detection;
+        if (window.EPLogger) EPLogger.log("recording", "segments-detected", detection.segments.length + " segments, " + detection.inPoints.length + " IN, " + detection.outPoints.length + " OUT");
 
         renderRecordingTranscriptPreview(result.words, detection);
 
@@ -1250,6 +1255,7 @@
         }
         if (!checkAIReady()) return;
 
+        if (window.EPLogger) EPLogger.log("recording", "take-analysis-start", (recorder.words ? recorder.words.length : 0) + " words");
         recStepStart(4);
         state.analyzing = true;
         state.supplementaryPairs = [];
@@ -1269,12 +1275,14 @@
                 setAnalyzeButtonMode("analyze");
 
                 if (result.error) {
+                    if (window.EPLogger) EPLogger.error("recording", "take-analysis-complete", result.error);
                     showToast("Error IA: " + result.error, "error");
                     return;
                 }
 
                 var adjustments = result.adjustments || [];
                 var additional = result.additionalMarkers || [];
+                if (window.EPLogger) EPLogger.log("recording", "take-analysis-complete", adjustments.length + " adjustments, " + additional.length + " additional markers");
                 resolveSupplementaryTimecodes(additional);
                 var pairs = pairAdditionalMarkers(additional);
                 state.supplementaryPairs = pairs;
@@ -1735,6 +1743,7 @@
     // ─── Recording Markers ───────────────────────────────────────
 
     function placeRecordingMarkers() {
+        if (window.EPLogger) EPLogger.log("recording", "markers-place", "");
         recStepStart(5);
 
         csInterface.evalScript("getActiveSequenceInfo()", function(seqRes) {
@@ -1977,6 +1986,7 @@
             showToast("No hay zonas para cortar", "info");
             return;
         }
+        if (window.EPLogger) EPLogger.log("recording", "cuts-execute", recCutState.removeZones.length + " zones to remove");
         recStepStart(6);
         if (!fs || !os || !path) {
             showToast("Error: Node.js no disponible", "error");

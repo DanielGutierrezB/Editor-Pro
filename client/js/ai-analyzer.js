@@ -253,6 +253,8 @@
         var timeoutMs = self.requestTimeoutMs || 900000;
         var sendFinished = false;
         self._activeTimeoutId = null;
+        var _sendStart = Date.now();
+        if (window.EPLogger) EPLogger.log("ai-analyzer", "api-call", "provider=" + self.provider + " model=" + self.model + " promptLen=" + (userPrompt ? userPrompt.length : 0));
         var wrappedCallback = function(result) {
             if (sendFinished) return;
             sendFinished = true;
@@ -262,6 +264,13 @@
             }
             self._activeRequest = null;
             if (self._aborted) return;
+            var elapsed = ((Date.now() - _sendStart) / 1000).toFixed(1);
+            if (result && result.error) {
+                if (window.EPLogger) EPLogger.error("ai-analyzer", "api-response", result.error + " (" + elapsed + "s)");
+            } else {
+                var resLen = result ? JSON.stringify(result).length : 0;
+                if (window.EPLogger) EPLogger.log("ai-analyzer", "api-response", "ok responseLen=" + resLen + " (" + elapsed + "s)");
+            }
             callback(result);
         };
         var body;
@@ -671,6 +680,7 @@
             callback(result);
 
         } catch(e) {
+            if (window.EPLogger) EPLogger.error("ai-analyzer", "parse-response", e.message + " rawLen=" + (data ? data.length : 0));
             callback({ error: "Error al procesar respuesta: " + e.message, raw: data });
         }
     };

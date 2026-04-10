@@ -143,10 +143,12 @@
 
     function mpToggleServer() {
         if (motionPro.serverRunning) {
+            if (window.EPLogger) EPLogger.log("motion-pro", "server-stop", "");
             motionPro.stopServer();
             mpUpdateServerUI();
             showToast("Servidor Motion-Pro detenido", "info");
         } else {
+            if (window.EPLogger) EPLogger.log("motion-pro", "server-start", "");
             var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
             var btn = document.getElementById("btn-mp-server-toggle");
             if (btn) { btn.textContent = "Iniciando..."; btn.disabled = true; }
@@ -154,8 +156,10 @@
             motionPro.startServer(extensionPath, function(err, ok) {
                 if (btn) btn.disabled = false;
                 if (err) {
+                    if (window.EPLogger) EPLogger.error("motion-pro", "server-start", err);
                     showToast("Error al iniciar servidor: " + err.message, "error");
                 } else {
+                    if (window.EPLogger) EPLogger.log("motion-pro", "server-started", "ok");
                     showToast("Servidor Motion-Pro iniciado", "success");
                 }
                 mpUpdateServerUI();
@@ -384,6 +388,7 @@
 
     function mpStartAnalysis() {
         if (state.mpAnalyzing) {
+            if (window.EPLogger) EPLogger.log("motion-pro", "analysis-cancel", "user cancelled");
             _mpAnalysisCancelled = true;
             aiAnalyzer.abort();
             mpClearMotionAnalysisHeartbeat();
@@ -403,6 +408,7 @@
             return;
         }
 
+        if (window.EPLogger) EPLogger.log("motion-pro", "analysis-start", "transcriptLen=" + state.transcript.length);
         _mpAnalysisCancelled = false;
         state.mpAnalyzing = true;
         mpSetMotionAnalyzeButtonMode(true);
@@ -446,10 +452,12 @@
             refreshMPHeaderProgressVisibility();
 
             if (result && result.error) {
+                if (window.EPLogger) EPLogger.error("motion-pro", "analysis-complete", result.error);
                 showToast("Error en análisis: " + result.error, "error");
                 return;
             }
 
+            if (window.EPLogger) EPLogger.log("motion-pro", "analysis-complete", "parsing proposals");
             var proposals = [];
             try {
                 var parsed = (typeof result === "string") ? JSON.parse(result) : result;
@@ -753,6 +761,7 @@
             return;
         }
 
+        if (window.EPLogger) EPLogger.log("motion-pro", "generate-start", selected.length + " proposals selected");
         state.mpGenerating = true;
         state.mpGenerateCancelRequested = false;
         showElement("mp-generate-progress");
@@ -816,8 +825,10 @@
                 if (hint) hint.textContent = (total - errors.length) + "/" + total + " generados";
 
                 if (errors.length > 0) {
+                    if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", done + "/" + total + " done, " + errors.length + " errors");
                     showToast(errors.length + " errores, " + (total - errors.length) + " generados", "error");
                 } else {
+                    if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", total + "/" + total + " done, 0 errors");
                     showToast(total + " motions generados y colocados en timeline", "success");
                 }
                 return;
@@ -834,10 +845,12 @@
 
                 if (err) {
                     errors.push({ id: proposal.id, error: err.message });
+                    if (window.EPLogger) EPLogger.error("motion-pro", "generate-item", proposal.id + ": " + err.message);
                     console.warn("[Motion-Pro] Generation error:", err.message);
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
                     processNext();
                 } else {
+                    if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result.motionId || "?"));
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando " + done + "/" + total + " en timeline...");
                     mpPlaceSingleInTimeline(result.motionId, function() {
                         motionPro.saveState();
@@ -899,6 +912,7 @@
         if (!motion) { if (callback) callback(); return; }
         var v = motionPro.getActiveVersion(motionId);
         if (!v || !v.mp4Path) { if (callback) callback(); return; }
+        if (window.EPLogger) EPLogger.log("motion-pro", "timeline-place", motionId + " at " + motion.startTime.toFixed(1) + "s");
 
         var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
         var mpDuration = mpComputeClipDurationSecs(motion, v);

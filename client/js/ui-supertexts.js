@@ -586,6 +586,7 @@
         var checks = document.querySelectorAll(".st2b-check:checked");
         if (checks.length === 0) { showToast("Selecciona al menos una secuencia", "info"); return; }
         if (!checkAIReady()) return;
+        if (window.EPLogger) EPLogger.log("supertexts", "batch-analyze-start", checks.length + " sequences");
 
         _st2BatchCancelled = false;
         _st2BatchRunning = true;
@@ -869,6 +870,7 @@
         if (state.analyzing) return;
         if (!checkAIReady()) return;
 
+        if (window.EPLogger) EPLogger.log("supertexts", "analysis-start", "transcriptLen=" + (state.transcript ? state.transcript.length : 0));
         state.analyzing = true;
         expandSection("supertexts2");
         hideElement("st2-results");
@@ -933,11 +935,13 @@
                     enableBtn("btn-supertexts2");
 
                     if (result.error) {
+                        if (window.EPLogger) EPLogger.error("supertexts", "analysis-complete", result.error);
                         showToast("Error: " + result.error, "error");
                         showElement("st2-empty");
                         return;
                     }
 
+                    if (window.EPLogger) EPLogger.log("supertexts", "analysis-complete", (result.supertexts ? result.supertexts.length : 0) + " supertexts found");
                     var mapped = (result.supertexts || []).map(function(st) {
                         st.checked = true;
                         if (st.type) st.type = st.type.toLowerCase().replace(/_/g, "").replace("bulletpoint", "bullet").replace("datapoint", "data");
@@ -1521,6 +1525,7 @@
             showToast("Selecciona al menos un supertexto", "info");
             return;
         }
+        if (window.EPLogger) EPLogger.log("supertexts", "mogrt-insert-start", selected.length + " selected");
 
         var usedTypes = {};
         selected.forEach(function(st) { usedTypes[st.type || "title"] = true; });
@@ -1555,10 +1560,12 @@
             try {
                 var data = JSON.parse(res);
                 if (data.error) {
+                    if (window.EPLogger) EPLogger.error("supertexts", "mogrt-insert-complete", data.error);
                     showToast(data.error, "error");
                     return;
                 }
                 state.supertexts2Inserted = true;
+                if (window.EPLogger) EPLogger.log("supertexts", "mogrt-insert-complete", data.inserted + "/" + data.total + " inserted, textSet=" + (data.textSet || 0));
                 document.querySelectorAll(".st2-replace-btn").forEach(function(btn) { btn.classList.remove("hidden"); });
                 var msg = data.inserted + " de " + data.total + " gráficos insertados";
                 if (data.textSet > 0) msg += " (" + data.textSet + " con texto)";
