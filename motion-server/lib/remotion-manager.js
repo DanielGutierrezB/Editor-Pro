@@ -161,30 +161,7 @@ class RemotionManager {
   _validateSyntax(tsxCode) {
     const errors = [];
 
-    // STEP 1: Strip JSX to pure JS so we can use Node's parser
-    // Replace JSX tags with placeholders so the JS parser doesn't choke on them
-    // This catches unterminated strings, brackets, template literals etc.
-    let jsCode = tsxCode;
-    // Strip JSX: <Component ... /> and <Component ...>...</Component>
-    // Replace with valid JS expressions
-    jsCode = jsCode.replace(/<[A-Z][^>]*\/>/g, 'null'); // self-closing
-    jsCode = jsCode.replace(/<\/[A-Za-z][^>]*>/g, ''); // closing tags
-    jsCode = jsCode.replace(/<[A-Za-z][^>]*>/g, '('); // opening tags → open paren
-    // Strip CSS-in-JS import statements that node can't parse
-    jsCode = jsCode.replace(/^import\s+["']@fontsource[^"']*["'];?\s*$/gm, '');
-    jsCode = jsCode.replace(/^import\s+["'][^"']*\.css["'];?\s*$/gm, '');
-
-    // STEP 2: Try to parse with Node's native parser
-    try {
-      // Use acorn-style check: wrap in async function to allow top-level await etc.
-      new Function('"use strict";\n' + jsCode);
-    } catch (parseErr) {
-      // Node parser caught a syntax error — extract useful info
-      const msg = parseErr.message || '';
-      errors.push('JS syntax error: ' + msg.split('\n')[0]);
-    }
-
-    // STEP 3: Additional TSX-specific checks
+    // STEP 1: String and bracket validation (TSX-safe, no JS parsing needed)
     // Check all string types (single, double, backtick) balance
     let inString = false;
     let stringChar = '';

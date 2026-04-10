@@ -97,7 +97,7 @@ const TYPE_INSTRUCTIONS = {
 - 2-3 cards arranged horizontally with SVG arrows between them
 - Each card: 500-620px wide, C.card background, solid border
 - Arrow connectors: SVG paths between cards
-- Line placeholders (3-4px height bars) for long text
+- For long text: use SHORT labels (max 8-10 words), never gray placeholder bars
 - Cards enter with stagger from left to right`,
 
   diagram: `Create a FLOW DIAGRAM (MULTI-SECTION):
@@ -114,7 +114,7 @@ const TYPE_INSTRUCTIONS = {
 - Form width: max 540-600px, input heights: 58-62px
 - Typing animation: substring with interpolate over 30-40 frames
 - Active field: accent border + subtle glow
-- Line placeholders for body text (3-4px bars, decreasing width/opacity)
+- For body text: use SHORT descriptive text (max 8-10 words), never gray placeholder bars
 - Generic data: "John Doe", "john@email.com"
 - NO full browser chrome — just the isolated element`,
 
@@ -131,7 +131,7 @@ const TYPE_INSTRUCTIONS = {
 - Main concept revealed through animated path tracing
 - Can reveal text character by character (typing effect)
 - Or reveal a diagram/icon by drawing its strokes
-- Use Trail from @remotion/motion-blur for cinematic feel on moving elements
+- Trail from @remotion/motion-blur is FRAGILE — avoid unless explicitly needed. If used, ALL props required: <Trail layers={8} lagInFrames={0.02} trailOpacity={0.6}>. NEVER omit trailOpacity.
 - Background elements can use noise2D from @remotion/noise for subtle organic movement`,
 
   list: `Create an ANIMATED LIST (vertical items):

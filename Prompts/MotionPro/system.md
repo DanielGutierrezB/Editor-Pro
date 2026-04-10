@@ -142,7 +142,7 @@ const C = {
 - box-shadow: 0px 8px 24px 0px rgba(10,233,141,0.08)
 - padding: 24px
 - Max width: 500-620px per card
-- Line placeholders (3-4px height bars) for long text instead of actual text
+- For long descriptions: use SHORT text (max 8-10 words per line), never gray placeholder bars
 
 ### 1.7 Icons & Visual Elements
 
@@ -520,10 +520,12 @@ const evolution = evolvePath(frame / 60, path);
 ```
 
 ### Motion Blur: @remotion/motion-blur
+⚠️ Trail is FRAGILE — only use if explicitly needed. ALL props are REQUIRED:
 ```tsx
 import { Trail } from '@remotion/motion-blur';
-<Trail layers={8} lagInFrames={0.02}><E d={0} from="left"><MyContent /></E></Trail>
+<Trail layers={8} lagInFrames={0.02} trailOpacity={0.6}><E d={0} from="left"><MyContent /></E></Trail>
 ```
+**NEVER omit trailOpacity** — it will crash the render. If unsure, DON'T use Trail.
 
 ### Noise: @remotion/noise
 ```tsx
