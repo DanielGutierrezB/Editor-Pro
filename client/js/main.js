@@ -2661,7 +2661,54 @@
     window._epGetTakeAnalysisPromptContext = getTakeAnalysisPromptContext;
     window._epToggleSettings = toggleSettings;
 
-    // ─── Start ───────────────────────────────────────────────────
+    // ─── Auto-update on reload ───────────────────────────────────
+    window.checkAndReload = function() {
+        var btn = document.getElementById("btn-reload");
+        var originalHTML = btn.innerHTML;
+        btn.innerHTML = "⏳";
+        btn.title = "Verificando updates...";
+        
+        try {
+            var exec = require("child_process").exec;
+            var extensionPath = csInterface.getSystemPath("extension");
+            
+            // Check for updates and pull
+            exec("cd '" + extensionPath + "' && git fetch origin fixes 2>&1 && git diff --stat HEAD origin/fixes", 
+                { timeout: 15000 }, 
+                function(err, stdout) {
+                    if (stdout && stdout.trim() && stdout.indexOf("files changed") !== -1) {
+                        // There are updates — pull them
+                        btn.innerHTML = "⬇️";
+                        btn.title = "Descargando update...";
+                        exec("cd '" + extensionPath + "' && git pull origin fixes 2>&1",
+                            { timeout: 30000 },
+                            function(err2, stdout2) {
+                                if (!err2) {
+                                    btn.innerHTML = "✅";
+                                    btn.title = "Actualizado! Recargando...";
+                                    setTimeout(function() { location.reload(); }, 500);
+                                } else {
+                                    btn.innerHTML = "❌";
+                                    btn.title = "Error: " + (err2.message || "git pull falló");
+                                    setTimeout(function() { btn.innerHTML = originalHTML; btn.title = "Recargar panel"; }, 3000);
+                                }
+                            }
+                        );
+                    } else {
+                        // No updates — just reload
+                        btn.innerHTML = "✅";
+                        btn.title = "Sin updates — recargando...";
+                        setTimeout(function() { location.reload(); }, 300);
+                    }
+                }
+            );
+        } catch(e) {
+            // Git not available — just reload
+            location.reload();
+        }
+    };
+
+// ─── Start ───────────────────────────────────────────────────
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
     else init();
 
