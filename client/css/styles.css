@@ -674,6 +674,17 @@ html, body {
     border-bottom: 1px solid var(--border);
 }
 
+/* Generation progress bar — always visible at bottom of Motion Pro card */
+.mp-generate-progress-wrap {
+    position: sticky !important;
+    bottom: 0;
+    z-index: 20;
+    background: var(--bg-raised);
+    border-top: 1px solid var(--border);
+    padding: 6px 12px !important;
+    margin: 0 -12px -12px -12px;
+}
+
 .tool-description {
     font-size: 10px;
     color: var(--text-secondary);
