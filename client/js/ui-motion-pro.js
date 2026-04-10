@@ -234,21 +234,21 @@
     // 6=Rose, 7=Mango, 8=Purple, 9=Blue, 10=Teal, 11=Magenta, 12=Tan, 13=Green, 14=Brown, 15=Yellow
     function _mpLabelColorForType(type) {
         var map = {
-            title: 4,        // Cerulean
-            reveal: 9,       // Blue
-            callout: 8,      // Purple
-            comparison: 7,   // Mango
-            beforeafter: 7,  // Mango
+            title: 4,        // Cerulean (blue)
+            reveal: 8,       // Purple
+            callout: 11,     // Magenta
+            comparison: 7,   // Mango (orange)
+            beforeafter: 6,  // Rose (pink)
             steps: 13,       // Green
-            icons: 10,       // Teal
-            cards: 2,        // Caribbean
-            diagram: 5,      // Forest
-            funnel: 5,       // Forest
-            chart: 15,       // Yellow
-            gauge: 15,       // Yellow
-            metrics: 15,     // Yellow
+            icons: 15,       // Yellow
+            cards: 2,        // Caribbean (teal)
+            diagram: 5,      // Forest (dark green)
+            funnel: 14,      // Brown
+            chart: 3,        // Lavender
+            gauge: 7,        // Mango (orange)
+            metrics: 0,      // Violet
             list: 10,        // Teal
-            timeline: 3,     // Lavender
+            timeline: 1,     // Iris
             ui: 12,          // Tan
         };
         return map[(type || "").toLowerCase()] !== undefined ? map[(type || "").toLowerCase()] : 4;

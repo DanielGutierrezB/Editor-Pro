@@ -24,6 +24,9 @@ class RemotionManager {
     // Sanitize: strip brandfetch URLs before any processing
     tsxCode = this._stripBrandfetch(tsxCode);
 
+    // Strip @remotion/motion-blur Trail — it crashes renders when trailOpacity is missing
+    tsxCode = this._stripTrail(tsxCode);
+
     // Pre-render validation: check imports against known packages
     const validationResult = this._validateImports(tsxCode);
     if (validationResult.fixedCode) {
@@ -87,6 +90,25 @@ class RemotionManager {
       }
     }
 
+    return tsxCode;
+  }
+
+  /**
+   * Strip @remotion/motion-blur Trail component — AI frequently omits required trailOpacity prop
+   * causing render crashes. Replace Trail wrappers with plain divs.
+   */
+  _stripTrail(tsxCode) {
+    if (!/Trail/i.test(tsxCode) || !/@remotion\/motion-blur/.test(tsxCode)) return tsxCode;
+    
+    console.log('[RemotionManager] Stripping Trail from TSX (crash prevention)');
+    
+    // Remove the import
+    tsxCode = tsxCode.replace(/^import\s*\{[^}]*Trail[^}]*\}\s*from\s*['"]@remotion\/motion-blur['"];?\s*$/gm, '// REMOVED: @remotion/motion-blur (crash prevention)');
+    
+    // Replace <Trail ...> with <div> and </Trail> with </div>
+    tsxCode = tsxCode.replace(/<Trail\b[^>]*>/g, '<div>');
+    tsxCode = tsxCode.replace(/<\/Trail>/g, '</div>');
+    
     return tsxCode;
   }
 

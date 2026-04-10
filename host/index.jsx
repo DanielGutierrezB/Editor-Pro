@@ -2720,6 +2720,40 @@ function importAndPlaceMotions(jsonPath) {
         var bin = _getOrCreateMotionBin();
         if (!bin) return JSON.stringify({ error: "No se pudo crear bin Motion-Pro." });
 
+        // Create sequence subfolder inside Motion-Pro bin
+        var seqBin = bin;
+        try {
+            var firstClip = data.clips[0];
+            if (firstClip && firstClip.clipName) {
+                // Extract sequence prefix from clip name (e.g., "14-2604" from "14-2604_Clip01_Reveal")
+                var seqMatch = firstClip.clipName.match(/^([^_]+)/);
+                if (seqMatch) {
+                    var seqFolderName = seqMatch[1];
+                    // Check if subfolder exists
+                    var found = false;
+                    if (bin.children) {
+                        for (var sf = 0; sf < bin.children.numItems; sf++) {
+                            if (bin.children[sf].name === seqFolderName && bin.children[sf].type === 2) {
+                                seqBin = bin.children[sf];
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!found) {
+                        bin.createBin(seqFolderName);
+                        // createBin returns void in ExtendScript — find the newly created bin
+                        for (var sf2 = 0; sf2 < bin.children.numItems; sf2++) {
+                            if (bin.children[sf2].name === seqFolderName && bin.children[sf2].type === 2) {
+                                seqBin = bin.children[sf2];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch(eBin) {}
+
         // Reuse existing Motion-Pro track or create a new one
         var baseTrack = _mpBaseTrack;
         if (baseTrack < 0 || baseTrack >= seq.videoTracks.numTracks) {
@@ -2746,11 +2780,11 @@ function importAndPlaceMotions(jsonPath) {
                 continue;
             }
 
-            var countBefore = bin.children ? bin.children.numItems : 0;
+            var countBefore = seqBin.children ? seqBin.children.numItems : 0;
             app.project.importFiles(
                 [mp4File.fsName],
                 true,
-                bin,
+                seqBin,
                 false
             );
 
@@ -2758,11 +2792,11 @@ function importAndPlaceMotions(jsonPath) {
             var wait;
             for (wait = 0; wait < 25; wait++) {
                 $.sleep(250);
-                if (bin.children && bin.children.numItems > countBefore) {
-                    item = bin.children[bin.children.numItems - 1];
+                if (seqBin.children && seqBin.children.numItems > countBefore) {
+                    item = seqBin.children[seqBin.children.numItems - 1];
                 }
                 if (!item) {
-                    item = _findProjectItemByPath(mp4File.fsName, bin);
+                    item = _findProjectItemByPath(mp4File.fsName, seqBin);
                 }
                 if (item) break;
             }

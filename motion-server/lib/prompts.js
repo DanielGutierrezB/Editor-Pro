@@ -140,7 +140,7 @@ const TYPE_INSTRUCTIONS = {
 - Main concept revealed through animated path tracing
 - Can reveal text character by character (typing effect)
 - Or reveal a diagram/icon by drawing its strokes
-- Use opacity and scale transitions for reveals. Avoid @remotion/motion-blur Trail component.
+- Use opacity and scale transitions for reveals. DO NOT use @remotion/motion-blur Trail component (it's disabled).
 - Background elements can use noise2D from @remotion/noise for subtle organic movement
 - Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
@@ -248,7 +248,7 @@ const C = {
 };
 
 const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({children,style}) => (
-  <div style={{position:'absolute',left:160,top:180,right:160,bottom:160,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',...style}}>{children}</div>
+  <div style={{position:'absolute',left:160,top:180,right:160,bottom:160,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',overflow:'hidden',...style}}>{children}</div>
 );
 
 const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CSSProperties}> = ({d,children,from='up',style}) => {
@@ -342,8 +342,7 @@ ${transcriptSegment}
     - '@remotion/shapes' (Rect, Circle, Triangle, Star, Pie)
     - '@remotion/paths' (evolvePath, getLength, getPointAtLength)
     - '@remotion/noise' (noise2D, noise3D)
-    - '@remotion/motion-blur' (Trail)
-    DO NOT import from any other package. DO NOT use named exports that don't exist in these packages.
+    DO NOT import from any other package. DO NOT use @remotion/motion-blur (Trail is disabled — it crashes renders). DO NOT use named exports that don't exist in these packages.
 22. INTERPOLATION CLAMPING: ALL interpolate() calls MUST include { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }. Missing clamping causes visual glitches (opacity > 1, positions overshoot).
 23. STAGGER: Never show all elements at once. Stagger entrances by 5-8 frames between elements. First element at d=0, second at d=6, third at d=12, etc.
 24. HOLD TIME: After text finishes animating in, it must hold still for at least 45 frames (1.5s) before exit. Reading time ≠ animation time.

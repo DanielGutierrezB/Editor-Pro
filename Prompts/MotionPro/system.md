@@ -308,7 +308,7 @@ import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequ
 ```tsx
 const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({children,style}) => (
   <div style={{position:'absolute',left:160,top:180,right:160,bottom:160,
-    display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',...style}}>
+    display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',overflow:'hidden',...style}}>
     {children}
   </div>
 );
@@ -527,12 +527,7 @@ const evolution = evolvePath(frame / 60, path);
 ```
 
 ### Motion Blur: @remotion/motion-blur
-⚠️ Trail is FRAGILE — only use if explicitly needed. ALL props are REQUIRED:
-```tsx
-import { Trail } from '@remotion/motion-blur';
-<Trail layers={8} lagInFrames={0.02} trailOpacity={0.6}><E d={0} from="left"><MyContent /></E></Trail>
-```
-**NEVER omit trailOpacity** — it will crash the render. If unsure, DON'T use Trail.
+⚠️ DO NOT USE. Trail component is disabled — it crashes renders when props are missing. Use opacity + scale transitions instead for motion effects.
 
 ### Noise: @remotion/noise
 ```tsx
@@ -557,10 +552,12 @@ import { Lottie, LottieAnimationData } from '@remotion/lottie';
 
 ## SECTION 4: QUALITY RULES
 
-### 4.1 Smooth Transitions Between Sections
-- Use TransitionSeries with fade() for transitions between related sections
-- Hard cuts ONLY between completely different topics
-- Transition duration: 10-15 frames (0.3-0.5s)
+### 4.1 Transitions Between Sections
+- DEFAULT: Hard cuts between sections (no transition) — this is what professional editors use most
+- If a transition is needed (same topic, evolving visual): use slide() or wipe(), NOT fade/crossfade
+- Transition duration: 5-8 frames maximum (0.17-0.27s) — FAST
+- NEVER use crossfade (both scenes visible simultaneously) — it looks amateurish
+- If elements persist between sections, MOVE them to new positions instead of fade out + fade in
 
 ### 4.2 Exact Data from Transcript
 - When the narrator says a specific number ("73% de los usuarios"), use EXACTLY 73
@@ -633,6 +630,10 @@ When a section has multiple items:
 25. ❌ Forgetting premountFor on Sequences — ALWAYS add premountFor={10}
 26. ❌ Using Math.random() — use random() from 'remotion' instead
 27. ❌ Same animation duration for everything — vary: titles 25-35f, body 15-25f, backgrounds 40-60f
+28. ❌ Split compound terms into separate screens — "Performance Marketer" is ONE concept, not two screens
+29. ❌ Decorative elements without narrative function — no random cursors, floating shapes, or arrows that don't point at anything
+30. ❌ Content not centered vertically — the visual center of gravity must be at the center of the safe area
+31. ❌ Crossfade transitions between sections — prefer hard cuts or quick wipes (5-8 frames max). Never show both scenes simultaneously
 
 ---
 
