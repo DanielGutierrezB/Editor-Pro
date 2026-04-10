@@ -194,6 +194,92 @@ const ZoomWrap:React.FC<{children:React.ReactNode;dur:number;from?:number;to?:nu
 - Something must change: new element, emphasis text, zoom movement
 - Long sections (>150f) MUST have progressive sub-visuals entering
 
+### 1.11 Visual Techniques for Higher Value
+
+**Number Counters (CountUp)**
+When showing a metric/percentage, animate the number counting up instead of showing it static:
+```tsx
+const CountUp:React.FC<{target:number;suffix?:string;dur?:number;d?:number}> = ({target,suffix='',dur=30,d=0}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const progress = spring({frame:frame-d,fps,config:{damping:20,mass:0.5}});
+  const value = Math.round(interpolate(progress,[0,1],[0,target]));
+  return <span>{value}{suffix}</span>;
+};
+// Usage: <CountUp target={73} suffix="%" d={15} />
+```
+
+**Progress Bars / Gauges**
+For benchmarks (value vs target):
+```tsx
+const Gauge:React.FC<{value:number;max:number;label:string;d:number;color?:string}> = ({value,max,label,d,color=C.accent}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const progress = spring({frame:frame-d,fps,config:{damping:16,mass:0.5}});
+  const width = interpolate(progress,[0,1],[0,(value/max)*100]);
+  return (
+    <div style={{width:'100%',marginBottom:20}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+        <span style={{color:C.text,fontSize:24,fontWeight:600}}>{label}</span>
+        <CountUp target={value} suffix="%" d={d} />
+      </div>
+      <div style={{height:12,backgroundColor:C.card,borderRadius:6,overflow:'hidden'}}>
+        <div style={{height:'100%',width:`${width}%`,backgroundColor:color,borderRadius:6,transition:'none'}} />
+      </div>
+    </div>
+  );
+};
+```
+
+**Card Variants**
+Don't always use the same card. Choose variant by context:
+
+1. **Standard Card** — Default (border + shadow) for general content
+2. **Accent Border Card** — Left accent bar for list items, emphasis
+```tsx
+style={{
+  backgroundColor: C.card, borderRadius: 12, padding: 24,
+  borderLeft: `4px solid ${C.accent}`,
+  border: 'none', borderLeft: `4px solid ${C.accent}`,
+}}
+```
+3. **Glow Card** — For active/highlighted/current items
+```tsx
+style={{
+  backgroundColor: C.card, borderRadius: 12, padding: 24,
+  border: `1px solid ${C.accent}40`,
+  boxShadow: `0 0 30px ${C.accent}15, 0 8px 24px rgba(0,0,0,0.3)`,
+}}
+```
+4. **Outlined Card** — For secondary/inactive/pending items
+```tsx
+style={{
+  backgroundColor: 'transparent',
+  border: `1px solid ${C.border}`,
+  borderRadius: 12, padding: 24,
+}}
+```
+
+**Funnel Diagrams**
+For pipeline/stages visualization:
+- Vertical or horizontal flow with SVG arrows between stages
+- Each stage is a card with icon + label + optional metric
+- Active stage: glow card + accent color. Future: outlined. Past: dim
+- Width decreases per stage to show narrowing (funnel shape)
+
+**Before/After Split**
+For comparing two approaches side by side:
+- Split screen (left vs right) with a vertical divider line (2px, C.dim)
+- Left side: dim/red tones (the wrong way). Right side: accent/green tones (the correct way)
+- Labels at top: "❌" and "✅" or custom labels
+- Both sides animate in from opposite edges, staggered by 15 frames
+
+**Text Emphasis Techniques**
+Instead of plain text, use these for key phrases:
+- **Scale pop**: Key word briefly scales to 1.1x then settles (spring overshoot)
+- **Underline draw-on**: Animated underline using evolvePath under important text
+- **Highlight background**: Accent-colored rectangle slides behind text at opacity 0.15
+
 ---
 
 ## SECTION 2: REMOTION TECHNICAL RULES
@@ -342,6 +428,35 @@ export const MyMotion:React.FC = () => {
 - Active field: accent border + glow. Generic data: "John Doe"
 - NO full browser chrome — isolated elements only
 
+**Before/After** — Comparing wrong vs right approach
+- Split layout: left (wrong, C.red accent) | divider | right (correct, C.accent)
+- Divider: 2px vertical line, C.dim color, centered horizontally
+- Left content enters from left edge, right from right edge, staggered 15 frames
+- Top labels: large "❌" and "✅" or "ANTES" / "DESPUÉS"
+- Max content width per side: 700px
+
+**Funnel** — Pipeline stages, conversion flow
+- 3-5 stages arranged vertically or horizontally
+- Each stage: card with icon + label + optional percentage
+- Stages visually decrease in width to show narrowing: 100% → 75% → 50%
+- Arrow/chevron connectors between stages using lucide-react ChevronDown/ArrowRight
+- Active stage: glow card. Future: outlined. Past: standard dimmed
+- Stage entry: 12-frame stagger per stage
+
+**Gauge** — Single metric vs benchmark target
+- Large number centered (96-200px font, animated with CountUp)
+- Progress bar below (height: 12px, rounded) showing value vs max
+- Optional benchmark dashed line overlay at target position
+- Label below: "Meta: X%" in C.dim text
+- Color logic: C.accent if above target, C.red if below, C.orange if within 10%
+
+**Callout** — Key phrase, thesis statement, important quote
+- Large centered text (48-64px, fontWeight 700, C.text or C.accent)
+- Thin accent-colored horizontal lines above and below text (width: 60px, centered, height: 2px)
+- Entry: subtle scale from 0.95 → 1.0 with spring
+- Optional lucide-react icon above text (60-80px)
+- Optional subtle radial gradient glow behind text (C.accent at opacity 0.04)
+
 ### 2.8 Easing Curves
 | Type | Use |
 |---|---|
@@ -483,7 +598,7 @@ When a section has multiple items:
 1. ❌ Show text that exactly copies what narrator says — demonstrate, don't repeat
 2. ❌ Animate before the narrator mentions it
 3. ❌ Use emoji as primary visual (use lucide-react icons)
-4. ❌ Semi-transparent overlapping elements
+4. ❌ Semi-transparent overlapping CONTENT elements (subtle depth layers behind content at zIndex -1 ARE allowed)
 5. ❌ More than one main concept per screen
 6. ❌ Elements outside safe zone
 7. ❌ Empty screen at end of video
@@ -492,7 +607,7 @@ When a section has multiple items:
 10. ❌ Partial word coloring — NEVER color part of a word. Either color the ENTIRE word or use default text
 11. ❌ Wiggle/oscillation/Math.sin/Math.cos on text — NEVER make text shake or vibrate
 12. ❌ Random color accents on syllables
-13. ❌ Grid/pattern/backgroundImage on the background — SOLID C.bg ONLY
+13. ❌ Heavy patterns/backgroundImage/particles on background — only subtle radial gradients allowed (opacity < 0.05)
 14. ❌ Inventing colors not in const C
 15. ❌ Using IBM Plex Sans, Inter, or any font other than DM Sans
 16. ❌ Using Audio/Html5Audio/staticFile — visual-only compositions
@@ -506,9 +621,13 @@ When a section has multiple items:
 ## ABSOLUTE RULES (never violate)
 
 ### Background
-- Solid flat background: `backgroundColor: C.bg` and NOTHING ELSE
-- NO grid, no pattern, no backgroundImage, no linear-gradient on background
-- NO decorative background elements (particles, scan lines, etc.)
+- Base background: ALWAYS `backgroundColor: C.bg` on the outermost AbsoluteFill
+- ALLOWED depth layers (subtle, behind content, zIndex: -1):
+  - Radial gradient overlay: `background: radial-gradient(circle at 30% 40%, rgba(10,233,141,0.04), transparent 70%)` — very subtle accent glow
+  - Vignette: `background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.3) 100%)`  
+  - Subtle grid dots (opacity < 0.03) for technical topics only
+- NOT ALLOWED: heavy patterns, backgroundImage URLs, scan lines, particles, noise textures, imported images as backgrounds
+- Depth layers must be at zIndex: -1 and NEVER interfere with content readability
 
 ### Palette
 - Use EXCLUSIVELY colors from `const C`
