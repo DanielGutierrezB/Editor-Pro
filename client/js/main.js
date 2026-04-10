@@ -2523,6 +2523,59 @@
                 }
             });
         });
+
+        // Inject fullscreen toggle buttons into each tool card header
+        document.querySelectorAll(".tool-card-header").forEach(function(hdr) {
+            var fsBtn = document.createElement("button");
+            fsBtn.className = "btn-fullscreen";
+            fsBtn.innerHTML = "⛶";
+            fsBtn.title = "Pantalla completa";
+            fsBtn.addEventListener("click", function(e) {
+                e.stopPropagation(); // Don't trigger card collapse
+                var card = hdr.closest(".tool-card");
+                if (!card) return;
+                var body = hdr.nextElementSibling;
+
+                if (card.classList.contains("fullscreen")) {
+                    // Exit fullscreen
+                    card.classList.remove("fullscreen");
+                    fsBtn.innerHTML = "⛶";
+                    fsBtn.title = "Pantalla completa";
+                    document.body.style.overflow = "";
+                } else {
+                    // Enter fullscreen — first make sure card is expanded
+                    if (body && body.classList.contains("hidden")) {
+                        body.classList.remove("hidden");
+                        var icon = hdr.querySelector(".toggle-icon");
+                        if (icon) icon.textContent = "▾";
+                    }
+                    card.classList.add("fullscreen");
+                    fsBtn.innerHTML = "✕";
+                    fsBtn.title = "Salir de pantalla completa";
+                    document.body.style.overflow = "hidden";
+                }
+            });
+            // Insert before the toggle icon
+            var toggleIcon = hdr.querySelector(".toggle-icon");
+            if (toggleIcon) {
+                hdr.insertBefore(fsBtn, toggleIcon);
+            } else {
+                hdr.appendChild(fsBtn);
+            }
+        });
+
+        // ESC key exits fullscreen
+        document.addEventListener("keydown", function(e) {
+            if (e.key === "Escape") {
+                var fsCard = document.querySelector(".tool-card.fullscreen");
+                if (fsCard) {
+                    fsCard.classList.remove("fullscreen");
+                    var btn = fsCard.querySelector(".btn-fullscreen");
+                    if (btn) { btn.innerHTML = "⛶"; btn.title = "Pantalla completa"; }
+                    document.body.style.overflow = "";
+                }
+            }
+        });
     }
 
     // Proxy: delegate to module functions
