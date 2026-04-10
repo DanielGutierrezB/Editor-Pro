@@ -21,6 +21,9 @@ class RemotionManager {
   }
 
   writeComposition(compositionId, tsxCode, durationFrames) {
+    // Sanitize: strip brandfetch URLs before any processing
+    tsxCode = this._stripBrandfetch(tsxCode);
+
     // Pre-render validation: check imports against known packages
     const validationResult = this._validateImports(tsxCode);
     if (validationResult.fixedCode) {
@@ -37,12 +40,47 @@ class RemotionManager {
   }
 
   /**
+   * Strip brandfetch URLs and replace with lucide-react Globe icon.
+   * Prevents render failures from external CDN dependencies.
+   */
+  _stripBrandfetch(tsxCode) {
+    // Check if there are any brandfetch references
+    if (!/brandfetch/i.test(tsxCode)) return tsxCode;
+
+    console.log('[RemotionManager] Stripping brandfetch references from TSX');
+
+    // Replace <Img src="...brandfetch..." .../> or <Img src={"...brandfetch..."} .../> with Globe icon
+    tsxCode = tsxCode.replace(/<Img\s+[^>]*(?:src=\{?["'][^"']*brandfetch[^"']*["']\}?)[^>]*\/?>/gi,
+      '<Globe size={60} color={C.accent} />');
+
+    // Replace any remaining lines containing brandfetch
+    tsxCode = tsxCode.replace(/.*brandfetch.*$/gm, '// [REMOVED: brandfetch URL not available]');
+
+    // Ensure Globe is imported from lucide-react
+    if (tsxCode.includes('<Globe') && !/import\s*\{[^}]*Globe[^}]*\}\s*from\s*['"]lucide-react['"]/.test(tsxCode)) {
+      // Check if there's already a lucide-react import to extend
+      const lucideImportMatch = tsxCode.match(/^(import\s*\{)([^}]*)\}\s*from\s*['"]lucide-react['"]/m);
+      if (lucideImportMatch) {
+        const existingImports = lucideImportMatch[2].trim();
+        tsxCode = tsxCode.replace(lucideImportMatch[0],
+          `import { ${existingImports}, Globe } from 'lucide-react'`);
+      } else {
+        // Add new lucide-react import after the last import line
+        tsxCode = tsxCode.replace(/(^import\s+.*$(?![\s\S]*^import\s))/m,
+          "$1\nimport { Globe } from 'lucide-react';");
+      }
+    }
+
+    return tsxCode;
+  }
+
+  /**
    * Validate imports in TSX code against known safe packages.
    * Returns { valid, errors[], fixedCode? }
    */
   _validateImports(tsxCode) {
     const ALLOWED_PACKAGES = {
-      'remotion': ['AbsoluteFill', 'useCurrentFrame', 'useVideoConfig', 'interpolate', 'spring', 'Sequence', 'Img', 'Audio', 'Easing', 'random', 'continueRender', 'delayRender'],
+      'remotion': ['AbsoluteFill', 'useCurrentFrame', 'useVideoConfig', 'interpolate', 'spring', 'Sequence', 'Img', 'Audio', 'Easing', 'random', 'continueRender', 'delayRender', 'staticFile'],
       'react': null, // allow all
       'lucide-react': null, // allow all icons
       '@remotion/transitions': ['TransitionSeries', 'linearTiming'],
@@ -81,6 +119,16 @@ class RemotionManager {
         // Comment out the bad import instead of failing
         fixedCode = fixedCode.replace(match[0], '// REMOVED unknown import: ' + match[0]);
       }
+    }
+
+    // Clean up Img import from 'remotion' if no valid <Img usages remain
+    // (brandfetch stripping may have removed all <Img> uses)
+    if (/<Img\b/.test(fixedCode) === false) {
+      // Remove Img from remotion import: import { ..., Img, ... } from 'remotion'
+      fixedCode = fixedCode.replace(
+        /(import\s*\{[^}]*)(?:,\s*Img\b|\bImg\s*,\s*)([^}]*\}\s*from\s*['"]remotion['"])/,
+        '$1$2'
+      );
     }
 
     if (errors.length > 0) {

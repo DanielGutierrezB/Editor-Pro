@@ -159,7 +159,14 @@ function getGenerationPrompt({ transcriptSegment, type, description, durationFra
 
   const logoInstructions = `
 ## Brand Logos
-For brand logos, use appropriate lucide-react icons (e.g., Globe for websites, Smartphone for apps, Monitor for desktop software, Cloud for cloud services, Shield for security, Mail for email, etc.). Do NOT load external images via URL. Do NOT use Brandfetch or any external image CDN. Use ONLY lucide-react icons for all brand/company visual representation.`;
+For brand logos, import { staticFile } from 'remotion' and use <Img src={staticFile('logos/BRAND.svg')} style={{width:60,height:60}} />.
+
+Available logos (in public/logos/):
+- meta.svg, facebook.svg, instagram.svg, whatsapp.svg, google.svg, youtube.svg, tiktok.svg, linkedin.svg, twitter.svg, slack.svg, telegram.svg, github.svg, apple.svg, microsoft.svg, amazon.svg, netflix.svg, spotify.svg, pinterest.svg, snapchat.svg
+
+If the brand is NOT in this list, use a lucide-react icon instead (e.g., Globe for websites, Smartphone for apps, Monitor for desktop, Cloud for cloud services, Shield for security, Mail for email).
+DO NOT use cdn.brandfetch.io or any external URL for logos. NEVER reference brandfetch in any way.
+DO NOT load images from external CDNs or URLs.`;
 
 
   const userMsg = `Generate a Remotion composition. You MUST start from this exact template and fill in the sections:
@@ -253,7 +260,7 @@ ${transcriptSegment}
 6. Last section uses <Fd dur={totalDuration} fi={10} fo={1}> so it stays visible until the very last frame. The composition MUST have visible animated content from frame 0 to frame ${durationFrames}. The last Sequence or Fd component must extend to the final frame.
 7. Colors: ONLY from const C — never invent colors
 8. Min font size: 24px. Weights: 400 or 700 only
-9. NO Audio, NO Html5Audio, NO staticFile — this is visual-only
+9. NO Audio, NO Html5Audio — this is visual-only. staticFile is ONLY allowed for logo SVGs from public/logos/
 10. NO grid/pattern background — solid C.bg only
 11. Icons: ALWAYS use lucide-react icons (import from 'lucide-react'). NEVER draw SVG manually. Size: 60-100px for main icons
 12. Elements must fill 70%+ of the safe area (1600×740px usable)
@@ -261,8 +268,12 @@ ${transcriptSegment}
 14. Consider @remotion/transitions (TransitionSeries + fade/slide) for smooth section transitions
 15. LANGUAGE: All text in the composition must be in the SAME LANGUAGE as the transcript. If transcript is in English, all labels/titles/text must be in English. If Spanish, in Spanish.
 16. NO GAPS: The animation MUST have visible content from frame 0 to the last frame. No empty/black frames. The FIRST visual element must appear at frame 0 (not frame 30 or later). The LAST visual element must persist until the final frame. Each motion's video must fill 100% of its duration.
-17. IMPORT SAFETY: Only import from these packages:
-    - 'remotion' (AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Img, Audio)
+17. BACKGROUND: The <AbsoluteFill> with backgroundColor:C.bg is your CONSTANT BACKGROUND. It is ALWAYS visible. Content inside <Sequence> blocks appears ON TOP of this background. When a Sequence ends, the background remains — NOT transparency/green.
+18. CONTINUOUS CONTENT: Every frame from 0 to ${durationFrames} must have at least ONE visible element besides the background. If you use <Sequence> blocks, ensure they OVERLAP or are CONTINUOUS — no gaps between sequences. The simplest way: use overlapping durations. Example: Section A = from 0 dur 150, Section B = from 120 dur 150 (overlap of 30 frames).
+19. LAST SECTION PERSISTENCE: The last visual section must use <Fd dur={totalDuration} fi={10} fo={1}> so it stays visible until the very end. Never let the last section fade out early.
+20. Z-INDEX LAYERING: When stacking elements, text/titles must ALWAYS be on top. Use position:'relative' and zIndex to control layering. Never place a background box OVER text content. If you need a text overlay, use a semi-transparent background (C.card with opacity 0.9) BEHIND the text, not on top. Stack order: background → decorative elements → cards/boxes → text/icons.
+21. IMPORT SAFETY: Only import from these packages:
+    - 'remotion' (AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Img, Audio, staticFile)
     - 'lucide-react' (any icon)
     - '@remotion/transitions' (TransitionSeries, linearTiming)
     - '@remotion/transitions/fade' (fade)
