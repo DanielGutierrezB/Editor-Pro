@@ -2555,10 +2555,10 @@
                     document.body.style.overflow = "hidden";
                 }
             });
-            // Insert before the toggle icon
+            // Insert right before the toggle icon (▸) so they're side by side on the right
             var toggleIcon = hdr.querySelector(".toggle-icon");
             if (toggleIcon) {
-                hdr.insertBefore(fsBtn, toggleIcon);
+                toggleIcon.parentNode.insertBefore(fsBtn, toggleIcon);
             } else {
                 hdr.appendChild(fsBtn);
             }
