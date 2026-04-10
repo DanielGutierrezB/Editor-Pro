@@ -49,12 +49,21 @@ router.post('/', (req, res) => {
     try {
       // Sync session before writing (ensures clean state)
       if (sessionDir) manager.syncFromSession(sessionDir);
-      const tsxPath = manager.writeComposition(compositionId, tsxCode, durationFrames);
+      const result = manager.writeComposition(compositionId, tsxCode, durationFrames);
+      
+      // Check if writeComposition returned a syntax error object
+      if (result && result.syntaxError) {
+        return res.status(500).json({ 
+          error: 'Syntax error in generated TSX: ' + (result.errors || []).join('; '),
+          compositionId,
+        });
+      }
+      
       // Save back to session folder
       if (sessionDir) manager.saveToSession(compositionId, sessionDir);
       res.json({
         compositionId,
-        tsxPath,
+        tsxPath: typeof result === 'string' ? result : (result && result.filePath) || '',
         durationFrames,
         status: 'generated',
       });
