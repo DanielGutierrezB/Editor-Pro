@@ -2058,6 +2058,7 @@
     function loadTranscriptText(text, source) {
         var textarea = document.getElementById("transcript-input");
         if (textarea) textarea.value = text;
+        state._transcriptSource = source || "";
         onTranscriptChange();
         renderTranscriptFromSegments();
         showToast("Transcripción cargada desde " + source, "success");
@@ -2087,7 +2088,10 @@
         // Update transcript card title with status
         var titleEl = document.querySelector('[data-tool="transcript"] .tool-card-title');
         if (titleEl) {
-            titleEl.textContent = text ? "✅ Transcripción" : "📝 Transcripción";
+            var src = state._transcriptSource || "";
+            titleEl.innerHTML = text 
+                ? "✅ Transcripción" + (src ? " <span style='font-size:11px;color:#888;font-weight:400;margin-left:6px'>" + src + "</span>" : "")
+                : "📝 Transcripción";
             titleEl.style.color = text ? "#0ae98d" : "";
         }
 
