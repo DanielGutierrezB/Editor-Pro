@@ -205,6 +205,13 @@
 
     // ─── Generate + Render pipeline ───────────────────────────────
 
+    // Configurable timeout for the generate→render pipeline (default 5 minutes)
+    var MP_PIPELINE_TIMEOUT_MS = 5 * 60 * 1000;
+    try {
+        var savedTimeout = localStorage.getItem("editorpro_mp_pipeline_timeout");
+        if (savedTimeout) MP_PIPELINE_TIMEOUT_MS = parseInt(savedTimeout, 10) || MP_PIPELINE_TIMEOUT_MS;
+    } catch(_e) {}
+
     MotionPro.prototype.generateMotion = function(proposal, transcriptSegment, aiConfig, callback, outputDir) {
         var self = this;
         var version = 1;
@@ -212,6 +219,12 @@
         if (existingMotion) {
             version = existingMotion.versions.length + 1;
         }
+
+        var timedOut = false;
+        var pipelineTimer = setTimeout(function() {
+            timedOut = true;
+            callback(new Error("Motion-Pro pipeline timeout (" + Math.round(MP_PIPELINE_TIMEOUT_MS / 1000) + "s) for " + proposal.id));
+        }, MP_PIPELINE_TIMEOUT_MS);
 
         var body = {
             proposal: {
@@ -231,13 +244,16 @@
         };
 
         self._post("/api/generate", body, function(err, result) {
-            if (err) return callback(err);
-            if (result.error) return callback(new Error(result.error));
+            if (timedOut) return;
+            if (err) { clearTimeout(pipelineTimer); return callback(err); }
+            if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
 
             var renderBody = { compositionId: result.compositionId, sessionDir: outputDir || "" };
             if (outputDir) renderBody.outputDir = outputDir;
 
             self._post("/api/render", renderBody, function(renderErr, renderResult) {
+                if (timedOut) return;
+                clearTimeout(pipelineTimer);
                 if (renderErr) return callback(renderErr);
                 if (renderResult.error) return callback(new Error(renderResult.error));
 

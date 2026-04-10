@@ -116,7 +116,10 @@
                 <span class="toggle-icon">▾</span>
             </div>
             <div class="tool-card-body" id="cutter-body">
-                <p class="tool-description">Lee los marcadores de la secuencia activa para identificar bloques IN/OUT. El primer marcador (claqueta) se ignora. Los marcadores con "OUT:" marcan el final de cada bloque.</p>
+                <p class="tool-description">Lee los marcadores de la secuencia activa para identificar bloques IN/OUT. Los marcadores con "OUT:" marcan el final de cada bloque.</p>
+                <label class="cutter-option" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);margin-bottom:6px;cursor:pointer;">
+                    <input type="checkbox" id="cutter-skip-clapperboard" checked> Ignorar primer marcador (claqueta)
+                </label>
 
                 <div class="btn-row">
                     <button id="btn-cutter-analyze" class="btn-analyze">

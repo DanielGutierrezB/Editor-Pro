@@ -117,7 +117,7 @@ Clase `SpeechToText`. Proveedores: `elevenlabs`, `whisper_local`, `whisper_api`.
 
 ### recording-notes.js
 Clase `RecordingNotes`.
-- Detecta segmentos por comandos de voz **literales**: IN → "retomemos"/"retoma" o conteo descendente ("3,2,1" / "3,2..."); OUT → "pausa" (estricto, sin falsos positivos)
+- Detecta segmentos por comandos de voz **literales**: IN → "retomemos"/"retoma" o conteo descendente ("3,2,1" / "3,2..."); OUT → "pausa", "corte", "corta", "alto", "para" (estricto, sin falsos positivos)
 - `detectSegments()` — analiza `words[]` y devuelve `{inPoints, outPoints, segments, takeGroups, filteredCount, retakeGroupCount}`
 - **Conteos**: se detectan en Pass 1; el IN se coloca al **final** del último número del conteo (después de "1"/"uno")
 - **OUT timing**: el marcador OUT se coloca al **final de la última palabra de contenido** (antes del trigger "pausa"/"corte"/etc.)
@@ -292,8 +292,17 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 - **Cada tool-card es independiente** pero comparten state a través de main.js.
 - **Whisper local** requiere instalación previa (`whisper/setup-whisper.sh`).
 - **Las peticiones a la IA no tienen timeout**: la IA se tarda lo que necesite.
-- **`state.analyzing`** bloquea la UI de Edit Suggestions; asegurarse de que siempre se resetea.
+- **`state.analyzing`** bloquea la UI; se usa try-finally en callbacks de IA para asegurar que siempre se resetea. `clearAllToolState()` también lo resetea.
 - **Operaciones por seqId**: `addMarkersFromFile` y `clearMarkersByPrefix` pueden operar directamente en una secuencia por ID sin necesidad de que sea la activa. Los cortes (`openBackupAndCut`) sí requieren abrir la secuencia pero lo hacen atómicamente en una sola llamada JSX.
+- **`clearContainer(el)`**: utility en main.js que clona un DOM node sin children/listeners antes de re-rendering, preventing memory leaks in dynamic lists.
+- **`safeCallback(fn)`**: wraps any callback in try-catch that shows errors via `showToast`. Use for callback consumers where errors should be visible to the user.
+- **Sequence cache is LRU-bounded**: `_seqCache` evicts entries beyond 20 using `_seqCacheTouch()`.
+- **Polling unificado**: solo main.js tiene `setInterval` para `refreshSequenceInfo` (cada 2s). `cutter.js` ya no tiene su propio timer.
+- **Clapperboard skip configurable**: checkbox en la UI del Cutter, persistido en `localStorage` key `editorpro_skip_clapperboard`.
+- **ElevenLabs streaming**: para archivos > 100MB, `_transcribeElevenLabsStreaming()` usa `fs.createReadStream()` en lugar de `readFileSync`.
+- **Motion-Pro pipeline timeout**: configurable (default 5 min), stored in `localStorage` key `editorpro_mp_pipeline_timeout`.
+- **Backup persistence**: `_batchBackups` se persisten a `editorpro_backups.json` junto al `.prproj`; se restauran al cargar el host.
+- **OUT triggers**: además de "pausa", ahora "corte", "corta", "alto" y "para" disparan OUT en Recording Notes.
 
 ## Motion-Pro — Motion Graphics Automáticos
 

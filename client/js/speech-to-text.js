@@ -175,6 +175,15 @@
         onProgress(5);
 
         var self = this;
+        var fileSize = 0;
+        try { fileSize = fs.statSync(filePath).size; } catch(_e) {}
+        var LARGE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100MB
+
+        // For files larger than 100MB, use streaming upload
+        if (fileSize > LARGE_FILE_THRESHOLD) {
+            return this._transcribeElevenLabsStreaming(filePath, key, onProgress, callback);
+        }
+
         var fileBuffer = fs.readFileSync(filePath);
         var fileName = path ? path.basename(filePath) : "audio.wav";
         var ext = path ? path.extname(filePath).toLowerCase() : ".wav";
@@ -284,6 +293,118 @@
             setImmediate(writeChunk);
         }
         writeChunk();
+    };
+
+    // ── ElevenLabs Streaming Upload (for files > 100MB) ────────────
+
+    SpeechToText.prototype._transcribeElevenLabsStreaming = function(filePath, key, onProgress, callback) {
+        var self = this;
+        var fileName = path ? path.basename(filePath) : "audio.wav";
+        var ext = path ? path.extname(filePath).toLowerCase() : ".wav";
+
+        var mimeTypes = {
+            ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4",
+            ".aac": "audio/aac", ".ogg": "audio/ogg", ".flac": "audio/flac",
+            ".webm": "audio/webm", ".mp4": "video/mp4"
+        };
+        var contentType = mimeTypes[ext] || "application/octet-stream";
+
+        var boundary = "----EduProBoundary" + Date.now();
+        var parts = [];
+        parts.push("--" + boundary + "\r\n");
+        parts.push('Content-Disposition: form-data; name="model_id"\r\n\r\n');
+        parts.push((self.model || "scribe_v1") + "\r\n");
+        parts.push("--" + boundary + "\r\n");
+        parts.push('Content-Disposition: form-data; name="language_code"\r\n\r\nes\r\n');
+        parts.push("--" + boundary + "\r\n");
+        parts.push('Content-Disposition: form-data; name="tag_audio_events"\r\n\r\nfalse\r\n');
+        parts.push("--" + boundary + "\r\n");
+        parts.push('Content-Disposition: form-data; name="file"; filename="' + fileName + '"\r\n');
+        parts.push("Content-Type: " + contentType + "\r\n\r\n");
+
+        var footer = "\r\n--" + boundary + "--\r\n";
+        var headerBuffer = Buffer.from(parts.join(""), "utf8");
+        var footerBuffer = Buffer.from(footer, "utf8");
+
+        var fileStats = fs.statSync(filePath);
+        var totalLength = headerBuffer.length + fileStats.size + footerBuffer.length;
+
+        onProgress(10);
+
+        var opts = {
+            hostname: "api.elevenlabs.io", port: 443,
+            path: "/v1/speech-to-text", method: "POST",
+            headers: {
+                "xi-api-key": key,
+                "Content-Type": "multipart/form-data; boundary=" + boundary,
+                "Content-Length": totalLength
+            }
+        };
+
+        var req = https.request(opts, function(res) {
+            var data = "";
+            res.on("data", function(chunk) {
+                if (self._aborted) return;
+                data += chunk;
+                onProgress(50 + Math.min(40, Math.round((data.length / 1000) * 2)));
+            });
+            res.on("end", function() {
+                self._activeRequest = null;
+                if (self._aborted) { callback({ error: "Transcripción cancelada." }); return; }
+                onProgress(95);
+                try {
+                    var result = JSON.parse(data);
+                    if (result.detail || result.error) {
+                        callback({ error: "ElevenLabs: " + (result.detail || result.error || JSON.stringify(result)) });
+                        return;
+                    }
+                    var words = (result.words || []).map(function(w) {
+                        return { text: w.text || "", start: w.start || 0, end: w.end || 0, type: w.type || "word" };
+                    });
+                    var fullText = result.text || words.map(function(w) {
+                        return w.type === "word" ? w.text : "";
+                    }).join(" ").replace(/\s+/g, " ").trim();
+                    onProgress(100);
+                    callback({ words: words, text: fullText, language: result.language_code || "es" });
+                } catch(e) {
+                    callback({ error: "Error al procesar respuesta STT: " + e.message });
+                }
+            });
+        });
+
+        req.on("error", function(e) {
+            self._activeRequest = null;
+            if (self._aborted) { callback({ error: "Transcripción cancelada." }); return; }
+            callback({ error: "Error de conexión con ElevenLabs: " + e.message });
+        });
+
+        self._activeRequest = req;
+
+        // Write header
+        req.write(headerBuffer);
+
+        // Stream file in chunks using createReadStream
+        var fileStream = fs.createReadStream(filePath, { highWaterMark: 64 * 1024 });
+        var bytesRead = 0;
+        var fileLen = fileStats.size;
+
+        fileStream.on("data", function(chunk) {
+            if (self._aborted) { fileStream.destroy(); req.destroy(); return; }
+            req.write(chunk);
+            bytesRead += chunk.length;
+            onProgress(10 + Math.round((bytesRead / fileLen) * 30));
+        });
+
+        fileStream.on("end", function() {
+            req.write(footerBuffer);
+            req.end();
+            onProgress(40);
+        });
+
+        fileStream.on("error", function(e) {
+            self._activeRequest = null;
+            callback({ error: "Error leyendo archivo: " + e.message });
+        });
     };
 
     // ═══════════════════════════════════════════════════════════════

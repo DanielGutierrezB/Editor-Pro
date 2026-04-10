@@ -214,8 +214,13 @@
         // Sort by start time
         markers.sort(function(a, b) { return a.startSeconds - b.startSeconds; });
 
-        // Skip first marker (clapperboard)
-        var working = markers.slice(1);
+        // Skip first marker (clapperboard) — configurable
+        var skipClapperboard = true;
+        try {
+            var stored = localStorage.getItem("editorpro_skip_clapperboard");
+            if (stored !== null) skipClapperboard = stored !== "false";
+        } catch(_e) {}
+        var working = skipClapperboard ? markers.slice(1) : markers.slice(0);
 
         if (working.length === 0) {
             return { keepBlocks: [], removeZones: [], warnings: [], error: "Solo se encontro el marcador de claqueta." };
@@ -2074,6 +2079,18 @@
 
     // ─── Event Listeners ─────────────────────────────────────
 
+    // ─── Clapperboard skip toggle ─────────────────────────
+    var clapperboardCb = document.getElementById("cutter-skip-clapperboard");
+    if (clapperboardCb) {
+        try {
+            var stored = localStorage.getItem("editorpro_skip_clapperboard");
+            if (stored !== null) clapperboardCb.checked = stored !== "false";
+        } catch(_e) {}
+        clapperboardCb.addEventListener("change", function() {
+            try { localStorage.setItem("editorpro_skip_clapperboard", String(clapperboardCb.checked)); } catch(_e) {}
+        });
+    }
+
     function bindCutterEvents() {
         if (dom.btnAnalyze) dom.btnAnalyze.addEventListener("click", function() {
             if (state.singleProcessing) {
@@ -2145,7 +2162,7 @@
 
     bindCutterEvents();
     refreshSequenceInfo();
-    setInterval(refreshSequenceInfo, 10000);
+    // Polling is handled by main.js's unified 2-second interval (startSequencePolling)
 
     // Sync header progress whenever main progress or body visibility changes
     var progressObserver = new MutationObserver(syncHeaderProgress);

@@ -43,6 +43,56 @@ var _originalSeqId = "";
 var _originalParentBinName = "";
 var _batchBackups = {}; // keyed by original seqId: { backupSeqId, backupSeqName, originalName }
 
+// ─── Backup Persistence to Disk ─────────────────────────────
+function _getBackupPersistPath() {
+    try {
+        var projPath = app.project.path;
+        if (!projPath || projPath === "") return null;
+        var projFile = new File(projPath);
+        var projDir = projFile.parent;
+        return projDir.fsName + "/editorpro_backups.json";
+    } catch(e) {
+        return null;
+    }
+}
+
+function _persistBackups() {
+    var filePath = _getBackupPersistPath();
+    if (!filePath) return;
+    try {
+        var data = JSON.stringify(_batchBackups);
+        var f = new File(filePath);
+        f.encoding = "UTF-8";
+        f.open("w");
+        f.write(data);
+        f.close();
+    } catch(e) {}
+}
+
+function _loadPersistedBackups() {
+    var filePath = _getBackupPersistPath();
+    if (!filePath) return;
+    try {
+        var f = new File(filePath);
+        if (!f.exists) return;
+        f.encoding = "UTF-8";
+        f.open("r");
+        var content = f.read();
+        f.close();
+        if (content) {
+            var loaded = JSON.parse(content);
+            for (var k in loaded) {
+                if (loaded.hasOwnProperty(k) && !_batchBackups[k]) {
+                    _batchBackups[k] = loaded[k];
+                }
+            }
+        }
+    } catch(e) {}
+}
+
+// Load persisted backups on startup
+_loadPersistedBackups();
+
 // ─── Sequence Info ────────────────────────────────────────────
 
 function getActiveSequenceInfo() {
@@ -459,6 +509,7 @@ function backupSequence() {
                 originalSeqId: originalSeqId,
                 originalParentBinName: _originalParentBinName
             };
+            _persistBackups();
         }
 
         // Close the backup tab by making it active then closing via QE
@@ -630,6 +681,7 @@ function restoreBackupById(seqId) {
 
         // Clean up batch backup entry
         delete _batchBackups[seqId];
+        _persistBackups();
 
         // Restore previous globals
         _backupSeqId = prevBackupSeqId;

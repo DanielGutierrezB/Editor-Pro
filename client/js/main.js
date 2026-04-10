@@ -353,9 +353,50 @@
         if (el) el.addEventListener(evt, fn);
     }
 
+    /**
+     * Clear a container's children and remove all event listeners by
+     * replacing the node with a clean clone. Returns the new node.
+     */
+    function clearContainer(el) {
+        if (!el) return el;
+        var clone = el.cloneNode(false); // shallow clone — no children, no listeners
+        if (el.parentNode) {
+            el.parentNode.replaceChild(clone, el);
+        }
+        return clone;
+    }
+
+    /**
+     * Wrap a callback function in try-catch that shows errors to the user.
+     * Usage: safeCallback(function(result) { ... })
+     */
+    function safeCallback(fn) {
+        return function() {
+            try {
+                return fn.apply(this, arguments);
+            } catch(e) {
+                console.error("[Editor-Pro] Callback error:", e);
+                showToast("Error interno: " + (e.message || e), "error");
+            }
+        };
+    }
+
     // ─── Sequence Info & Change Detection ─────────────────────────
     var _seqCache = {};
+    var _seqCacheOrder = []; // LRU order tracking
+    var _SEQ_CACHE_MAX = 20;
     var _lastSeqName = "";
+
+    function _seqCacheTouch(name) {
+        var idx = _seqCacheOrder.indexOf(name);
+        if (idx !== -1) _seqCacheOrder.splice(idx, 1);
+        _seqCacheOrder.push(name);
+        // Evict oldest entries if over limit
+        while (_seqCacheOrder.length > _SEQ_CACHE_MAX) {
+            var evicted = _seqCacheOrder.shift();
+            delete _seqCache[evicted];
+        }
+    }
 
     function refreshSequenceInfo() {
         csInterface.evalScript("getActiveSequenceInfo()", function(result) {
@@ -554,6 +595,7 @@
 
     function saveCurrentSequenceState() {
         if (!_lastSeqName) return;
+        _seqCacheTouch(_lastSeqName);
         _seqCache[_lastSeqName] = {
             transcript: state.transcript,
             segments: state.segments,
@@ -576,6 +618,7 @@
     function restoreSequenceState(seqName) {
         var cached = _seqCache[seqName];
         if (cached) {
+            _seqCacheTouch(seqName);
             state.transcript = cached.transcript || "";
             state.segments = cached.segments || [];
             state.sttResult = cached.sttResult || null;
@@ -611,6 +654,8 @@
         state.es2Suggestions = [];
         state.es2Errors = [];
         state.reelProposals = [];
+        state.analyzing = false;
+        state.mpGenerating = false;
         restoreUIFromState(null);
     }
 
@@ -1016,6 +1061,11 @@
             } catch(e) {
                 finishSpellCheck();
                 showToast("Error: " + e.message, "error");
+            } finally {
+                // Ensure analyzing is reset even on unexpected errors
+                if (!state.textClips || state.textClips.length === 0) {
+                    state.analyzing = false;
+                }
             }
         });
     }
@@ -1077,8 +1127,7 @@
     }
 
     function renderSpellCheckResults() {
-        var list = document.getElementById("sc-clip-list");
-        list.innerHTML = "";
+        var list = clearContainer(document.getElementById("sc-clip-list"));
 
         state.textClips.forEach(function(clip, idx) {
             var result = state.clipResults[idx];
@@ -2348,27 +2397,30 @@
         aiAnalyzer.analyzeSupertexts(timedTranscript, getSupertext2PromptContext(), function(result) {
             setST2Progress(100, "Completado");
             setTimeout(function() {
-                hideElement("st2-progress"); hideElement("st2-progress-header");
-                state.analyzing = false;
-                enableBtn("btn-supertexts2");
+                try {
+                    hideElement("st2-progress"); hideElement("st2-progress-header");
+                    enableBtn("btn-supertexts2");
 
-                if (result.error) {
-                    showToast("Error: " + result.error, "error");
-                    showElement("st2-empty");
-                    return;
+                    if (result.error) {
+                        showToast("Error: " + result.error, "error");
+                        showElement("st2-empty");
+                        return;
+                    }
+
+                    var mapped = (result.supertexts || []).map(function(st) {
+                        st.checked = true;
+                        if (st.type) st.type = st.type.toLowerCase().replace(/_/g, "").replace("bulletpoint", "bullet").replace("datapoint", "data");
+                        if (ST2_TYPES.indexOf(st.type) === -1) st.type = "bullet";
+                        normalizeSt2Fields(st);
+                        return st;
+                    });
+                    state.supertexts2 = _st2CapEndTimes(mapped, 0);
+                    renderSupertext2Results(result);
+                    showElement("st2-results");
+                    showToast(state.supertexts2.length + " supertextos detectados", "success");
+                } finally {
+                    state.analyzing = false;
                 }
-
-                var mapped = (result.supertexts || []).map(function(st) {
-                    st.checked = true;
-                    if (st.type) st.type = st.type.toLowerCase().replace(/_/g, "").replace("bulletpoint", "bullet").replace("datapoint", "data");
-                    if (ST2_TYPES.indexOf(st.type) === -1) st.type = "bullet";
-                    normalizeSt2Fields(st);
-                    return st;
-                });
-                state.supertexts2 = _st2CapEndTimes(mapped, 0);
-                renderSupertext2Results(result);
-                showElement("st2-results");
-                showToast(state.supertexts2.length + " supertextos detectados", "success");
             }, 500);
         });
     }
@@ -3073,25 +3125,28 @@
             setES2Progress(100, "Completado");
 
             setTimeout(function() {
-                hideElement("es2-progress");
-                hideElement("es2-progress-header");
-                state.analyzing = false;
-                enableBtn("btn-editsuggestions2");
+                try {
+                    hideElement("es2-progress");
+                    hideElement("es2-progress-header");
+                    enableBtn("btn-editsuggestions2");
 
-                if (result.error) {
-                    showToast("Error: " + result.error, "error");
-                    showElement("es2-empty");
-                    return;
+                    if (result.error) {
+                        showToast("Error: " + result.error, "error");
+                        showElement("es2-empty");
+                        return;
+                    }
+
+                    state.es2Highlights = result.highlights || [];
+                    state.es2Suggestions = result.suggestions || [];
+                    state.es2Errors = postProcessES2Errors(result.errors || []);
+                    renderES2Results(result);
+                    showElement("es2-results");
+
+                    var total = state.es2Highlights.length + state.es2Suggestions.length + state.es2Errors.length;
+                    showToast(total + " observaciones encontradas", "success");
+                } finally {
+                    state.analyzing = false;
                 }
-
-                state.es2Highlights = result.highlights || [];
-                state.es2Suggestions = result.suggestions || [];
-                state.es2Errors = postProcessES2Errors(result.errors || []);
-                renderES2Results(result);
-                showElement("es2-results");
-
-                var total = state.es2Highlights.length + state.es2Suggestions.length + state.es2Errors.length;
-                showToast(total + " observaciones encontradas", "success");
             }, 500);
         });
     }
@@ -3205,8 +3260,7 @@
         }
         summary.innerHTML = scoreHtml + esc(result.summary || "Análisis completado");
 
-        var list = document.getElementById("es2-list");
-        list.innerHTML = "";
+        var list = clearContainer(document.getElementById("es2-list"));
 
         var nErr = state.es2Errors.length;
         var nSug = state.es2Suggestions.length;
@@ -3559,23 +3613,26 @@
             setRPProgress(100, "Completado");
 
             setTimeout(function() {
-                hideElement("rp-progress");
-                hideElement("rp-progress-header");
-                state.analyzing = false;
-                enableBtn("btn-reelproposal");
+                try {
+                    hideElement("rp-progress");
+                    hideElement("rp-progress-header");
+                    enableBtn("btn-reelproposal");
 
-                if (result.error) {
-                    showToast("Error: " + result.error, "error");
-                    showElement("rp-empty");
-                    return;
+                    if (result.error) {
+                        showToast("Error: " + result.error, "error");
+                        showElement("rp-empty");
+                        return;
+                    }
+
+                    state.reelProposals = result.reels || [];
+                    renderReelResults(result);
+                    showElement("rp-results");
+
+                    var count = state.reelProposals.length;
+                    showToast(count > 0 ? count + " propuesta(s) de reel" : "Sin reels viables", count > 0 ? "success" : "info");
+                } finally {
+                    state.analyzing = false;
                 }
-
-                state.reelProposals = result.reels || [];
-                renderReelResults(result);
-                showElement("rp-results");
-
-                var count = state.reelProposals.length;
-                showToast(count > 0 ? count + " propuesta(s) de reel" : "Sin reels viables", count > 0 ? "success" : "info");
             }, 500);
         });
     }
@@ -3584,8 +3641,7 @@
         var assessment = document.getElementById("rp-assessment");
         assessment.innerHTML = esc(result.assessment || "Análisis completado");
 
-        var list = document.getElementById("rp-list");
-        list.innerHTML = "";
+        var list = clearContainer(document.getElementById("rp-list"));
 
         if (result.notSuitable && result.notSuitable.length > 0) {
             var nsDiv = document.createElement("div");
@@ -5886,8 +5942,7 @@
     }
 
     function renderSegmentList(segments, takeGroups) {
-        var list = document.getElementById("segment-list");
-        list.innerHTML = "";
+        var list = clearContainer(document.getElementById("segment-list"));
 
         var activeCount = getActiveSegmentCount();
         var filteredCount = 0;
@@ -6339,8 +6394,7 @@
     }
 
     function renderAISuggestions(adjustments, pairs) {
-        var list = document.getElementById("take-list");
-        list.innerHTML = "";
+        var list = clearContainer(document.getElementById("take-list"));
 
         state.aiSuggestionStates = {};
 
@@ -7688,17 +7742,19 @@
     function mpResetGenPrompts() {
         var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
         var originals = [
-            { central: "system.md", local: "SYSTEM_PROMPT.md", src: "/Users/danielgutierrez/Downloads/SYSTEM_PROMPT.md" },
-            { central: "style-guide.md", local: "STYLE_GUIDE.md", src: "/Users/danielgutierrez/Downloads/STYLE_GUIDE.md" },
-            { central: "design-fundamentals.md", local: "DESIGN_FUNDAMENTALS.md", src: "/Users/danielgutierrez/Downloads/DESIGN_FUNDAMENTALS.md" }
+            { central: "system.md", local: "SYSTEM_PROMPT.md" },
+            { central: "style-guide.md", local: "STYLE_GUIDE.md" },
+            { central: "design-fundamentals.md", local: "DESIGN_FUNDAMENTALS.md" }
         ];
         try {
             var promptsDir = path.join(extRoot, "Prompts", "MotionPro");
             var serverLib = path.join(extRoot, "motion-server", "lib");
             originals.forEach(function(o) {
-                if (fs.existsSync(o.src)) {
-                    fs.copyFileSync(o.src, path.join(promptsDir, o.central));
-                    fs.copyFileSync(o.src, path.join(serverLib, o.local));
+                // Restore from the canonical source in Prompts/MotionPro → motion-server/lib
+                var centralPath = path.join(promptsDir, o.central);
+                var localPath = path.join(serverLib, o.local);
+                if (fs.existsSync(centralPath)) {
+                    fs.copyFileSync(centralPath, localPath);
                 }
             });
             showToast("Prompts restaurados a los originales", "success");
@@ -7830,9 +7886,8 @@
     var _mpTypeFilter = null;
 
     function mpRenderProposals() {
-        var list = document.getElementById("mp-proposal-list");
+        var list = clearContainer(document.getElementById("mp-proposal-list"));
         if (!list) return;
-        list.innerHTML = "";
 
         var proposals = motionPro.proposals;
 
@@ -8357,9 +8412,8 @@
     }
 
     function mpRenderControlPanel() {
-        var list = document.getElementById("mp-motions-list");
+        var list = clearContainer(document.getElementById("mp-motions-list"));
         if (!list) return;
-        list.innerHTML = "";
 
         // Do not clear mpGenerating here — this runs after each motion during batch generation
         // and would hide the progress bar and confuse state until the pipeline finishes.

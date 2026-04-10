@@ -22,7 +22,11 @@
     ];
 
     var OUT_PATTERNS = [
-        /\bpausa\b/i
+        /\bpausa\b/i,
+        /\bcorte\b/i,
+        /\bcorta\b/i,
+        /\balto\b/i,
+        /\bpara\b/i
     ];
 
     // Countdown number map — digits and Spanish words
