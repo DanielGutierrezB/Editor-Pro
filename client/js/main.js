@@ -92,6 +92,13 @@
         window._epRecorder = recorder;
         window._epMotionPro = motionPro;
 
+        // Initialize UI modules (capture shared references now that _ep* globals are set)
+        if (window.EditorProUI && window.EditorProUI.spellcheck && window.EditorProUI.spellcheck.init) window.EditorProUI.spellcheck.init();
+        if (window.EditorProUI && window.EditorProUI.supertexts && window.EditorProUI.supertexts.init) window.EditorProUI.supertexts.init();
+        if (window.EditorProUI && window.EditorProUI.editSuggestions && window.EditorProUI.editSuggestions.init) window.EditorProUI.editSuggestions.init();
+        if (window.EditorProUI && window.EditorProUI.recording && window.EditorProUI.recording.init) window.EditorProUI.recording.init();
+        // motionPro.init() is called via mpInit() below, which calls _initRefs() internally
+
         loadSavedSettings();
         loadCustomDictionary();
         bindEvents();
@@ -2647,6 +2654,12 @@
     window._epRenderTranscriptFromSegments = renderTranscriptFromSegments;
     window._epBindCollapsibles = bindCollapsibles;
     window._epMP_ANTICIPATION_SECS = MP_ANTICIPATION_SECS;
+    window._epGetTranscriptFolders = _getTranscriptFolders;
+    window._epParseTranscriptJson = parseTranscriptJson;
+    window._epFindTranscriptFiles = findTranscriptFiles;
+    window._epShowTranscriptExportInstructions = showTranscriptExportInstructions;
+    window._epGetTakeAnalysisPromptContext = getTakeAnalysisPromptContext;
+    window._epToggleSettings = toggleSettings;
 
     // ─── Start ───────────────────────────────────────────────────
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
