@@ -149,6 +149,46 @@ const TYPE_INSTRUCTIONS = {
 - Optional trend arrow (lucide-react TrendingUp/TrendingDown)
 - Numbers animate from 0 to final value over 30-40 frames
 - Cards with C.card background, border-radius 12px, subtle glow`,
+
+  beforeafter: `Create a BEFORE/AFTER comparison (split screen):
+- Split layout: left side (wrong way, C.red accent) | vertical divider | right side (correct way, C.accent)
+- Divider: 2px vertical line at center, color C.dim
+- Left content enters from left edge, right from right edge, staggered by 15 frames
+- Top labels: large "❌" and "✅" or "ANTES" / "DESPUÉS" (match transcript language)
+- Max content width per side: 700px
+- Left side uses C.red or C.orange tones, right uses C.accent/C.green
+- Each side can have a card, text block, or icon-based content
+- Use Sequence blocks: Section 1 = left appears, Section 2 = divider + right appears`,
+
+  funnel: `Create a FUNNEL/PIPELINE visualization (stages with flow):
+- 3-5 stages arranged vertically, each as a card with icon + label + optional metric
+- Stages visually decrease in width to show narrowing: first stage widest (600px), last narrowest (300px)
+- Arrow/chevron connectors between stages using lucide-react ChevronDown icons
+- Active/current stage: glow card (border: 1px solid C.accent + "40", boxShadow with C.accent glow)
+- Future stages: outlined card (transparent bg, C.border border)
+- Past stages: standard card, dimmed (opacity 0.6)
+- Stage entry animation: 12-frame stagger per stage, entering from top with spring
+- Use Sequence blocks to reveal stages progressively as narrator mentions them`,
+
+  gauge: `Create a GAUGE/BENCHMARK visualization (metric vs target):
+- Large number centered (96-200px font, animated counting up from 0 using interpolate)
+- CountUp pattern: const value = Math.round(interpolate(spring({frame,fps,config:{damping:20,mass:0.5}}),[0,1],[0,TARGET]));
+- Progress bar below: height 12px, backgroundColor C.card, filled portion with accent color, borderRadius 6
+- Optional benchmark dashed line at target position on the progress bar
+- Label below: "Meta: X%" in C.dim text, fontSize 24
+- Color logic: C.accent if value >= target, C.red if value < target * 0.7, C.orange if between
+- Suffix (%, $, etc.) displayed next to the large number
+- Optional: secondary metric or comparison text below the gauge`,
+
+  callout: `Create a CALLOUT/KEY PHRASE visualization:
+- Large centered text (48-64px, fontWeight 700, color C.text or C.accent)
+- Thin accent-colored horizontal lines above and below text (width: 80px, centered, height: 2px)
+- Entry: subtle scale animation from 0.95 to 1.0 using spring
+- Optional lucide-react icon above text (60-80px, C.accent color)
+- Background: very subtle radial gradient glow behind text at zIndex -1
+  - background: "radial-gradient(circle at 50% 50%, rgba(10,233,141,0.04), transparent 70%)"
+- Text should be impactful — this is the KEY TAKEAWAY the narrator is emphasizing
+- Keep it simple: one phrase, big and centered, with elegant decoration`,
 };
 
 function getGenerationPrompt({ transcriptSegment, type, description, durationFrames, compositionId, brandfetchKey }) {
