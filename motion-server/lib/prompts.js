@@ -60,14 +60,14 @@ const TYPE_INSTRUCTIONS = {
 - Each card: 500-620px wide, C.card background, border-radius 12px
 - Card headers with lucide-react icon + accent color, body with comparison points
 - Use different accent colors (C.accent vs C.orange)
-- Use TransitionSeries or staggered Sequences for the 3-part reveal
+- Use staggered <Sequence> blocks for the 3-part reveal
 - Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   steps: `Create a STEP/PROGRESS animation (MULTI-SECTION):
 - Show ONE step at a time, centered, with a lucide-react icon (60-80px)
 - Progress dots on one side showing all steps (active=filled, completed=dim, pending=empty)
-- Each step gets its own <Sequence> block with fade transition between them
-- Use TransitionSeries with fade() for smooth step-to-step transitions
+- Each step gets its own <Sequence> block with hard cuts between them
+- Use separate <Sequence> blocks for each step with hard cuts between them
 - Active step: border + boxShadow glow, fontWeight 700
 - Stagger elements within each step: 12-15 frames
 - 3-5 steps typical, each step lasts 90-150 frames (3-5 seconds)
@@ -112,7 +112,7 @@ const TYPE_INSTRUCTIONS = {
 - PROGRESSIVE REVEAL: show one element at a time, each in its own Sequence
 - Section 1: first box appears. Section 2: arrow + second box. Section 3: arrow + third box.
 - Connection arrows appear WITH the next box, not before
-- Use TransitionSeries with fade() between stages
+- Use separate <Sequence> blocks for each stage with hard cuts between them
 - Each stage lasts 120-180 frames (4-6 seconds)
 - Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
@@ -147,7 +147,7 @@ const TYPE_INSTRUCTIONS = {
   list: `Create an ANIMATED LIST (vertical items):
 - 3-8 items stacked vertically, each entering from bottom with stagger
 - Each item: lucide-react icon (40px) + text label, aligned left
-- Use TransitionSeries so items flow in smoothly
+- Use staggered <Sequence> blocks so items flow in smoothly
 - Optional: number/bullet before each item
 - Items can have a subtle highlight bar that fills as the narrator mentions them
 - Use Rect from @remotion/shapes for highlight backgrounds
@@ -307,7 +307,7 @@ ${transcriptSegment}
 ## MULTI-SECTION STRUCTURE (IMPORTANT)
 - This composition should have MULTIPLE internal sections that evolve with the narration
 - Each section = one <Sequence> or one part of a <TransitionSeries>
-- Use fade() transitions between sections for smooth visual flow
+- Use hard cuts between sections — NO crossfade. If transition needed, use slide() only (5-8 frames max)
 - Each section should have NEW visual content (not just the same elements staying static)
 - Think of this as a MINI FILM that tells a visual story alongside the narrator
 - Minimum 2-3 sections for clips under 15s, 3-5 sections for clips 15-30s
@@ -326,7 +326,7 @@ ${transcriptSegment}
 11. Icons: ALWAYS use lucide-react icons (import from 'lucide-react'). NEVER draw SVG manually. Size: 60-100px for main icons
 12. Elements must fill 70%+ of the safe area (1600×740px usable)
 13. Use @remotion/shapes for geometric elements (Circle, Rect, Triangle, Star) instead of manual SVG
-14. Consider @remotion/transitions (TransitionSeries + fade/slide) for smooth section transitions
+14. Prefer hard cuts between sections. Only use slide() transition if truly needed (5-8 frames max). NEVER use fade() or crossfade
 15. LANGUAGE: All text in the composition must be in the SAME LANGUAGE as the transcript. If transcript is in English, all labels/titles/text must be in English. If Spanish, in Spanish.
 16. NO GAPS: The animation MUST have visible content from frame 0 to the last frame. No empty/black frames. The FIRST visual element must appear at frame 0 (not frame 30 or later). The LAST visual element must persist until the final frame. Each motion's video must fill 100% of its duration.
 17. BACKGROUND: The <AbsoluteFill> with backgroundColor:C.bg is your CONSTANT BACKGROUND. It is ALWAYS visible. Content inside <Sequence> blocks appears ON TOP of this background. When a Sequence ends, the background remains — NOT transparency/green.
@@ -348,6 +348,13 @@ ${transcriptSegment}
 24. HOLD TIME: After text finishes animating in, it must hold still for at least 45 frames (1.5s) before exit. Reading time ≠ animation time.
 25. PREMOUNT: ALL <Sequence> components MUST include premountFor={10} to prevent pop-in artifacts.
 26. EASING DIRECTION: Use Easing.out or Easing.bezier(0.16,1,0.3,1) for entrances. Use Easing.in for exits. NEVER use linear easing for element motion.
+27. TEXT CONTRAST: All readable text must use C.text (#ffffff). Only use C.dim for metadata/captions. NEVER use dim colors for content that must be read.
+28. SPELLING CORRECTION: If the transcript has obvious typos or truncated words (e.g., "markete" instead of "marketer"), fix them in the visual. The motion must look correct.
+29. NO DECORATIVE ELEMENTS: Every visual element must have a narrative purpose. No random cursors, floating dots, shapes, or arrows that don't point at anything meaningful.
+30. NO OSCILLATION: Never animate values with pendulum/bounce/zigzag without narrative reason. If a number changes, it changes ONCE from A to B.
+31. CENTERED LAYOUT: Content must be vertically AND horizontally centered in the safe area. The visual center of gravity must be at the center of the frame. Never cluster content in one corner.
+32. STEPS/PROGRESS: Show ONE step at a time, CENTERED. Previous steps disappear completely (not dimmed on the side). Only the active step + progress indicator visible.
+33. NO CROSSFADE: NEVER use TransitionSeries with fade(). Use hard cuts (<Sequence> blocks) or slide() transition (5-8 frames max). Crossfade makes both scenes visible simultaneously — it looks broken.
 
 Output the COMPLETE TSX file. No explanations before or after the code.`;
 
