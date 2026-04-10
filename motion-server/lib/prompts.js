@@ -157,18 +157,9 @@ function getGenerationPrompt({ transcriptSegment, type, description, durationFra
   const typeGuide = TYPE_INSTRUCTIONS[type] || TYPE_INSTRUCTIONS.title;
   const compName = _componentName(compositionId);
 
-  const logoInstructions = brandfetchKey ? `
-## Brand Logos (ENABLED)
-When the transcript mentions a known brand/company/app (Google, Telegram, WhatsApp, Slack, etc.):
-- Use Remotion's <Img> component to load the official logo
-- URL pattern: https://cdn.brandfetch.io/{domain}?c=${brandfetchKey}&theme=dark&type=icon
-- Import: import { Img } from 'remotion';
-- Size: standalone logo 80-120px, inside card 40-60px, in list 32-40px
-- Style: objectFit:'contain', no background needed (logos come with transparency)
-- Common domains: google.com, telegram.org, whatsapp.com, slack.com, github.com, facebook.com, instagram.com, youtube.com, twitter.com, linkedin.com, apple.com, microsoft.com, amazon.com, netflix.com, spotify.com
-- If unsure of the domain, use a lucide-react icon instead` : `
-## Brand Logos (NOT CONFIGURED)
-Do NOT attempt to load brand logos via URL. Use lucide-react icons for all visual elements.`;
+  const logoInstructions = `
+## Brand Logos
+For brand logos, use appropriate lucide-react icons (e.g., Globe for websites, Smartphone for apps, Monitor for desktop software, Cloud for cloud services, Shield for security, Mail for email, etc.). Do NOT load external images via URL. Do NOT use Brandfetch or any external image CDN. Use ONLY lucide-react icons for all brand/company visual representation.`;
 
 
   const userMsg = `Generate a Remotion composition. You MUST start from this exact template and fill in the sections:
@@ -259,7 +250,7 @@ ${transcriptSegment}
 3. ALL text elements must use fontFamily:"'DM Sans',sans-serif" — this is the CORPORATE FONT, never use IBM Plex Sans
 4. ALL content must be inside <Safe> wrapper — NOTHING may exit the safe zone
 5. Use <Sequence from={frame} durationInFrames={dur}> — frame 0 is the START of this clip, NOT the absolute timeline time. If the transcript says [30.0s - 45.0s], that maps to frames 0-450 in your composition. Calculate: frame = (transcriptTime - clipStartTime) * 30
-6. Last section uses <Fd dur={X} fi={10} fo={1}> so it stays visible
+6. Last section uses <Fd dur={totalDuration} fi={10} fo={1}> so it stays visible until the very last frame. The composition MUST have visible animated content from frame 0 to frame ${durationFrames}. The last Sequence or Fd component must extend to the final frame.
 7. Colors: ONLY from const C — never invent colors
 8. Min font size: 24px. Weights: 400 or 700 only
 9. NO Audio, NO Html5Audio, NO staticFile — this is visual-only
@@ -269,6 +260,18 @@ ${transcriptSegment}
 13. Use @remotion/shapes for geometric elements (Circle, Rect, Triangle, Star) instead of manual SVG
 14. Consider @remotion/transitions (TransitionSeries + fade/slide) for smooth section transitions
 15. LANGUAGE: All text in the composition must be in the SAME LANGUAGE as the transcript. If transcript is in English, all labels/titles/text must be in English. If Spanish, in Spanish.
+16. NO GAPS: The animation MUST have visible content from frame 0 to the last frame. No empty/black frames. The FIRST visual element must appear at frame 0 (not frame 30 or later). The LAST visual element must persist until the final frame. Each motion's video must fill 100% of its duration.
+17. IMPORT SAFETY: Only import from these packages:
+    - 'remotion' (AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Img, Audio)
+    - 'lucide-react' (any icon)
+    - '@remotion/transitions' (TransitionSeries, linearTiming)
+    - '@remotion/transitions/fade' (fade)
+    - '@remotion/transitions/slide' (slide)
+    - '@remotion/shapes' (Rect, Circle, Triangle, Star, Pie)
+    - '@remotion/paths' (evolvePath, getLength, getPointAtLength)
+    - '@remotion/noise' (noise2D, noise3D)
+    - '@remotion/motion-blur' (Trail)
+    DO NOT import from any other package. DO NOT use named exports that don't exist in these packages.
 
 Output the COMPLETE TSX file. No explanations before or after the code.`;
 

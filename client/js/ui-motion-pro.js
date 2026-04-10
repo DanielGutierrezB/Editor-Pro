@@ -90,6 +90,18 @@
         mpUpdateAnalyzeButton();
         mpBindStepHeaders();
 
+        // On init, restart server to ensure clean state
+        if (motionPro) {
+            motionPro.stopServer();
+            mpUpdateServerUI();
+            var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+            motionPro.startServer(extensionPath, function(err) {
+                if (!err) {
+                    mpUpdateServerUI();
+                }
+            });
+        }
+
         // Resolve session from active sequence, then load state + render UI
         mpResolveOutputDir(function() {
             mpRenderFullUI();
@@ -478,8 +490,17 @@
                         description: p.description || p.descripcion || "",
                         priority: p.priority || p.prioridad || "media",
                         selected: true,
-                        transcriptSegment: p.transcriptSegment || p.segment || ""
+                        transcriptSegment: p.transcriptSegment || p.segment || "",
+                        group: p.group || p.grupo || ""
                     });
+                }
+
+                // Fix 4: Anti-overlap — trim overlapping proposals by time
+                proposals.sort(function(a, b) { return a.startTime - b.startTime; });
+                for (var ov = 1; ov < proposals.length; ov++) {
+                    if (proposals[ov].startTime < proposals[ov - 1].endTime) {
+                        proposals[ov - 1].endTime = proposals[ov].startTime;
+                    }
                 }
             } catch(e) {
                 showToast("Error al parsear respuesta IA: " + e.message, "error");
@@ -582,52 +603,105 @@
             }
         }
 
-        // Render cards
-        for (var i = 0; i < filtered.length; i++) {
-            var p = filtered[i];
-            var origIdx = proposals.indexOf(p);
+        // Group proposals by concept group
+        var groups = {};
+        var groupOrder = [];
+        for (var gi = 0; gi < filtered.length; gi++) {
+            var gp = filtered[gi];
+            var groupName = gp.group || "Otros";
+            if (!groups[groupName]) {
+                groups[groupName] = [];
+                groupOrder.push(groupName);
+            }
+            groups[groupName].push(gp);
+        }
 
-            var typeInfo = MotionPro.TYPES[p.type] || { label: p.type, color: "#818cf8" };
-            var priorityClass = p.priority === "alta" ? "mp-priority-high" : p.priority === "baja" ? "mp-priority-low" : "mp-priority-med";
+        // Render grouped cards
+        for (var gIdx = 0; gIdx < groupOrder.length; gIdx++) {
+            var grpName = groupOrder[gIdx];
+            var grpItems = groups[grpName];
 
-            var card = document.createElement("div");
-            card.className = "mp-proposal-card";
-            card.setAttribute("data-mp-idx", origIdx);
-            card.innerHTML =
-                '<label class="mp-proposal-check">' +
-                    '<input type="checkbox" ' + (p.selected ? 'checked' : '') + ' data-mp-idx="' + origIdx + '">' +
+            // Group header with checkbox
+            var groupHeader = document.createElement("div");
+            groupHeader.className = "mp-group-header";
+            groupHeader.innerHTML =
+                '<label class="mp-group-check">' +
+                    '<input type="checkbox" data-mp-group="' + escAttr(grpName) + '" checked>' +
                 '</label>' +
-                '<div class="mp-proposal-info">' +
-                    '<div class="mp-proposal-top">' +
-                        '<span class="mp-type-badge" style="background:' + typeInfo.color + '22;color:' + typeInfo.color + ';border:1px solid ' + typeInfo.color + '44">' + esc(typeInfo.label) + '</span>' +
-                        '<span class="mp-proposal-time">' + formatTimeFull(p.startTime) + ' — ' + formatTimeFull(p.endTime) + '</span>' +
-                        '<span class="mp-proposal-dur">' + (p.endTime - p.startTime).toFixed(1) + 's</span>' +
-                        '<span class="' + priorityClass + '">' + esc(p.priority) + '</span>' +
-                    '</div>' +
-                    '<div class="mp-proposal-desc">' + esc(p.description) + '</div>' +
-                '</div>';
+                '<span class="mp-group-icon">📦</span>' +
+                '<span class="mp-group-name">' + esc(grpName) + '</span>' +
+                '<span class="mp-group-count">(' + grpItems.length + ')</span>';
 
-            var cb = card.querySelector("input[type=checkbox]");
-            (function(idx, startTime) {
-                cb.addEventListener("change", function() {
-                    motionPro.proposals[idx].selected = this.checked;
-                    mpUpdateSelectionCount();
-                    motionPro.saveState();
-                });
-                var infoEl = card.querySelector(".mp-proposal-info");
-                if (infoEl) {
-                    infoEl.style.cursor = "pointer";
-                    infoEl.addEventListener("click", function() {
-                        document.querySelectorAll(".mp-proposal-card.mp-card-active").forEach(function(c) {
-                            c.classList.remove("mp-card-active");
-                        });
-                        infoEl.closest(".mp-proposal-card").classList.add("mp-card-active");
-                        mpMovePlayhead(startTime);
-                    });
+            var groupCb = groupHeader.querySelector("input[type=checkbox]");
+            (function(gName, items) {
+                // Check if all items in group are selected
+                var allSel = true;
+                for (var ci = 0; ci < items.length; ci++) {
+                    if (!items[ci].selected) { allSel = false; break; }
                 }
-            })(origIdx, p.startTime);
+                groupCb.checked = allSel;
 
-            list.appendChild(card);
+                groupCb.addEventListener("change", function() {
+                    var checked = this.checked;
+                    for (var ci = 0; ci < items.length; ci++) {
+                        var idx = proposals.indexOf(items[ci]);
+                        if (idx >= 0) motionPro.proposals[idx].selected = checked;
+                    }
+                    motionPro.saveState();
+                    mpRenderProposals();
+                });
+            })(grpName, grpItems);
+
+            list.appendChild(groupHeader);
+
+            // Render cards in this group
+            for (var i = 0; i < grpItems.length; i++) {
+                var p = grpItems[i];
+                var origIdx = proposals.indexOf(p);
+
+                var typeInfo = MotionPro.TYPES[p.type] || { label: p.type, color: "#818cf8" };
+                var priorityClass = p.priority === "alta" ? "mp-priority-high" : p.priority === "baja" ? "mp-priority-low" : "mp-priority-med";
+
+                var card = document.createElement("div");
+                card.className = "mp-proposal-card mp-grouped-card";
+                card.setAttribute("data-mp-idx", origIdx);
+                card.setAttribute("data-mp-group", grpName);
+                card.innerHTML =
+                    '<label class="mp-proposal-check">' +
+                        '<input type="checkbox" ' + (p.selected ? 'checked' : '') + ' data-mp-idx="' + origIdx + '">' +
+                    '</label>' +
+                    '<div class="mp-proposal-info">' +
+                        '<div class="mp-proposal-top">' +
+                            '<span class="mp-type-badge" style="background:' + typeInfo.color + '22;color:' + typeInfo.color + ';border:1px solid ' + typeInfo.color + '44">' + esc(typeInfo.label) + '</span>' +
+                            '<span class="mp-proposal-time">' + formatTimeFull(p.startTime) + ' — ' + formatTimeFull(p.endTime) + '</span>' +
+                            '<span class="mp-proposal-dur">' + (p.endTime - p.startTime).toFixed(1) + 's</span>' +
+                            '<span class="' + priorityClass + '">' + esc(p.priority) + '</span>' +
+                        '</div>' +
+                        '<div class="mp-proposal-desc">' + esc(p.description) + '</div>' +
+                    '</div>';
+
+                var cb = card.querySelector("input[type=checkbox]");
+                (function(idx, startTime) {
+                    cb.addEventListener("change", function() {
+                        motionPro.proposals[idx].selected = this.checked;
+                        mpUpdateSelectionCount();
+                        motionPro.saveState();
+                    });
+                    var infoEl = card.querySelector(".mp-proposal-info");
+                    if (infoEl) {
+                        infoEl.style.cursor = "pointer";
+                        infoEl.addEventListener("click", function() {
+                            document.querySelectorAll(".mp-proposal-card.mp-card-active").forEach(function(c) {
+                                c.classList.remove("mp-card-active");
+                            });
+                            infoEl.closest(".mp-proposal-card").classList.add("mp-card-active");
+                            mpMovePlayhead(startTime);
+                        });
+                    }
+                })(origIdx, p.startTime);
+
+                list.appendChild(card);
+            }
         }
 
         showElement("mp-proposals-summary");

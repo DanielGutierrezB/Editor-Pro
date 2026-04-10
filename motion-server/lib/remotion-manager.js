@@ -21,6 +21,12 @@ class RemotionManager {
   }
 
   writeComposition(compositionId, tsxCode, durationFrames) {
+    // Pre-render validation: check imports against known packages
+    const validationResult = this._validateImports(tsxCode);
+    if (validationResult.fixedCode) {
+      tsxCode = validationResult.fixedCode;
+    }
+
     const filePath = path.join(this.compositionsDir, `${compositionId}.tsx`);
     fs.writeFileSync(filePath, tsxCode, 'utf8');
 
@@ -28,6 +34,60 @@ class RemotionManager {
     const actualDuration = this._calculateDuration(tsxCode, durationFrames);
     this._registerInRoot(compositionId, actualDuration);
     return filePath;
+  }
+
+  /**
+   * Validate imports in TSX code against known safe packages.
+   * Returns { valid, errors[], fixedCode? }
+   */
+  _validateImports(tsxCode) {
+    const ALLOWED_PACKAGES = {
+      'remotion': ['AbsoluteFill', 'useCurrentFrame', 'useVideoConfig', 'interpolate', 'spring', 'Sequence', 'Img', 'Audio', 'Easing', 'random', 'continueRender', 'delayRender'],
+      'react': null, // allow all
+      'lucide-react': null, // allow all icons
+      '@remotion/transitions': ['TransitionSeries', 'linearTiming'],
+      '@remotion/transitions/fade': ['fade'],
+      '@remotion/transitions/slide': ['slide'],
+      '@remotion/shapes': ['Rect', 'Circle', 'Triangle', 'Star', 'Pie'],
+      '@remotion/paths': ['evolvePath', 'getLength', 'getPointAtLength', 'parsePath', 'resetPath', 'scalePath', 'translatePath'],
+      '@remotion/noise': ['noise2D', 'noise3D'],
+      '@remotion/motion-blur': ['Trail'],
+      '@fontsource/dm-sans/400.css': null,
+      '@fontsource/dm-sans/500.css': null,
+      '@fontsource/dm-sans/600.css': null,
+      '@fontsource/dm-sans/700.css': null,
+    };
+
+    const errors = [];
+    let fixedCode = tsxCode;
+    // Match: import { ... } from 'package'; or import ... from 'package';
+    const importRegex = /^import\s+(?:(?:\{[^}]*\}|[^;{]*)\s+from\s+)?['"]([^'"]+)['"]/gm;
+    let match;
+    while ((match = importRegex.exec(tsxCode)) !== null) {
+      const pkg = match[1];
+      // Allow CSS imports
+      if (pkg.endsWith('.css')) {
+        if (!ALLOWED_PACKAGES[pkg]) {
+          // Only allow @fontsource/dm-sans CSS
+          if (!pkg.startsWith('@fontsource/dm-sans')) {
+            errors.push(`Unknown CSS import: ${pkg}`);
+            fixedCode = fixedCode.replace(match[0], '// REMOVED unknown import: ' + match[0]);
+          }
+        }
+        continue;
+      }
+      if (!ALLOWED_PACKAGES.hasOwnProperty(pkg)) {
+        errors.push(`Unknown package: ${pkg}`);
+        // Comment out the bad import instead of failing
+        fixedCode = fixedCode.replace(match[0], '// REMOVED unknown import: ' + match[0]);
+      }
+    }
+
+    if (errors.length > 0) {
+      console.warn('[RemotionManager] Import validation warnings:', errors);
+      return { valid: false, errors, fixedCode };
+    }
+    return { valid: true, errors: [] };
   }
 
   _calculateDuration(tsxCode, fallback) {
