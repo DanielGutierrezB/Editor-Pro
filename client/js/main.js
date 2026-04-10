@@ -2687,25 +2687,22 @@
         } catch(e) {}
     }
 
-    // Show current version from git
+    // Show current version from VERSION file
     function _showVersion() {
         try {
-            var exec = require("child_process").exec;
             var extensionPath = csInterface.getSystemPath("extension");
-            exec("cd '" + extensionPath + "' && git log --oneline -1 2>/dev/null",
-                { timeout: 5000 },
-                function(err, stdout) {
-                    var label = document.getElementById("version-label");
-                    if (label && stdout && stdout.trim()) {
-                        var hash = stdout.trim().substring(0, 7);
-                        label.textContent = "v" + hash;
-                        label.title = stdout.trim();
-                    }
+            var versionFile = path.join(extensionPath, "VERSION");
+            if (fs.existsSync(versionFile)) {
+                var ver = fs.readFileSync(versionFile, "utf8").trim();
+                var label = document.getElementById("version-label");
+                if (label) {
+                    label.textContent = "v" + ver;
+                    label.title = "Editor-Pro v" + ver;
                 }
-            );
+            }
         } catch(e) {}
     }
-    setTimeout(_showVersion, 1000);
+    setTimeout(_showVersion, 500);
 
     // Check on startup after 5 seconds
     setTimeout(_checkForUpdates, 5000);
