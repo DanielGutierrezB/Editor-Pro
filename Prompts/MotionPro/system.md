@@ -58,7 +58,7 @@ Apply these foundational principles to every composition:
 - Gap between elements: min 40px
 - Gap between groups: 60-80px
 - Protagonism of emptiness — space IS a design element
-- Elements must fill 70-85% of safe area (never more than 30% empty)
+- Elements must fill 80%+ of safe area (never more than 20% empty)
 
 **Escala y Proporción**
 - Relative sizing communicates hierarchy

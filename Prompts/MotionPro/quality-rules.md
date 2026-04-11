@@ -43,7 +43,7 @@ Assign different accent colors to different topics within a single motion:
 Do NOT use the same accent color for everything. Vary by conceptual meaning.
 
 ## 4. Fill the Screen Rule
-- Elements must occupy 70-85% of the safe area (1600×740 usable)
+- Elements must occupy 80%+ of the safe area (1600×740 usable)
 - NEVER leave more than 30% empty space
 - If content is small, make elements BIGGER — not add decorative filler
 - Cards: min-width 500px. Icons: min 60px. Titles: min 36px font size
