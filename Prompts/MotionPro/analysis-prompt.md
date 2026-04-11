@@ -36,13 +36,6 @@ REGLAS DE TIMING:
 - Duración típica: 5-15 segundos por motion
 - Solo hacer motions más largos (15-30s) cuando el concepto genuinamente lo requiere (un proceso de muchos pasos, una comparación elaborada)
 
-REGLAS DE CLIP COHERENTE:
-- Si un concepto tiene dos partes naturales (ej: problema → solución, antes → después), propón UN solo clip largo en vez de dos cortos
-- Un clip de 15 segundos con transición interna es MEJOR que dos clips de 7 segundos que se cortan
-- Usa duración larga (15-25s) cuando el concepto fluye naturalmente entre ideas relacionadas
-- Solo separa en clips distintos cuando los conceptos son INDEPENDIENTES
-- Si el narrador dice algo durante 20 segundos sin cambiar de tema, eso es UN clip, no 3
-
 REGLAS DE COBERTURA:
 - Cubrir el 80-95% del video con motions
 - El profesor SIEMPRE debe tener apoyo visual, incluso en transiciones entre conceptos

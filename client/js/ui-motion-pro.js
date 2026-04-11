@@ -920,78 +920,94 @@
 
         mpShowStep(3);
 
-        function processNext() {
-            if (state.mpGenerateCancelRequested) {
-                state.mpGenerateCancelRequested = false;
-                state.mpGenerating = false;
-                hideElement("mp-generate-progress");
-                refreshMPHeaderProgressVisibility();
-                motionPro.saveState();
-                mpRenderControlPanel();
+        // Parallel generation with concurrency limit
+        var CONCURRENCY = 3; // Generate 3 items at a time
+        var nextIndex = 0;
+        var activeWorkers = 0;
 
-                var hint = document.getElementById("mp-step-hint-2");
-                if (hint) hint.textContent = done + "/" + total + " generados (detenido)";
+        function _onAllComplete() {
+            state.mpGenerateCancelRequested = false;
+            state.mpGenerating = false;
+            hideElement("mp-generate-progress");
+            refreshMPHeaderProgressVisibility();
+            motionPro.saveState();
+            mpRenderControlPanel();
 
-                showToast("Generación detenida: " + done + " de " + total + " completados.", "info");
-                return;
+            var totalTime = ((Date.now() - _mpTimers.totalStart) / 1000).toFixed(0);
+            var genTime = ((Date.now() - _mpTimers.generateStart) / 1000).toFixed(0);
+            var hint3 = document.getElementById("mp-step-hint-3");
+            if (hint3) hint3.textContent = "Total: " + totalTime + "s (gen: " + genTime + "s)";
+
+            var hint = document.getElementById("mp-step-hint-2");
+            if (hint) hint.textContent = (total - errors.length) + "/" + total + " generados";
+
+            if (errors.length > 0) {
+                if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", done + "/" + total + " done, " + errors.length + " errors");
+                showToast(errors.length + " errores, " + (total - errors.length) + " generados", "error");
+            } else {
+                if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", total + "/" + total + " done, 0 errors");
+                showToast(total + " motions generados y colocados en timeline", "success");
             }
+        }
 
-            if (done >= total) {
-                state.mpGenerateCancelRequested = false;
-                state.mpGenerating = false;
-                hideElement("mp-generate-progress");
-                refreshMPHeaderProgressVisibility();
-                motionPro.saveState();
-                mpRenderControlPanel();
-
-                var totalTime = ((Date.now() - _mpTimers.totalStart) / 1000).toFixed(0);
-                var genTime = ((Date.now() - _mpTimers.generateStart) / 1000).toFixed(0);
-                var hint3 = document.getElementById("mp-step-hint-3");
-                if (hint3) hint3.textContent = "Total: " + totalTime + "s (gen: " + genTime + "s)";
-
-                var hint = document.getElementById("mp-step-hint-2");
-                if (hint) hint.textContent = (total - errors.length) + "/" + total + " generados";
-
-                if (errors.length > 0) {
-                    if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", done + "/" + total + " done, " + errors.length + " errors");
-                    showToast(errors.length + " errores, " + (total - errors.length) + " generados", "error");
-                } else {
-                    if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", total + "/" + total + " done, 0 errors");
-                    showToast(total + " motions generados y colocados en timeline", "success");
+        function launchWorker() {
+            if (state.mpGenerateCancelRequested) {
+                if (activeWorkers === 0) {
+                    state.mpGenerateCancelRequested = false;
+                    state.mpGenerating = false;
+                    hideElement("mp-generate-progress");
+                    refreshMPHeaderProgressVisibility();
+                    motionPro.saveState();
+                    mpRenderControlPanel();
+                    var hint = document.getElementById("mp-step-hint-2");
+                    if (hint) hint.textContent = done + "/" + total + " generados (detenido)";
+                    showToast("Generación detenida: " + done + " de " + total + " completados.", "info");
                 }
                 return;
             }
 
-            var proposal = selected[done];
+            if (nextIndex >= total) {
+                if (activeWorkers === 0) _onAllComplete();
+                return;
+            }
+
+            var idx = nextIndex++;
+            var proposal = selected[idx];
+            activeWorkers++;
             _mpTimers.itemStarts[proposal.id] = Date.now();
-            var pct = Math.round(((done + 0.3) / total) * 100);
+
             var elapsed = ((Date.now() - _mpTimers.generateStart) / 1000).toFixed(0);
-            mpSetProgress("mp-generate", pct, "Generando " + (done + 1) + "/" + total + ": " + proposal.type + "... (" + elapsed + "s)");
+            mpSetProgress("mp-generate", Math.round((done / total) * 100),
+                "Generando " + (done + 1) + "-" + Math.min(nextIndex, total) + "/" + total + " (" + elapsed + "s)");
 
             var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
 
             motionPro.generateMotion(proposal, segment, aiConfig, function(err, result) {
                 done++;
+                activeWorkers--;
 
                 if (err) {
                     errors.push({ id: proposal.id, error: err.message });
                     if (window.EPLogger) EPLogger.error("motion-pro", "generate-item", proposal.id + ": " + err.message);
                     console.warn("[Motion-Pro] Generation error:", err.message);
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
-                    processNext();
+                    launchWorker(); // Launch next
                 } else {
                     if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result.motionId || "?"));
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando " + done + "/" + total + " en timeline...");
                     mpPlaceSingleInTimeline(result.motionId, function() {
                         motionPro.saveState();
                         mpRenderControlPanel();
-                        processNext();
+                        launchWorker(); // Launch next
                     });
                 }
             }, outputDir);
         }
 
-        processNext();
+        // Launch initial batch of workers
+        for (var w = 0; w < Math.min(CONCURRENCY, total); w++) {
+            launchWorker();
+        }
     }
 
     function mpExtractSegment(startTime, endTime) {
