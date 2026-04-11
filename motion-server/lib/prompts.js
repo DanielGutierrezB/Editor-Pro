@@ -64,14 +64,14 @@ const TYPE_INSTRUCTIONS = {
 - Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   steps: `Create a STEP/PROGRESS animation (MULTI-SECTION):
-- Show ONE step at a time, centered, with a lucide-react icon (60-80px)
-- Progress dots on one side showing all steps (active=filled, completed=dim, pending=empty)
-- Each step gets its own <Sequence> block with hard cuts between them
-- Use separate <Sequence> blocks for each step with hard cuts between them
-- Active step: border + boxShadow glow, fontWeight 700
-- Stagger elements within each step: 12-15 frames
-- 3-5 steps typical, each step lasts 90-150 frames (3-5 seconds)
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Show ONE step at a time, CENTERED in the safe area
+- Progress indicator (dots or numbers) at the bottom showing total steps
+- Each step: centered card with icon (60-80px) + title + description
+- Hard cut between steps (NO crossfade, NO diagonal movement)
+- Previous steps DISAPPEAR completely — only current step + progress visible
+- Active step: accent border + glow. Progress dots: filled for completed, empty for pending
+- Each step lasts 90-150 frames (3-5 seconds)
+- Fill 80%+ of safe area. NEVER leave more than 20% empty.`,
 
   icons: `Create an ICON REVEAL animation (2-4 items):
 - 2-4 items displayed horizontally with gap: 140-160px
@@ -79,6 +79,7 @@ const TYPE_INSTRUCTIONS = {
 - Label below each icon: 20-24px, fontWeight 700
 - Items enter with stagger: 12-15 frames between each
 - Use different accent colors per icon
+- Layout: horizontal row OR 2x2 grid using flexbox. NEVER place icons orbiting around a center element.
 - Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   chart: `Create a CHART animation:
@@ -114,6 +115,8 @@ const TYPE_INSTRUCTIONS = {
 - Connection arrows appear WITH the next box, not before
 - Use separate <Sequence> blocks for each stage with hard cuts between them
 - Each stage lasts 120-180 frames (4-6 seconds)
+- Use flexbox layout with gap, NOT absolute positioning for flow elements
+- All elements must be vertically AND horizontally centered in the safe area
 - Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   ui: `Create a UI MOCKUP animation:
@@ -182,6 +185,8 @@ const TYPE_INSTRUCTIONS = {
 - Past stages: standard card, dimmed (opacity 0.6)
 - Stage entry animation: 12-frame stagger per stage, entering from top with spring
 - Use Sequence blocks to reveal stages progressively as narrator mentions them
+- Ensure ALL stages fit within the safe area (1600x740px). If 5 stages, each stage max 120px tall
+- Center the funnel vertically — never let top or bottom stages clip outside safe zone
 - Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
 
   gauge: `Create a GAUGE/BENCHMARK visualization (metric vs target):

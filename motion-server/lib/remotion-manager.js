@@ -494,8 +494,10 @@ class RemotionManager {
       outputPath,
       '--codec=h264',
       '--pixel-format=yuv420p',
+      '--crf=18',
       '--muted',
       '--image-format=png',
+      '--jpeg-quality=95',
     ];
 
     const proc = spawn(npxPath, args, {

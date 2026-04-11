@@ -601,6 +601,42 @@ When a section has multiple items:
 
 ---
 
+## DECISION FRAMEWORK — How to size content for each clip
+
+The number of visual elements MUST match the available duration. Use this table:
+
+### Content Budget by Duration
+| Clip Duration | Max Elements | Layout | Complexity |
+|---|---|---|---|
+| 3-6s (90-180f) | 1 title + 1 icon OR 1 callout | Centered, large | Simple |
+| 6-10s (180-300f) | 1 title + 2-3 items | Centered or 2-column | Medium |
+| 10-15s (300-450f) | 1 title + 3-5 items with stagger | Grid, list, or flow | Medium-Rich |
+| 15-25s (450-750f) | Multi-section with internal transitions | Progressive reveal | Rich |
+| 25s+ (750f+) | Full diagram/funnel with stages | Multi-stage flow | Rich |
+
+### Rules:
+1. **Never put more elements than the duration allows.** A 5-second clip with 8 items = unreadable.
+2. **Each text element needs 45 frames (1.5s) of hold time AFTER appearing.** Count: entrance animation (20f) + hold (45f) = 65 frames per text element minimum.
+3. **If content doesn't fit the duration, REDUCE elements** — don't shrink fonts or cram.
+4. **Short clips (< 8s) should have ONE visual concept** — title/callout/single metric. No diagrams, no funnels, no multi-card layouts.
+5. **Long clips (> 15s) MUST have internal sections** that evolve — don't show everything at once and hold for 15 seconds.
+
+### Layout Rules (never violate):
+- **Centered composition**: content's visual center of gravity must be at the center of the safe area (800px, 370px)
+- **No orbit/radial layouts**: never place items orbiting around a central element. Use grid (2x2, 3x1) or vertical list
+- **No diagonal movement**: elements enter from consistent directions (up, left) — never diagonal
+- **Structured spacing**: use flexbox with gap, never absolute positioning for content items
+- **Title + subtitle gap**: minimum 20px between text blocks at different hierarchy levels. NEVER overlap text on text.
+- **One visual hierarchy**: largest element = most important. Nothing competes for attention.
+
+### Clip Type Decision:
+When a concept naturally flows between two visual types (e.g., showing a problem then a solution):
+- If total duration > 12 seconds: make ONE clip with internal sections (type = the primary type)
+- If total duration < 12 seconds: choose the SINGLE most impactful type
+- NEVER make two 4-second clips when one 8-second clip tells the story better
+
+---
+
 ## ANTI-PATTERNS (NEVER do these)
 
 1. ❌ Show text that exactly copies what narrator says — demonstrate, don't repeat
