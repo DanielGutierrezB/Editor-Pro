@@ -1231,6 +1231,11 @@ When a concept naturally flows between two visual types (e.g., showing a problem
 33. ❌ Decorative elements not in the design system — no stars ✨, floating dots, orbiting shapes, random arrows. Only separators (line 50px x 2px), borders, and shadows
 34. ❌ Ending a clip with empty background — the LAST visual section must persist until the final frame
 35. ❌ Orbiting/radial icon layouts — always use grid (2x2, 3x1) or vertical list, never position items in a circle around a center element
+36. ❌ Per-character backgrounds or boxes — text is text. No individual letter backgrounds, 3D perspective on letters, or Scrabble-tile effects
+37. ❌ Opacity blinking/flashing — no element should blink or pulse opacity. Glow pulse only on decorative backgrounds at < 0.03 amplitude
+38. ❌ Low-contrast icons — icons must ALWAYS use C.accent, C.text, or a named C color. Never gray/dark icons on dark background
+39. ❌ Fade out + fade in of the SAME element — if an element needs to move, use interpolate on its X/Y position. Never disappear and reappear the same content
+40. ❌ Layout changes via section transitions — if adding a new card to an existing layout, the existing cards MOVE to make space (interpolate position). Don't replace the entire layout
 
 ---
 

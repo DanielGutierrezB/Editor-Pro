@@ -776,6 +776,10 @@ ${transcriptSegment}
 32. STEPS/PROGRESS: Show ONE step at a time, CENTERED. Previous steps disappear completely (not dimmed on the side). Only the active step + progress indicator visible.
 33. NO CROSSFADE: NEVER use TransitionSeries with fade(). Use hard cuts (<Sequence> blocks) or slide() transition (5-8 frames max). Crossfade makes both scenes visible simultaneously — it looks broken.
 34. SAFE VALUES: When using interpolate() results in .toFixed(), Math.round(), or similar — always provide a fallback: \`(interpolate(...) || 0).toFixed(1)\`. Undefined values crash the render.
+35. NO BLINKING: No opacity flashing or blinking on any element. No Math.sin/cos on opacity.
+36. NO PER-CHARACTER STYLING: Never apply backgrounds, borders, or 3D effects to individual characters/letters. Text renders as a single block.
+37. ICON CONTRAST: Icons must use C.accent, C.text, C.orange, C.purple, C.red, or C.green. NEVER use gray, dark, or dim colors for icons. Icons must be clearly visible against C.bg.
+38. SAME ELEMENT = MOVE, NOT REPLACE: If a card/element is already on screen and needs to change position (e.g., making room for a new card), use interpolate on its X/Y position. NEVER fade out and fade in the same element.
 
 Output the COMPLETE TSX file. No explanations before or after the code.`;
 

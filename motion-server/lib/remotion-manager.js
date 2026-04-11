@@ -604,8 +604,8 @@ class RemotionManager {
       '--pixel-format=yuv420p',
       '--crf=18',
       '--muted',
-      '--image-format=png',
-      '--jpeg-quality=95',
+      '--image-format=jpeg',
+      '--jpeg-quality=100',
     ];
 
     const proc = spawn(npxPath, args, {
