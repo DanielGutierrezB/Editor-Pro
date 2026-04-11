@@ -457,7 +457,8 @@ const TYPE_INSTRUCTIONS = {
 - Active step: accent border + glow. Progress dots: filled for completed, empty for pending
 - Each step lasts 90-150 frames (3-5 seconds)
 - Fill 80%+ of safe area. NEVER leave more than 20% empty.
-- Use GlowCard for active step, ProgressDots at bottom.`,
+- Use GlowCard for active step, ProgressDots at bottom.
+- CRITICAL: Each step's Sequence must have ZERO overlap with the next step's Sequence. If Step 1 is from=0 durationInFrames=120, Step 2 MUST start at from=120, NOT from=100. Overlapping Sequences cause text duplication artifacts.`,
 
   icons: `Create an ICON REVEAL animation (2-4 items):
 - 2-4 items displayed horizontally with gap: 140-160px
@@ -756,12 +757,17 @@ ${transcriptSegment}
     DO NOT import from any other package. DO NOT use @remotion/motion-blur (Trail is disabled — it crashes renders). DO NOT use named exports that don't exist in these packages.
 22. INTERPOLATION CLAMPING: ALL interpolate() calls MUST include { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }. Missing clamping causes visual glitches (opacity > 1, positions overshoot).
 23. STAGGER: Never show all elements at once. Stagger entrances by 5-8 frames between elements. First element at d=0, second at d=6, third at d=12, etc.
-24. HOLD TIME: After text finishes animating in, it must hold still for at least 45 frames (1.5s) before exit. Reading time ≠ animation time.
+24. HOLD TIME (CRITICAL): Text must be READABLE. After text entrance animation completes, it must remain STATIC and VISIBLE for AT LEAST:
+    - Titles (1-4 words): 60 frames (2s)
+    - Short text (5-8 words): 90 frames (3s)
+    - Medium text (9-15 words): 120 frames (4s)
+    - Long text (16+ words): 150 frames (5s)
+    The entrance animation duration does NOT count as reading time. Text that appears and disappears in under 2 seconds is USELESS — the viewer cannot read it.
 25. PREMOUNT: ALL <Sequence> components MUST include premountFor={10} to prevent pop-in artifacts.
 26. EASING DIRECTION: Use Easing.out or Easing.bezier(0.16,1,0.3,1) for entrances. Use Easing.in for exits. NEVER use linear easing for element motion.
 27. TEXT CONTRAST: All readable text must use C.text (#ffffff). Only use C.dim for metadata/captions. NEVER use dim colors for content that must be read.
 28. SPELLING CORRECTION: If the transcript has obvious typos or truncated words (e.g., "markete" instead of "marketer"), fix them in the visual. The motion must look correct.
-29. NO DECORATIVE ELEMENTS: Every visual element must have a narrative purpose. No random cursors, floating dots, shapes, or arrows that don't point at anything meaningful.
+29. NO DECORATIVE ELEMENTS: Every visual element MUST serve the narrative. Specifically BANNED: stars (✨⭐), sparkles, floating dots, orbiting shapes, random arrows, CTA buttons ("¡Comienza ahora!"), badges, ribbons. This is a VIDEO, not an app — nothing is clickable. Only allowed decorations: AccentSeparator lines, card borders, icon circle containers, shadows.
 30. NO OSCILLATION: Never animate values with pendulum/bounce/zigzag without narrative reason. If a number changes, it changes ONCE from A to B.
 31. CENTERED LAYOUT: Content must be vertically AND horizontally centered in the safe area. The visual center of gravity must be at the center of the frame. Never cluster content in one corner.
 32. STEPS/PROGRESS: Show ONE step at a time, CENTERED. Previous steps disappear completely (not dimmed on the side). Only the active step + progress indicator visible.

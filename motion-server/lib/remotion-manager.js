@@ -30,6 +30,9 @@ class RemotionManager {
     // Strip TransitionSeries with fade — replace with plain Sequence blocks
     tsxCode = this._stripFadeTransitions(tsxCode);
 
+    // Replace lucide icons with brand SVG logos when applicable
+    tsxCode = this._replaceBrandIcons(tsxCode);
+
     // Pre-render validation: check imports against known packages
     const validationResult = this._validateImports(tsxCode);
     if (validationResult.fixedCode) {
@@ -143,6 +146,67 @@ class RemotionManager {
     tsxCode = tsxCode.replace(/^import\s*\{[^}]*TransitionSeries[^}]*\}\s*from\s*['"]@remotion\/transitions['"];?\s*$/gm,
       '// REMOVED: TransitionSeries (hard cuts enforced)');
     
+    return tsxCode;
+  }
+
+  /**
+   * Replace lucide-react icons used for known brands with local SVG logos.
+   * The AI often uses Globe, Facebook, Camera etc. instead of actual brand logos.
+   */
+  _replaceBrandIcons(tsxCode) {
+    const brandMap = {
+      // Map common lucide icon usage patterns to brand SVGs
+      'meta': { icons: ['Globe', 'Building'], svg: 'meta.svg' },
+      'facebook': { icons: ['Facebook', 'ThumbsUp'], svg: 'facebook.svg' },
+      'instagram': { icons: ['Camera', 'Image'], svg: 'instagram.svg' },
+      'whatsapp': { icons: ['MessageCircle', 'Phone'], svg: 'whatsapp.svg' },
+      'google': { icons: ['Search', 'Globe'], svg: 'google.svg' },
+      'youtube': { icons: ['Play', 'Video'], svg: 'youtube.svg' },
+      'tiktok': { icons: ['Music', 'Film'], svg: 'tiktok.svg' },
+      'linkedin': { icons: ['Linkedin', 'Briefcase'], svg: 'linkedin.svg' },
+      'twitter': { icons: ['Twitter', 'AtSign'], svg: 'twitter.svg' },
+    };
+
+    // Only apply if transcript/description mentions a brand
+    // Check if any brand keywords exist in the TSX comments or text content
+    let changed = false;
+    Object.keys(brandMap).forEach(brand => {
+      const regex = new RegExp(brand, 'i');
+      if (!regex.test(tsxCode)) return;
+
+      // This brand is mentioned — check if its icons are used without the proper SVG
+      if (tsxCode.includes("staticFile('logos/" + brandMap[brand].svg + "')")) return; // Already using SVG
+
+      // Add staticFile import if not present
+      if (!tsxCode.includes('staticFile')) {
+        tsxCode = tsxCode.replace(
+          /from\s*['"]remotion['"]/,
+          match => match.replace("from 'remotion'", "from 'remotion'").replace('from "remotion"', 'from "remotion"')
+        );
+        // Ensure staticFile is in the import
+        if (!tsxCode.includes('staticFile')) {
+          tsxCode = tsxCode.replace(
+            /(import\s*\{[^}]*)(}\s*from\s*['"]remotion['"])/,
+            '$1, staticFile$2'
+          );
+        }
+      }
+
+      // Ensure Img is imported
+      if (!tsxCode.includes('Img') || !/(import\s*\{[^}]*\bImg\b)/.test(tsxCode)) {
+        tsxCode = tsxCode.replace(
+          /(import\s*\{[^}]*)(}\s*from\s*['"]remotion['"])/,
+          '$1, Img$2'
+        );
+      }
+
+      changed = true;
+    });
+
+    if (changed) {
+      console.log('[RemotionManager] Brand references detected — ensure staticFile/Img imports available');
+    }
+
     return tsxCode;
   }
 

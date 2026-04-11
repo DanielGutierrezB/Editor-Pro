@@ -921,7 +921,7 @@
         mpShowStep(3);
 
         // Parallel generation with concurrency limit
-        var CONCURRENCY = 3; // Generate 3 items at a time
+        var CONCURRENCY = 2; // Generate 2 items at a time (reduced to avoid ECONNRESET)
         var nextIndex = 0;
         var activeWorkers = 0;
 
@@ -987,6 +987,37 @@
                 activeWorkers--;
 
                 if (err) {
+                    var errMsg = err.message || '';
+                    // Retry once on network errors
+                    if ((errMsg.includes('ECONNRESET') || errMsg.includes('EPIPE') || errMsg.includes('ECONNREFUSED')) && !proposal._retried) {
+                        proposal._retried = true;
+                        console.log('[Motion-Pro] Retrying ' + proposal.id + ' after network error...');
+                        if (window.EPLogger) EPLogger.log("motion-pro", "retry", proposal.id + " — " + errMsg);
+                        done--; // Don't count as done yet
+                        activeWorkers++;
+                        setTimeout(function() {
+                            _mpTimers.itemStarts[proposal.id] = Date.now();
+                            motionPro.generateMotion(proposal, segment, aiConfig, function(err2, result2) {
+                                done++;
+                                activeWorkers--;
+                                if (err2) {
+                                    errors.push({ id: proposal.id, error: err2.message });
+                                    if (window.EPLogger) EPLogger.error("motion-pro", "generate-item", proposal.id + ": " + err2.message + " (retry failed)");
+                                    mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
+                                    launchWorker();
+                                } else {
+                                    if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result2.motionId || "?") + " (retry success)");
+                                    mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando " + done + "/" + total + " en timeline...");
+                                    mpPlaceSingleInTimeline(result2.motionId, function() {
+                                        motionPro.saveState();
+                                        mpRenderControlPanel();
+                                        launchWorker();
+                                    });
+                                }
+                            }, outputDir);
+                        }, 3000);
+                        return;
+                    }
                     errors.push({ id: proposal.id, error: err.message });
                     if (window.EPLogger) EPLogger.error("motion-pro", "generate-item", proposal.id + ": " + err.message);
                     console.warn("[Motion-Pro] Generation error:", err.message);

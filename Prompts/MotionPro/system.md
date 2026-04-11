@@ -1125,14 +1125,16 @@ import { Lottie, LottieAnimationData } from '@remotion/lottie';
 - Data/stats → C.orange
 
 ### 4.4 Reading Time Rule (CRITICAL)
-Every text must have enough time to be READ:
-- Titles (1-4 words): min 75 frames (2.5s)
-- Short text (5-8 words): min 120 frames (4s)
-- Medium text (9-15 words): min 180 frames (6s)
-- Long text (16+ words): min 240 frames (8s)
-- NEVER remove text before reading time is complete
+Every text must have enough time to be READ after it finishes animating in:
+- Titles (1-4 words): min 60 frames (2s) of HOLD after entrance
+- Short text (5-8 words): min 90 frames (3s)
+- Medium text (9-15 words): min 120 frames (4s)
+- Long text (16+ words): min 150 frames (5s)
+- NEVER remove text before its reading time is complete
+- The entrance animation (20-30 frames) does NOT count as reading time
+- Total minimum visibility = entrance animation + hold time
 
-**Hold Time Rule**: After text finishes animating in, it must HOLD STILL for at least 45 frames (1.5s) before any exit animation. Viewers need time to READ. The text entrance animation duration does NOT count as reading time.
+**Hold Time Rule**: After text finishes animating in, it must HOLD STILL for the durations above. Text that appears and disappears in under 2 seconds is USELESS.
 
 ### 4.5 Cumulative Content Rule (CRITICAL)
 When a section has multiple items:
