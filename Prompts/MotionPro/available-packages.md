@@ -26,30 +26,26 @@ Common icons by category:
 - Tech: Code, Terminal, Wifi, Zap, Globe, Monitor, Smartphone
 
 ## Transitions: @remotion/transitions
-Smooth transitions between sections instead of hard cuts.
+DEFAULT: Use hard cuts between sections (`<Sequence>` blocks). Only use transitions when genuinely needed.
 
 ```tsx
-import { TransitionSeries, linearTiming } from '@remotion/transitions';
-import { fade } from '@remotion/transitions/fade';
-import { slide } from '@remotion/transitions/slide';
-import { wipe } from '@remotion/transitions/wipe';
+// DEFAULT — hard cuts with Sequence blocks (PREFERRED):
+<Sequence from={0} durationInFrames={150} premountFor={10}><Section1 /></Sequence>
+<Sequence from={150} durationInFrames={200} premountFor={10}><Section2 /></Sequence>
 
-// In the component:
+// ONLY if a transition is needed — use slide() (5-8 frames max):
+import { TransitionSeries, linearTiming } from '@remotion/transitions';
+import { slide } from '@remotion/transitions/slide';
+
 <TransitionSeries>
-  <TransitionSeries.Sequence durationInFrames={150}>
-    <Section1 />
-  </TransitionSeries.Sequence>
-  <TransitionSeries.Transition
-    presentation={fade()}
-    timing={linearTiming({ durationInFrames: 15 })}
-  />
-  <TransitionSeries.Sequence durationInFrames={200}>
-    <Section2 />
-  </TransitionSeries.Sequence>
+  <TransitionSeries.Sequence durationInFrames={150}><Section1 /></TransitionSeries.Sequence>
+  <TransitionSeries.Transition presentation={slide({direction:'from-right'})} timing={linearTiming({durationInFrames:8})} />
+  <TransitionSeries.Sequence durationInFrames={200}><Section2 /></TransitionSeries.Sequence>
 </TransitionSeries>
 ```
 
-Available transitions: fade(), slide(), wipe(), flip(), clockWipe()
+Available transitions: slide(), wipe(), flip(), clockWipe()
+⚠️ DO NOT use fade() — it causes crossfade artifacts where both scenes are visible simultaneously.
 
 ## Shapes: @remotion/shapes
 Perfect geometric shapes without manual SVG.
@@ -77,15 +73,7 @@ const evolution = evolvePath(frame / 60, path); // 0 to 1 progress
 ```
 
 ## Motion Blur: @remotion/motion-blur
-Cinematic motion blur on fast-moving elements.
-
-```tsx
-import { Trail } from '@remotion/motion-blur';
-
-<Trail layers={8} lagInFrames={0.02}>
-  <E d={0} from="left"><MyContent /></E>
-</Trail>
-```
+⚠️ DO NOT USE — Trail component crashes renders when props are missing. Use opacity + scale transitions instead.
 
 ## Noise: @remotion/noise
 Organic backgrounds and subtle movement.
@@ -118,14 +106,15 @@ useEffect(() => {
 
 ## RULES FOR USING PACKAGES
 1. ALWAYS use lucide-react icons instead of drawing SVG manually
-2. Prefer TransitionSeries over hard <Sequence> cuts when transitions make sense
-3. Use @remotion/shapes for geometric elements instead of manual SVG
-4. Use @remotion/paths evolvePath for timeline and reveal type animations
-5. Motion blur is optional — use only when it enhances the visual
-6. All packages are already installed — just import and use
+2. DEFAULT: hard cuts with `<Sequence>` blocks. Only use slide() transition if genuinely needed (5-8 frames max)
+3. NEVER use fade() transition — causes crossfade artifacts
+4. Use @remotion/shapes for geometric elements instead of manual SVG
+5. Use @remotion/paths evolvePath for timeline and reveal type animations
+6. DO NOT use @remotion/motion-blur Trail — it's disabled
+7. All packages are already installed — just import and use
 
 ## Animation Types that leverage these packages
 - **timeline**: Uses @remotion/paths (draw-on line) + @remotion/shapes (Circle nodes) + lucide-react icons
-- **reveal**: Uses @remotion/paths (evolvePath) + @remotion/motion-blur (Trail) + @remotion/noise
-- **list**: Uses TransitionSeries + lucide-react icons + @remotion/shapes (Rect highlights)
+- **reveal**: Uses @remotion/paths (evolvePath) + @remotion/noise + opacity/scale transitions
+- **list**: Uses staggered `<Sequence>` blocks + lucide-react icons + @remotion/shapes (Rect highlights)
 - **metrics**: Uses @remotion/shapes (Circle/Pie progress) + lucide-react (TrendingUp) + interpolate for counting

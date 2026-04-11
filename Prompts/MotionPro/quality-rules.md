@@ -3,26 +3,14 @@
 These rules improve the professional quality of generated motions.
 
 ## 1. Smooth Transitions Between Sections
-- Use TransitionSeries with fade() for transitions between related sections
+- Use hard cuts between sections (default). Only use slide() if needed (5-8 frames max). NEVER use fade() or crossfade
 - Hard cuts ONLY between completely different topics
 - Transition duration: 10-15 frames (0.3-0.5s)
 
+Use `<Sequence>` blocks with hard cuts. If a transition is needed, use `slide()` only (5-8 frames max).
 ```tsx
-import { TransitionSeries, linearTiming } from '@remotion/transitions';
-import { fade } from '@remotion/transitions/fade';
-
-<TransitionSeries>
-  <TransitionSeries.Sequence durationInFrames={150}>
-    <Section1 />
-  </TransitionSeries.Sequence>
-  <TransitionSeries.Transition
-    presentation={fade()}
-    timing={linearTiming({ durationInFrames: 12 })}
-  />
-  <TransitionSeries.Sequence durationInFrames={200}>
-    <Section2 />
-  </TransitionSeries.Sequence>
-</TransitionSeries>
+<Sequence from={0} durationInFrames={150} premountFor={10}><Section1 /></Sequence>
+<Sequence from={150} durationInFrames={200} premountFor={10}><Section2 /></Sequence>
 ```
 
 ## 2. Exact Data from Transcript

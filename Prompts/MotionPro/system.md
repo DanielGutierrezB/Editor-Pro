@@ -1061,7 +1061,7 @@ import { fade } from '@remotion/transitions/fade';
 import { slide } from '@remotion/transitions/slide';
 import { wipe } from '@remotion/transitions/wipe';
 ```
-Available: fade(), slide(), wipe(), flip(), clockWipe()
+Available: slide(), wipe(), flip(), clockWipe() — DO NOT use fade() (causes crossfade artifacts)
 
 ### Shapes: @remotion/shapes
 ```tsx
