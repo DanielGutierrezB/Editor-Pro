@@ -3048,14 +3048,22 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    max-height: 460px;
+    max-height: none;
     overflow-y: auto;
 }
 .mp-motion-card {
     background: var(--bg-raised);
     border: 1px solid var(--border);
     border-radius: 5px;
-    padding: 8px;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+}
+
+/* In fullscreen, motion cards take full width */
+.tool-card.fullscreen .mp-motions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 .mp-motion-header {
     display: flex;

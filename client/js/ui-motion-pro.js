@@ -24,6 +24,13 @@
     var srtSegmentsToSttResult, renderTranscriptFromSegments, bindCollapsibles;
     var MP_ANTICIPATION_SECS;
 
+    var _mpTimers = {
+        analysisStart: 0,
+        generateStart: 0,
+        totalStart: 0,
+        itemStarts: {},
+    };
+
     function _initRefs() {
         state       = global._epState;
         csInterface = global._epCSInterface;
@@ -446,6 +453,8 @@
         }
 
         if (window.EPLogger) EPLogger.log("motion-pro", "analysis-start", "transcriptLen=" + state.transcript.length);
+        _mpTimers.totalStart = Date.now();
+        _mpTimers.analysisStart = Date.now();
         _mpAnalysisCancelled = false;
         state.mpAnalyzing = true;
         mpSetMotionAnalyzeButtonMode(true);
@@ -495,6 +504,7 @@
             }
 
             if (window.EPLogger) EPLogger.log("motion-pro", "analysis-complete", "parsing proposals");
+            var analysisTime = ((Date.now() - _mpTimers.analysisStart) / 1000).toFixed(1);
             var proposals = [];
             try {
                 var parsed = (typeof result === "string") ? JSON.parse(result) : result;
@@ -540,7 +550,7 @@
             mpToggleStep("2");
 
             var hint = document.getElementById("mp-step-hint-1");
-            if (hint) hint.textContent = proposals.length + " momentos detectados";
+            if (hint) hint.textContent = proposals.length + " momentos (" + analysisTime + "s)";
             showToast(proposals.length + " momentos identificados para motions", "success");
         });
     }
@@ -863,10 +873,22 @@
         }
 
         if (window.EPLogger) EPLogger.log("motion-pro", "generate-start", selected.length + " proposals selected");
+        _mpTimers.generateStart = Date.now();
         state.mpGenerating = true;
         state.mpGenerateCancelRequested = false;
         showElement("mp-generate-progress");
         mpSetProgress("mp-generate", 5, "Preparando carpeta del proyecto...");
+
+        // Get sequence FPS for Remotion
+        var seqFps = 30;
+        try {
+            csInterface.evalScript('getSequenceFps()', function(fpsResult) {
+                try {
+                    var parsed = JSON.parse(fpsResult);
+                    if (parsed.fps) seqFps = Math.round(parsed.fps);
+                } catch(e) {}
+            });
+        } catch(e) {}
 
         mpResolveOutputDir(function(outputDir) {
             if (outputDir) {
@@ -922,6 +944,11 @@
                 motionPro.saveState();
                 mpRenderControlPanel();
 
+                var totalTime = ((Date.now() - _mpTimers.totalStart) / 1000).toFixed(0);
+                var genTime = ((Date.now() - _mpTimers.generateStart) / 1000).toFixed(0);
+                var hint3 = document.getElementById("mp-step-hint-3");
+                if (hint3) hint3.textContent = "Total: " + totalTime + "s (gen: " + genTime + "s)";
+
                 var hint = document.getElementById("mp-step-hint-2");
                 if (hint) hint.textContent = (total - errors.length) + "/" + total + " generados";
 
@@ -936,8 +963,10 @@
             }
 
             var proposal = selected[done];
+            _mpTimers.itemStarts[proposal.id] = Date.now();
             var pct = Math.round(((done + 0.3) / total) * 100);
-            mpSetProgress("mp-generate", pct, "Generando " + (done + 1) + "/" + total + ": " + proposal.type + "...");
+            var elapsed = ((Date.now() - _mpTimers.generateStart) / 1000).toFixed(0);
+            mpSetProgress("mp-generate", pct, "Generando " + (done + 1) + "/" + total + ": " + proposal.type + "... (" + elapsed + "s)");
 
             var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
 

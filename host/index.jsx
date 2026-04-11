@@ -2884,6 +2884,22 @@ function importAndPlaceMotions(jsonPath) {
     }
 }
 
+function getSequenceFps() {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ fps: 30 });
+        // Premiere stores timebase as ticks per second / ticks per frame
+        var timebase = seq.timebase;
+        if (timebase) {
+            var fps = parseFloat(timebase);
+            if (fps > 0) return JSON.stringify({ fps: fps });
+        }
+        return JSON.stringify({ fps: 30 });
+    } catch(e) {
+        return JSON.stringify({ fps: 30, error: e.message });
+    }
+}
+
 function replaceMotionOnTrack(jsonPath) {
     try {
         var f = new File(jsonPath);
