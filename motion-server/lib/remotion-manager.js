@@ -27,6 +27,9 @@ class RemotionManager {
     // Strip @remotion/motion-blur Trail — it crashes renders when trailOpacity is missing
     tsxCode = this._stripTrail(tsxCode);
 
+    // Strip TransitionSeries with fade — replace with plain Sequence blocks
+    tsxCode = this._stripFadeTransitions(tsxCode);
+
     // Pre-render validation: check imports against known packages
     const validationResult = this._validateImports(tsxCode);
     if (validationResult.fixedCode) {
@@ -108,6 +111,37 @@ class RemotionManager {
     // Replace <Trail ...> with <div> and </Trail> with </div>
     tsxCode = tsxCode.replace(/<Trail\b[^>]*>/g, '<div>');
     tsxCode = tsxCode.replace(/<\/Trail>/g, '</div>');
+    
+    return tsxCode;
+  }
+
+  /**
+   * Strip TransitionSeries + fade() usage. The AI keeps using crossfade despite
+   * prompt prohibitions. Replace with plain <Sequence> blocks.
+   */
+  _stripFadeTransitions(tsxCode) {
+    if (!/TransitionSeries/.test(tsxCode)) return tsxCode;
+    
+    console.log('[RemotionManager] Stripping TransitionSeries/fade from TSX');
+    
+    // Remove fade import
+    tsxCode = tsxCode.replace(/^import\s*\{[^}]*fade[^}]*\}\s*from\s*['"]@remotion\/transitions\/fade['"];?\s*$/gm, 
+      '// REMOVED: fade transition (hard cuts enforced)');
+    
+    // Replace TransitionSeries.Sequence with Sequence
+    tsxCode = tsxCode.replace(/<TransitionSeries\.Sequence\b/g, '<Sequence');
+    tsxCode = tsxCode.replace(/<\/TransitionSeries\.Sequence>/g, '</Sequence>');
+    
+    // Remove TransitionSeries.Transition elements entirely
+    tsxCode = tsxCode.replace(/<TransitionSeries\.Transition[\s\S]*?\/>/g, '');
+    
+    // Replace TransitionSeries wrapper with fragment
+    tsxCode = tsxCode.replace(/<TransitionSeries\b[^>]*>/g, '<>');
+    tsxCode = tsxCode.replace(/<\/TransitionSeries>/g, '</>');
+    
+    // Remove TransitionSeries import
+    tsxCode = tsxCode.replace(/^import\s*\{[^}]*TransitionSeries[^}]*\}\s*from\s*['"]@remotion\/transitions['"];?\s*$/gm,
+      '// REMOVED: TransitionSeries (hard cuts enforced)');
     
     return tsxCode;
   }

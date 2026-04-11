@@ -308,7 +308,7 @@ import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequ
 ```tsx
 const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({children,style}) => (
   <div style={{position:'absolute',left:160,top:180,right:160,bottom:160,
-    display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',overflow:'hidden',...style}}>
+    display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',...style}}>
     {children}
   </div>
 );
@@ -349,6 +349,12 @@ All sides: 80px → 1760×920 usable of 1920×1080
 SafeArea component: left:160, top:180, right:160, bottom:160 → 1600×740 usable
 ```
 **Nothing may exit these bounds. Ever.**
+
+**Safe Area Philosophy:**
+- Content that MUST be read → always fully inside safe area
+- Elements exiting the screen → CAN leave safe area during exit animation
+- Decorative/contextual elements → CAN be partially outside if not essential to read
+- Elements losing relevance → dim to opacity 0.3 and/or apply slight blur, don't clip them
 
 ### 2.5 Timing Rules (30fps)
 
@@ -670,6 +676,10 @@ When a concept naturally flows between two visual types (e.g., showing a problem
 29. ❌ Decorative elements without narrative function — no random cursors, floating shapes, or arrows that don't point at anything
 30. ❌ Content not centered vertically — the visual center of gravity must be at the center of the safe area
 31. ❌ Crossfade transitions between sections — prefer hard cuts or quick wipes (5-8 frames max). Never show both scenes simultaneously
+32. ❌ Moving elements after their entrance animation completes — once positioned, elements stay PUT until exit
+33. ❌ Decorative elements not in the design system — no stars ✨, floating dots, orbiting shapes, random arrows. Only separators (line 50px x 2px), borders, and shadows
+34. ❌ Ending a clip with empty background — the LAST visual section must persist until the final frame
+35. ❌ Orbiting/radial icon layouts — always use grid (2x2, 3x1) or vertical list, never position items in a circle around a center element
 
 ---
 

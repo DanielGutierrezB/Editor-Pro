@@ -106,8 +106,10 @@ process.on('SIGINT', () => {
 // Prevent server from crashing on uncaught errors
 process.on('uncaughtException', (err) => {
   console.error('[motion-server] Uncaught exception (server stays alive):', err.message);
+  // Don't exit — keep serving
 });
 
 process.on('unhandledRejection', (reason) => {
-  console.error('[motion-server] Unhandled rejection (server stays alive):', reason);
+  console.error('[motion-server] Unhandled rejection (server stays alive):', String(reason));
+  // Don't exit — keep serving
 });

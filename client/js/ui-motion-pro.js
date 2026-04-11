@@ -709,7 +709,7 @@
                     '<div class="mp-proposal-info">' +
                         '<div class="mp-proposal-top">' +
                             '<span class="mp-type-badge" data-type="' + esc(p.type) + '" style="background:' + typeInfo.color + '22;color:' + typeInfo.color + ';border:1px solid ' + typeInfo.color + '44">' + esc(typeInfo.label) + '</span>' +
-                            '<span class="mp-clip-name">' + esc(_mpBuildSeqPrefix() + "_Clip" + (String(i+1).length < 2 ? "0"+(i+1) : String(i+1)) + "_" + (p.type.charAt(0).toUpperCase() + p.type.slice(1))) + '</span>' +
+                            '<span class="mp-clip-name">' + esc("Clip" + (String(i+1).length < 2 ? "0"+(i+1) : String(i+1))) + '</span>' +
                             '<span class="mp-proposal-time">' + formatTimeFull(p.startTime) + ' — ' + formatTimeFull(p.endTime) + '</span>' +
                             '<span class="mp-proposal-dur">' + (p.endTime - p.startTime).toFixed(1) + 's</span>' +
                             '<span class="' + priorityClass + '">' + esc(p.priority) + '</span>' +
@@ -1208,7 +1208,7 @@
             card.innerHTML =
                 '<div class="mp-motion-header mp-clickable-header">' +
                     '<span class="mp-type-badge" data-type="' + esc(m.type) + '" style="background:' + typeInfo.color + '22;color:' + typeInfo.color + ';border:1px solid ' + typeInfo.color + '44">' + esc(typeInfo.label) + '</span>' +
-                    '<span class="mp-clip-name">' + esc(_mpBuildSeqPrefix() + "_Clip" + m.id.split("-")[0] + "_" + (m.type || "motion").charAt(0).toUpperCase() + (m.type || "motion").slice(1)) + '</span>' +
+                    '<span class="mp-clip-name">' + esc("Clip" + m.id.split("-")[0]) + '</span>' +
                     '<span class="mp-motion-time">' + formatTimeFull(m.startTime) + ' — ' + formatTimeFull(m.endTime) + '</span>' +
                     statusBadge +
                 '</div>' +

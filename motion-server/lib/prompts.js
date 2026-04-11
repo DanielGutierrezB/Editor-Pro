@@ -220,6 +220,10 @@ function getGenerationPrompt({ transcriptSegment, type, description, durationFra
 
   const logoInstructions = `
 ## Brand Logos
+CRITICAL: When the transcript mentions a brand by name (Meta, Facebook, Google, etc.), 
+you MUST use the local SVG logo: <Img src={staticFile('logos/BRAND.svg')} style={{width:60,height:60}} />.
+Do NOT substitute with a lucide-react icon when a local logo exists.
+
 For brand logos, import { staticFile } from 'remotion' and use <Img src={staticFile('logos/BRAND.svg')} style={{width:60,height:60}} />.
 
 Available logos (in public/logos/):
@@ -253,7 +257,7 @@ const C = {
 };
 
 const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({children,style}) => (
-  <div style={{position:'absolute',left:160,top:180,right:160,bottom:160,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',overflow:'hidden',...style}}>{children}</div>
+  <div style={{position:'absolute',left:160,top:180,right:160,bottom:160,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',...style}}>{children}</div>
 );
 
 const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CSSProperties}> = ({d,children,from='up',style}) => {
@@ -273,6 +277,11 @@ const Fd:React.FC<{children:React.ReactNode;fi?:number;fo?:number;dur:number}> =
   const frame = useCurrentFrame();
   return <div style={{opacity:interpolate(frame,[0,fi,dur-fo,dur],[0,1,1,0],{extrapolateRight:'clamp'}),position:'absolute',inset:0}}>{children}</div>;
 };
+
+// Safety: always clamp interpolate results to prevent undefined/NaN
+// When using interpolate with spring or custom functions, always add fallback:
+// const value = interpolate(...) || 0;
+// const text = (value).toFixed(1); // safe because value is always a number
 
 // === YOUR SECTIONS GO HERE ===
 
@@ -360,6 +369,7 @@ ${transcriptSegment}
 31. CENTERED LAYOUT: Content must be vertically AND horizontally centered in the safe area. The visual center of gravity must be at the center of the frame. Never cluster content in one corner.
 32. STEPS/PROGRESS: Show ONE step at a time, CENTERED. Previous steps disappear completely (not dimmed on the side). Only the active step + progress indicator visible.
 33. NO CROSSFADE: NEVER use TransitionSeries with fade(). Use hard cuts (<Sequence> blocks) or slide() transition (5-8 frames max). Crossfade makes both scenes visible simultaneously — it looks broken.
+34. SAFE VALUES: When using interpolate() results in .toFixed(), Math.round(), or similar — always provide a fallback: \`(interpolate(...) || 0).toFixed(1)\`. Undefined values crash the render.
 
 Output the COMPLETE TSX file. No explanations before or after the code.`;
 
