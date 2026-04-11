@@ -529,9 +529,77 @@ const AccentSeparator:React.FC<{
 };
 
 // Safety: always clamp interpolate results to prevent undefined/NaN
-// When using interpolate with spring or custom functions, always add fallback:
 // const value = interpolate(...) || 0;
-// const text = (value).toFixed(1); // safe because value is always a number
+// const text = (value).toFixed(1);
+
+// --- Advanced Components ---
+
+// CascadeItem — stagger with blur (depth of field effect)
+const CascadeItem:React.FC<{d:number;index:number;children:React.ReactNode}> = ({d,index,children}) => {
+  const frame = useCurrentFrame();
+  const delay = d + index * 8;
+  const dist = 60 + index * 15;
+  const dur = 22 + index * 2;
+  const progress = interpolate(frame - delay, [0, dur], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  return (
+    <div style={{
+      opacity: progress,
+      transform: \`translateY(\${interpolate(progress,[0,1],[dist,0])}px)\`,
+      filter: \`blur(\${interpolate(progress,[0,0.5,1],[4,1,0])}px)\`,
+    }}>{children}</div>
+  );
+};
+
+// OdometerDigit — number that counts up digit by digit
+const OdometerDigit:React.FC<{value:number;d:number;fontSize?:number;color?:string}> = ({value,d,fontSize=96,color=C.accent}) => {
+  const frame = useCurrentFrame();
+  const progress = interpolate(frame - d, [0, 40], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  const current = Math.round(interpolate(progress, [0,1], [0, value]));
+  const digits = String(current).split('');
+  return (
+    <div style={{display:'flex',overflow:'hidden',height:fontSize*1.2}}>
+      {digits.map((digit, i) => {
+        const dp = interpolate(frame - d - i*3, [0,30], [0,1], {
+          easing: Easing.bezier(0.16,1,0.3,1), extrapolateLeft:'clamp', extrapolateRight:'clamp',
+        });
+        return <div key={i} style={{fontSize,fontWeight:700,color,fontFamily:"'DM Sans',sans-serif",lineHeight:1.2,opacity:dp,
+          transform:\`translateY(\${interpolate(dp,[0,1],[fontSize*0.5,0])}px)\`}}>{digit}</div>;
+      })}
+    </div>
+  );
+};
+
+// AnimatedMetric — number + suffix + label
+const AnimatedMetric:React.FC<{value:number;suffix:string;label:string;d:number;accent?:string}> = ({value,suffix,label,d,accent=C.accent}) => (
+  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:12}}>
+    <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+      <OdometerDigit value={value} d={d} fontSize={96} color={accent}/>
+      <E d={d+15} from="pop"><span style={{fontSize:48,fontWeight:700,color:accent}}>{suffix}</span></E>
+    </div>
+    <E d={d+20} from="up"><span style={{fontSize:22,fontWeight:400,color:C.dim,textTransform:'uppercase',letterSpacing:3}}>{label}</span></E>
+  </div>
+);
+
+// MorphPosition — element that smoothly repositions between phases
+const MorphPosition:React.FC<{children:React.ReactNode;phase:number;fromY:number;toY:number;fromX?:number;toX?:number;fromScale?:number;toScale?:number;d:number;duration?:number}> = 
+  ({children,phase,fromY,toY,fromX=0,toX=0,fromScale=1,toScale=1,d,duration=25}) => {
+  const frame = useCurrentFrame();
+  const mp = interpolate(frame - d, [0, duration], [0, phase], {
+    easing: Easing.bezier(0.45, 0, 0.55, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  return (
+    <div style={{transform:\`translate(\${interpolate(mp,[0,1],[fromX,toX])}px,\${interpolate(mp,[0,1],[fromY,toY])}px) scale(\${interpolate(mp,[0,1],[fromScale,toScale])})\`,transformOrigin:'center center'}}>
+      {children}
+    </div>
+  );
+};
 
 // === YOUR SECTIONS GO HERE ===
 
