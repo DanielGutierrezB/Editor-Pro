@@ -61,7 +61,8 @@ const TYPE_INSTRUCTIONS = {
 - Card headers with lucide-react icon + accent color, body with comparison points
 - Use different accent colors (C.accent vs C.orange)
 - Use staggered <Sequence> blocks for the 3-part reveal
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Use GlowCard. Left card accent=C.red, right card accent=C.accent.`,
 
   steps: `Create a STEP/PROGRESS animation (MULTI-SECTION):
 - Show ONE step at a time, CENTERED in the safe area
@@ -71,7 +72,8 @@ const TYPE_INSTRUCTIONS = {
 - Previous steps DISAPPEAR completely — only current step + progress visible
 - Active step: accent border + glow. Progress dots: filled for completed, empty for pending
 - Each step lasts 90-150 frames (3-5 seconds)
-- Fill 80%+ of safe area. NEVER leave more than 20% empty.`,
+- Fill 80%+ of safe area. NEVER leave more than 20% empty.
+- Use GlowCard for active step, ProgressDots at bottom.`,
 
   icons: `Create an ICON REVEAL animation (2-4 items):
 - 2-4 items displayed horizontally with gap: 140-160px
@@ -80,7 +82,8 @@ const TYPE_INSTRUCTIONS = {
 - Items enter with stagger: 12-15 frames between each
 - Use different accent colors per icon
 - Layout: horizontal row OR 2x2 grid using flexbox. NEVER place icons orbiting around a center element.
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Icon inside circle container with subtle glow border.`,
 
   chart: `Create a CHART animation:
 - Bar chart OR line chart based on the data
@@ -89,7 +92,8 @@ const TYPE_INSTRUCTIONS = {
 - ALWAYS include axis labels (X and Y)
 - Title: 30-42px, marginBottom 60px minimum
 - Values shown above bars or at data points
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Bars animate with spring stagger. Use AccentSeparator between title and chart.`,
 
   title: `Create a TITLE/INTRO screen:
 - Large centered SVG icon (100-140px) at top
@@ -97,7 +101,8 @@ const TYPE_INSTRUCTIONS = {
 - Subtitle: 24-28px, fontWeight 400, color C.dim
 - Decorative separator line: 50px wide, 2px height, accent color
 - Elements enter with stagger from center (pop animation)
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Use AnimatedText for word-by-word reveal. Use AccentSeparator below title.`,
 
   cards: `Create a CARD LAYOUT (horizontal flow):
 - 2-3 cards arranged horizontally with SVG arrows between them
@@ -105,7 +110,8 @@ const TYPE_INSTRUCTIONS = {
 - Arrow connectors: SVG paths between cards
 - For long text: use SHORT labels (max 8-10 words), never gray placeholder bars
 - Cards enter with stagger from left to right
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Use GlowCard with different elevation levels. Active card = elevation 4.`,
 
   diagram: `Create a FLOW DIAGRAM (MULTI-SECTION):
 - Flow boxes: 480-560px wide, connected by arrows using lucide-react ArrowRight
@@ -117,7 +123,8 @@ const TYPE_INSTRUCTIONS = {
 - Each stage lasts 120-180 frames (4-6 seconds)
 - Use flexbox layout with gap, NOT absolute positioning for flow elements
 - All elements must be vertically AND horizontally centered in the safe area
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Use AnimatedLine for connections between nodes. GlowCard for active node.`,
 
   ui: `Create a UI MOCKUP animation:
 - Show ONLY the relevant UI element per section, centered
@@ -145,7 +152,8 @@ const TYPE_INSTRUCTIONS = {
 - Or reveal a diagram/icon by drawing its strokes
 - Use opacity and scale transitions for reveals. DO NOT use @remotion/motion-blur Trail component (it's disabled).
 - Background elements can use noise2D from @remotion/noise for subtle organic movement
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Use AnimatedText mode='word' for progressive text reveal.`,
 
   list: `Create an ANIMATED LIST (vertical items):
 - 3-8 items stacked vertically, each entering from bottom with stagger
@@ -154,7 +162,8 @@ const TYPE_INSTRUCTIONS = {
 - Optional: number/bullet before each item
 - Items can have a subtle highlight bar that fills as the narrator mentions them
 - Use Rect from @remotion/shapes for highlight backgrounds
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Use CascadeItem pattern (blur entrance) for staggered list items.`,
 
   metrics: `Create a METRICS/KPI dashboard:
 - 2-4 big numbers displayed prominently
@@ -163,7 +172,8 @@ const TYPE_INSTRUCTIONS = {
 - Optional trend arrow (lucide-react TrendingUp/TrendingDown)
 - Numbers animate from 0 to final value over 30-40 frames
 - Cards with C.card background, border-radius 12px, subtle glow
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Use GlowCard for each metric. Numbers MUST use CountUp animation, never static.`,
 
   beforeafter: `Create a BEFORE/AFTER comparison (split screen):
 - Split layout: left side (wrong way, C.red accent) | vertical divider | right side (correct way, C.accent)
@@ -174,7 +184,8 @@ const TYPE_INSTRUCTIONS = {
 - Left side uses C.red or C.orange tones, right uses C.accent/C.green
 - Each side can have a card, text block, or icon-based content
 - Use Sequence blocks: Section 1 = left appears, Section 2 = divider + right appears
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Left GlowCard accent=C.red, right GlowCard accent=C.accent.`,
 
   funnel: `Create a FUNNEL/PIPELINE visualization (stages with flow):
 - 3-5 stages arranged vertically, each as a card with icon + label + optional metric
@@ -187,7 +198,8 @@ const TYPE_INSTRUCTIONS = {
 - Use Sequence blocks to reveal stages progressively as narrator mentions them
 - Ensure ALL stages fit within the safe area (1600x740px). If 5 stages, each stage max 120px tall
 - Center the funnel vertically — never let top or bottom stages clip outside safe zone
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Use GlowCard for active stage, outlined for future stages.`,
 
   gauge: `Create a GAUGE/BENCHMARK visualization (metric vs target):
 - Large number centered (96-200px font, animated counting up from 0 using interpolate)
@@ -198,7 +210,8 @@ const TYPE_INSTRUCTIONS = {
 - Color logic: C.accent if value >= target, C.red if value < target * 0.7, C.orange if between
 - Suffix (%, $, etc.) displayed next to the large number
 - Optional: secondary metric or comparison text below the gauge
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Use AnimatedMetric/OdometerDigit for the number.`,
 
   callout: `Create a CALLOUT/KEY PHRASE visualization:
 - Large centered text (48-64px, fontWeight 700, color C.text or C.accent)
@@ -209,7 +222,8 @@ const TYPE_INSTRUCTIONS = {
   - background: "radial-gradient(circle at 50% 50%, rgba(10,233,141,0.04), transparent 70%)"
 - Text should be impactful — this is the KEY TAKEAWAY the narrator is emphasizing
 - Keep it simple: one phrase, big and centered, with elegant decoration
-- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.`,
+- Fill 80%+ of the safe area (1600×740px). NEVER leave more than 20% empty. If content is small, make elements BIGGER.
+- Use AnimatedText mode='word'. Background radial gradient glow. AccentSeparator above and below.`,
 };
 
 function getGenerationPrompt({ transcriptSegment, type, description, durationFrames, compositionId, brandfetchKey }) {
@@ -276,6 +290,242 @@ const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CS
 const Fd:React.FC<{children:React.ReactNode;fi?:number;fo?:number;dur:number}> = ({children,fi=10,fo=10,dur}) => {
   const frame = useCurrentFrame();
   return <div style={{opacity:interpolate(frame,[0,fi,dur-fo,dur],[0,1,1,0],{extrapolateRight:'clamp'}),position:'absolute',inset:0}}>{children}</div>;
+};
+
+const AnimatedText:React.FC<{
+  text:string;
+  d:number;
+  fontSize?:number;
+  fontWeight?:number;
+  color?:string;
+  align?:'left'|'center'|'right';
+  mode?:'word'|'line'|'fade';
+  framesPerWord?:number;
+}> = ({text, d, fontSize=36, fontWeight=700, color=C.text, align='center', mode='word', framesPerWord=4}) => {
+  const frame = useCurrentFrame();
+  const words = text.split(' ');
+  
+  if (mode === 'fade') {
+    const progress = interpolate(frame - d, [0, 25], [0, 1], {
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
+      extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+    });
+    return (
+      <div style={{fontSize, fontWeight, color, textAlign:align, opacity:progress, 
+        transform:\`translateY(\${interpolate(progress,[0,1],[30,0])}px)\`}}>
+        {text}
+      </div>
+    );
+  }
+  
+  return (
+    <div style={{fontSize, fontWeight, textAlign:align, display:'flex', flexWrap:'wrap', 
+      justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+      gap: \`0 \${fontSize * 0.3}px\`}}>
+      {words.map((word, i) => {
+        const wordDelay = d + i * framesPerWord;
+        const progress = interpolate(frame - wordDelay, [0, 12], [0, 1], {
+          easing: Easing.bezier(0.16, 1, 0.3, 1),
+          extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+        });
+        return (
+          <span key={i} style={{
+            color,
+            opacity: progress,
+            transform: \`translateY(\${interpolate(progress, [0,1], [20, 0])}px)\`,
+            display: 'inline-block',
+          }}>
+            {word}
+          </span>
+        );
+      })}
+    </div>
+  );
+};
+
+const GlowCard:React.FC<{
+  children:React.ReactNode;
+  d:number;
+  from?:string;
+  accent?:string;
+  elevation?:1|2|3|4;
+  width?:number|string;
+  active?:boolean;
+  style?:React.CSSProperties;
+}> = ({children, d, from='up', accent=C.accent, elevation=2, width='auto', active=true, style}) => {
+  const frame = useCurrentFrame();
+  
+  const shadows:{[key:number]:string} = {
+    1: '0 2px 8px rgba(0,0,0,0.3)',
+    2: '0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06)',
+    3: '0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)',
+    4: \`0 8px 32px \${accent}20, 0 0 60px \${accent}08, 0 0 0 1px \${accent}30\`,
+  };
+
+  const glowIntensity = active 
+    ? interpolate(frame % 120, [0, 60, 120], [0.03, 0.06, 0.03], {extrapolateRight:'clamp', extrapolateLeft:'clamp'})
+    : 0;
+  
+  return (
+    <E d={d} from={from} style={{width, ...style}}>
+      <div style={{
+        backgroundColor: C.card,
+        borderRadius: 16,
+        padding: 32,
+        border: active ? \`1px solid \${accent}30\` : \`1px solid \${C.border}\`,
+        boxShadow: shadows[active ? Math.max(elevation, 3) : elevation],
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {active && (
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+            background: \`linear-gradient(90deg, transparent, \${accent}, transparent)\`,
+            opacity: 0.6,
+          }}/>
+        )}
+        {active && (
+          <div style={{
+            position: 'absolute', top: -50, right: -50, width: 200, height: 200,
+            background: \`radial-gradient(circle, \${accent}\${Math.round(glowIntensity * 255).toString(16).padStart(2,'0')}, transparent 70%)\`,
+            pointerEvents: 'none',
+          }}/>
+        )}
+        <div style={{position:'relative', zIndex:1}}>
+          {children}
+        </div>
+      </div>
+    </E>
+  );
+};
+
+const AnimatedLine:React.FC<{
+  x1:number; y1:number; x2:number; y2:number;
+  d:number;
+  color?:string;
+  strokeWidth?:number;
+  dashed?:boolean;
+  duration?:number;
+}> = ({x1, y1, x2, y2, d, color=C.accent, strokeWidth=2, dashed=false, duration=30}) => {
+  const frame = useCurrentFrame();
+  const progress = interpolate(frame - d, [0, duration], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  
+  const length = Math.sqrt(Math.pow(x2-x1, 2) + Math.pow(y2-y1, 2));
+  
+  return (
+    <svg style={{position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:0}}>
+      <line
+        x1={x1} y1={y1} x2={x2} y2={y2}
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeDasharray={dashed ? '8 6' : \`\${length}\`}
+        strokeDashoffset={dashed ? 0 : length * (1 - progress)}
+        strokeLinecap="round"
+        opacity={interpolate(progress, [0, 0.1], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'})}
+      />
+      {progress > 0.8 && (
+        <circle
+          cx={interpolate(progress, [0,1], [x1, x2])}
+          cy={interpolate(progress, [0,1], [y1, y2])}
+          r={4}
+          fill={color}
+          opacity={interpolate(progress, [0.8, 1], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'})}
+        />
+      )}
+    </svg>
+  );
+};
+
+const ProgressDots:React.FC<{
+  total:number;
+  current:number;
+  d:number;
+  accent?:string;
+  position?:'bottom'|'right';
+}> = ({total, current, d, accent=C.accent, position='bottom'}) => {
+  const frame = useCurrentFrame();
+  const isHorizontal = position === 'bottom';
+  
+  return (
+    <E d={d} from="pop" style={{
+      position: 'absolute',
+      ...(isHorizontal 
+        ? {bottom: 60, left: '50%', transform: 'translateX(-50%)'}
+        : {right: 80, top: '50%', transform: 'translateY(-50%)'}
+      ),
+    }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: isHorizontal ? 'row' : 'column',
+        gap: 12,
+        alignItems: 'center',
+      }}>
+        {Array.from({length: total}).map((_, i) => {
+          const isActive = i === current;
+          const isPast = i < current;
+          return (
+            <div key={i} style={{
+              width: isActive ? (isHorizontal ? 32 : 8) : 8,
+              height: isActive ? (isHorizontal ? 8 : 32) : 8,
+              borderRadius: 4,
+              backgroundColor: isActive ? accent : isPast ? \`\${accent}60\` : 'rgba(255,255,255,0.15)',
+              transition: 'none',
+            }}/>
+          );
+        })}
+      </div>
+    </E>
+  );
+};
+
+const AccentSeparator:React.FC<{
+  d:number;
+  width?:number;
+  color?:string;
+  variant?:'line'|'dots'|'gradient';
+}> = ({d, width=80, color=C.accent, variant='line'}) => {
+  const frame = useCurrentFrame();
+  const progress = interpolate(frame - d, [0, 25], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  
+  if (variant === 'dots') {
+    return (
+      <div style={{display:'flex', gap:8, justifyContent:'center', opacity: progress}}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{
+            width: 6, height: 6, borderRadius: 3,
+            backgroundColor: i === 1 ? color : \`\${color}40\`,
+            transform: \`scale(\${interpolate(
+              frame - d - i * 5, [0, 15], [0, 1],
+              {easing: Easing.bezier(0.34, 1.56, 0.64, 1), extrapolateLeft:'clamp', extrapolateRight:'clamp'}
+            )})\`,
+          }}/>
+        ))}
+      </div>
+    );
+  }
+  
+  if (variant === 'gradient') {
+    return (
+      <div style={{
+        width: width * progress, height: 2, margin: '0 auto',
+        background: \`linear-gradient(90deg, transparent, \${color}, transparent)\`,
+        borderRadius: 1,
+      }}/>
+    );
+  }
+  
+  return (
+    <div style={{
+      width: width * progress, height: 2,
+      backgroundColor: color, borderRadius: 1, margin: '0 auto',
+    }}/>
+  );
 };
 
 // Safety: always clamp interpolate results to prevent undefined/NaN

@@ -280,6 +280,281 @@ Instead of plain text, use these for key phrases:
 - **Underline draw-on**: Animated underline using evolvePath under important text
 - **Highlight background**: Accent-colored rectangle slides behind text at opacity 0.15
 
+### 1.12 Advanced Design Rules
+
+**Rule 1: ELEVATION SYSTEM — Depth Layers**
+
+Each element has an elevation level that defines its shadow and visual presence:
+
+```
+Level 0: Background (C.bg) — no shadow
+Level 1: Surface (C.card) — boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+Level 2: Raised (active cards) — boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06)'
+Level 3: Floating (overlays, modals) — boxShadow: '0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)'
+Level 4: Glow (main active element) — boxShadow: '0 8px 32px rgba(10,233,141,0.15), 0 0 60px rgba(10,233,141,0.05)'
+```
+
+NEVER use the same shadow for all elements. The most important element gets Level 3-4, secondary ones Level 1-2.
+
+**Rule 2: ANIMATION VELOCITY HIERARCHY**
+
+Entry speed communicates importance:
+
+```
+Hero elements (main title, big number): 30-40 frames — SLOW, dramatic
+Primary content (cards, charts): 18-25 frames — normal
+Secondary content (labels, captions): 12-15 frames — fast, doesn't compete
+Background/decorative: 40-60 frames — very slow, doesn't distract
+```
+
+NEVER animate everything at the same speed. Important things enter SLOW (feel heavy, important). Secondary things enter FAST (feel light, don't distract).
+
+**Rule 3: COLOR TEMPERATURE — Warm vs Cool**
+
+In dark themes, luminosity is your main tool:
+
+```
+Active/Important: accent color at 100% + subtle glow
+Normal: white at 100%
+Secondary: white at 55% (C.dim)
+Disabled/Past: white at 25% — rgba(255,255,255,0.25)
+Background accent: accent at 4-8% — rgba(10,233,141,0.04)
+```
+
+An element can transition between states: `interpolateColors(progress, [0,1], ['rgba(255,255,255,0.25)', C.accent])` to "activate" when the narrator mentions it.
+
+**Rule 4: VISUAL BREATHING — Nothing completely static**
+
+After an element finishes its entrance, it should have "micro-life":
+
+- Glow that pulses subtly: `opacity: 0.05 + Math.sin(frame * 0.03) * 0.02` (NOTE: only for decorative glow, NOT for text)
+- Subtle shadow shift: shadow moves 1-2px over time
+- Background gradient rotation: the gradient angle rotates slowly
+
+IMPORTANT: This applies ONLY to decorative elements (backgrounds, glows, separators). Text and data NEVER move after entering.
+
+**Rule 5: TYPOGRAPHIC MOMENTS — Text as protagonist**
+
+When text IS the main content (callouts, key phrases, definitions):
+
+```
+- Use animated letter-spacing: -2px → 0px during entrance
+- Apply subtle text-shadow: '0 0 40px rgba(10,233,141,0.15)' on accent text
+- Reveal word by word when text is short (< 6 words)
+- For numbers: ALWAYS use CountUp, never show numbers static
+```
+
+**Rule 6: COMPOSITION WEIGHT — Controlled asymmetry**
+
+Not all layouts should be centered symmetric. Use asymmetry when content allows:
+
+```
+60/40 split: Main content 60% left, supplementary visual 40% right
+70/30 split: Large data point left, metadata/context right
+Golden ratio: Main element at 38% of width, not exactly centered
+```
+
+Centered symmetric ONLY for: titles, callouts, solo metrics, and icon reveals. Everything else benefits from asymmetric tension.
+
+**Rule 7: PROGRESSIVE DISCLOSURE — Build complexity**
+
+Never show the final layout immediately. Build:
+
+```
+Frame 0-30: Only the title (viewer knows the topic)
+Frame 30-60: First element appears (viewer starts to understand)
+Frame 60-90: Second element (pattern emerges)
+Frame 90-120: Third element (viewer has the complete picture)
+```
+
+Each new element should make the viewer say "ah, I see the pattern now". This is fundamentally different from "stagger 5 frames between items".
+
+**Rule 8: ACCENT CONTAINMENT — Controlled accent color**
+
+The accent color (#0ae98d) is VERY bright in dark themes. Rules:
+
+```
+- NEVER use accent as background of a large area (> 200px²)
+- Accent only for: borders, text, small indicators, icon color, underlines
+- For accent backgrounds: use at 4-8% opacity as glow/gradient
+- For "filled" buttons/badges: accent background with text C.bg (dark on bright)
+- Maximum 3 accent elements simultaneously visible per screen
+```
+
+**Rule 9: CONNECTIVE TISSUE — Elements that connect sections**
+
+Between sections, use elements that create continuity:
+
+```
+- An "accent line" that persists between sections (thin line, 2px, accent, at same Y position)
+- Subtle progress indicator in the corner (dots or bar)
+- Consistent element positioning: if a title is at a certain position in Section 1,
+  the title of Section 2 appears in the same position
+- Background gradient that shifts subtly between sections (doesn't disappear/reappear)
+```
+
+**Rule 10: NEGATIVE SPACE AS DESIGN — Space with intention**
+
+Empty space is not "leftover space" — it is design:
+
+```
+- Between title and content: ALWAYS 50-80px of breathing room
+- Around a callout: the empty space IS the decoration
+- Inside cards: generous padding (32-40px) conveys premium
+- The "safe area" can be 70-80% filled — NOT 100% — breathing room is premium
+```
+
+Violation: adding more content to "fill" space. Premium feels spacious, not packed.
+
+### 1.13 Advanced Animation Techniques
+
+**Technique 1: Staggered Cascade with Depth — Entrance with depth of field**
+
+Instead of simple stagger (delay between items), each item enters from farther and more blurred:
+
+```tsx
+const CascadeItem:React.FC<{
+  d:number;
+  index:number;
+  children:React.ReactNode;
+}> = ({d, index, children}) => {
+  const frame = useCurrentFrame();
+  const staggerDelay = d + index * 8;
+  
+  // Each successive item has more entrance distance
+  const distance = 60 + index * 15; // Later items travel more
+  const duration = 22 + index * 2;  // Later items are a bit slower
+  
+  const progress = interpolate(frame - staggerDelay, [0, duration], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  
+  return (
+    <div style={{
+      opacity: progress,
+      transform: `translateY(${interpolate(progress, [0,1], [distance, 0])}px)`,
+      filter: `blur(${interpolate(progress, [0, 0.5, 1], [4, 1, 0])}px)`,
+    }}>
+      {children}
+    </div>
+  );
+};
+```
+
+The blur entrance simulates depth of field — elements "approach" the camera. Increasing distance creates a sense that each item "comes from farther away".
+
+**Technique 2: Number Morphing — Odometer-style digits**
+
+Instead of CountUp that jumps from 0 to N, digits "roll" like an odometer:
+
+```tsx
+const OdometerDigit:React.FC<{
+  value:number;
+  d:number;
+  fontSize?:number;
+  color?:string;
+}> = ({value, d, fontSize=96, color=C.accent}) => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  
+  const progress = spring({
+    frame: frame - d,
+    fps,
+    config: {damping: 20, mass: 0.6, stiffness: 80},
+  });
+  
+  const currentValue = interpolate(progress, [0, 1], [0, value], {
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  
+  const displayDigits = Math.round(currentValue).toString().split('');
+  
+  return (
+    <div style={{display: 'flex', overflow: 'hidden', height: fontSize * 1.2}}>
+      {displayDigits.map((digit, i) => {
+        const digitProgress = interpolate(
+          frame - d - i * 3, [0, 30], [0, 1],
+          {easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}
+        );
+        return (
+          <div key={i} style={{
+            fontSize, fontWeight: 700, color,
+            fontFamily: "'DM Sans', sans-serif",
+            lineHeight: 1.2,
+            opacity: digitProgress,
+            transform: `translateY(${interpolate(digitProgress, [0, 1], [fontSize * 0.5, 0])}px)`,
+          }}>
+            {digit}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// Usage with suffix
+const AnimatedMetric:React.FC<{
+  value:number; suffix:string; label:string;
+  d:number; accent?:string;
+}> = ({value, suffix, label, d, accent=C.accent}) => (
+  <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:12}}>
+    <div style={{display:'flex', alignItems:'baseline', gap:4}}>
+      <OdometerDigit value={value} d={d} fontSize={96} color={accent} />
+      <E d={d + 15} from="pop">
+        <span style={{fontSize:48, fontWeight:700, color:accent}}>{suffix}</span>
+      </E>
+    </div>
+    <E d={d + 20} from="up">
+      <span style={{fontSize:22, fontWeight:400, color:C.dim, textTransform:'uppercase', letterSpacing:3}}>
+        {label}
+      </span>
+    </E>
+  </div>
+);
+```
+
+**Technique 3: Morphing Layout — Content that repositions smoothly**
+
+When a section evolves (e.g., from title to title + content), the title MOVES to its new position instead of disappearing and reappearing:
+
+```tsx
+const MorphPosition:React.FC<{
+  children: React.ReactNode;
+  phase: number; // 0 = initial, 1 = final
+  fromY: number;
+  toY: number;
+  fromX?: number;
+  toX?: number;
+  fromScale?: number;
+  toScale?: number;
+  d: number;
+  duration?: number;
+}> = ({children, phase, fromY, toY, fromX=0, toX=0, fromScale=1, toScale=1, d, duration=25}) => {
+  const frame = useCurrentFrame();
+  
+  const morphProgress = interpolate(frame - d, [0, duration], [0, phase], {
+    easing: Easing.bezier(0.45, 0, 0.55, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  
+  const y = interpolate(morphProgress, [0, 1], [fromY, toY]);
+  const x = interpolate(morphProgress, [0, 1], [fromX, toX]);
+  const scale = interpolate(morphProgress, [0, 1], [fromScale, toScale]);
+  
+  return (
+    <div style={{
+      transform: `translate(${x}px, ${y}px) scale(${scale})`,
+      transformOrigin: 'center center',
+    }}>
+      {children}
+    </div>
+  );
+};
+```
+
+Instead of hard cut between "title screen" and "content screen", the title MOVES fluidly to its final position. This creates narrative continuity — the viewer never loses context.
+
 ---
 
 ## SECTION 2: REMOTION TECHNICAL RULES
@@ -342,6 +617,277 @@ const Fd:React.FC<{children:React.ReactNode;fi?:number;fo?:number;dur:number}> =
 ```
 - Last section: use `fo={1}` so it stays visible until end
 - `fo` must be >= 1 (never 0, causes interpolation error)
+
+**AnimatedText — Word-by-word text reveal**
+```tsx
+const AnimatedText:React.FC<{
+  text:string;
+  d:number;
+  fontSize?:number;
+  fontWeight?:number;
+  color?:string;
+  align?:'left'|'center'|'right';
+  mode?:'word'|'line'|'fade';
+  framesPerWord?:number;
+}> = ({text, d, fontSize=36, fontWeight=700, color=C.text, align='center', mode='word', framesPerWord=4}) => {
+  const frame = useCurrentFrame();
+  const words = text.split(' ');
+  
+  if (mode === 'fade') {
+    // Simple fade in as a unit
+    const progress = interpolate(frame - d, [0, 25], [0, 1], {
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
+      extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+    });
+    return (
+      <div style={{fontSize, fontWeight, color, textAlign:align, opacity:progress, 
+        transform:`translateY(${interpolate(progress,[0,1],[30,0])}px)`}}>
+        {text}
+      </div>
+    );
+  }
+  
+  // Word-by-word reveal
+  return (
+    <div style={{fontSize, fontWeight, textAlign:align, display:'flex', flexWrap:'wrap', 
+      justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+      gap: `0 ${fontSize * 0.3}px`}}>
+      {words.map((word, i) => {
+        const wordDelay = d + i * framesPerWord;
+        const progress = interpolate(frame - wordDelay, [0, 12], [0, 1], {
+          easing: Easing.bezier(0.16, 1, 0.3, 1),
+          extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+        });
+        return (
+          <span key={i} style={{
+            color,
+            opacity: progress,
+            transform: `translateY(${interpolate(progress, [0,1], [20, 0])}px)`,
+            display: 'inline-block',
+          }}>
+            {word}
+          </span>
+        );
+      })}
+    </div>
+  );
+};
+```
+- `mode='word'` — reveals word by word (best for short titles < 6 words)
+- `mode='fade'` — simple fade in as a unit (best for subtitles)
+- `framesPerWord` — delay between each word (default: 4 frames)
+
+**GlowCard — Card with animated glow and elevation**
+```tsx
+const GlowCard:React.FC<{
+  children:React.ReactNode;
+  d:number;
+  from?:string;
+  accent?:string;
+  elevation?:1|2|3|4;
+  width?:number|string;
+  active?:boolean;
+  style?:React.CSSProperties;
+}> = ({children, d, from='up', accent=C.accent, elevation=2, width='auto', active=true, style}) => {
+  const frame = useCurrentFrame();
+  
+  const shadows:{[key:number]:string} = {
+    1: '0 2px 8px rgba(0,0,0,0.3)',
+    2: `0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06)`,
+    3: `0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)`,
+    4: `0 8px 32px ${accent}20, 0 0 60px ${accent}08, 0 0 0 1px ${accent}30`,
+  };
+
+  // Subtle glow pulse for active cards (decorative only)
+  const glowIntensity = active 
+    ? interpolate(frame % 120, [0, 60, 120], [0.03, 0.06, 0.03], {extrapolateRight:'clamp', extrapolateLeft:'clamp'})
+    : 0;
+  
+  return (
+    <E d={d} from={from} style={{width, ...style}}>
+      <div style={{
+        backgroundColor: C.card,
+        borderRadius: 16,
+        padding: 32,
+        border: active ? `1px solid ${accent}30` : `1px solid ${C.border}`,
+        boxShadow: shadows[active ? Math.max(elevation, 3) : elevation],
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Subtle top gradient accent line */}
+        {active && (
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+            background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
+            opacity: 0.6,
+          }}/>
+        )}
+        {/* Ambient glow */}
+        {active && (
+          <div style={{
+            position: 'absolute', top: -50, right: -50, width: 200, height: 200,
+            background: `radial-gradient(circle, ${accent}${Math.round(glowIntensity * 255).toString(16).padStart(2,'0')}, transparent 70%)`,
+            pointerEvents: 'none',
+          }}/>
+        )}
+        <div style={{position:'relative', zIndex:1}}>
+          {children}
+        </div>
+      </div>
+    </E>
+  );
+};
+```
+- `elevation` — 1-4, defines shadow depth. Active elements get Level 3-4
+- `active` — adds accent border, glow pulse, and top gradient line
+- Use different elevations to create visual hierarchy between cards
+
+**AnimatedLine — SVG draw-on connector**
+```tsx
+const AnimatedLine:React.FC<{
+  x1:number; y1:number; x2:number; y2:number;
+  d:number;
+  color?:string;
+  strokeWidth?:number;
+  dashed?:boolean;
+  duration?:number;
+}> = ({x1, y1, x2, y2, d, color=C.accent, strokeWidth=2, dashed=false, duration=30}) => {
+  const frame = useCurrentFrame();
+  const progress = interpolate(frame - d, [0, duration], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  
+  const length = Math.sqrt(Math.pow(x2-x1, 2) + Math.pow(y2-y1, 2));
+  
+  return (
+    <svg style={{position:'absolute', top:0, left:0, width:'100%', height:'100%', pointerEvents:'none', zIndex:0}}>
+      <line
+        x1={x1} y1={y1} x2={x2} y2={y2}
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeDasharray={dashed ? '8 6' : `${length}`}
+        strokeDashoffset={dashed ? 0 : length * (1 - progress)}
+        strokeLinecap="round"
+        opacity={interpolate(progress, [0, 0.1], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'})}
+      />
+      {/* Arrow head at end */}
+      {progress > 0.8 && (
+        <circle
+          cx={interpolate(progress, [0,1], [x1, x2])}
+          cy={interpolate(progress, [0,1], [y1, y2])}
+          r={4}
+          fill={color}
+          opacity={interpolate(progress, [0.8, 1], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'})}
+        />
+      )}
+    </svg>
+  );
+};
+```
+- Use for animated connections between diagram nodes
+- `dashed` — for optional/secondary connections
+
+**ProgressDots — Minimal progress indicator**
+```tsx
+const ProgressDots:React.FC<{
+  total:number;
+  current:number;
+  d:number;
+  accent?:string;
+  position?:'bottom'|'right';
+}> = ({total, current, d, accent=C.accent, position='bottom'}) => {
+  const frame = useCurrentFrame();
+  const isHorizontal = position === 'bottom';
+  
+  return (
+    <E d={d} from="pop" style={{
+      position: 'absolute',
+      ...(isHorizontal 
+        ? {bottom: 60, left: '50%', transform: 'translateX(-50%)'}
+        : {right: 80, top: '50%', transform: 'translateY(-50%)'}
+      ),
+    }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: isHorizontal ? 'row' : 'column',
+        gap: 12,
+        alignItems: 'center',
+      }}>
+        {Array.from({length: total}).map((_, i) => {
+          const isActive = i === current;
+          const isPast = i < current;
+          return (
+            <div key={i} style={{
+              width: isActive ? (isHorizontal ? 32 : 8) : 8,
+              height: isActive ? (isHorizontal ? 8 : 32) : 8,
+              borderRadius: 4,
+              backgroundColor: isActive ? accent : isPast ? `${accent}60` : 'rgba(255,255,255,0.15)',
+              transition: 'none', // Remotion — no CSS transitions
+            }}/>
+          );
+        })}
+      </div>
+    </E>
+  );
+};
+```
+- Use at bottom of step/progress compositions
+- Active dot is wider, completed dots are accent at 60%, pending are dim
+
+**AccentSeparator — Decorative animated separator**
+```tsx
+const AccentSeparator:React.FC<{
+  d:number;
+  width?:number;
+  color?:string;
+  variant?:'line'|'dots'|'gradient';
+}> = ({d, width=80, color=C.accent, variant='line'}) => {
+  const frame = useCurrentFrame();
+  const progress = interpolate(frame - d, [0, 25], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  
+  if (variant === 'dots') {
+    return (
+      <div style={{display:'flex', gap:8, justifyContent:'center', opacity: progress}}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{
+            width: 6, height: 6, borderRadius: 3,
+            backgroundColor: i === 1 ? color : `${color}40`,
+            transform: `scale(${interpolate(
+              frame - d - i * 5, [0, 15], [0, 1],
+              {easing: Easing.bezier(0.34, 1.56, 0.64, 1), extrapolateLeft:'clamp', extrapolateRight:'clamp'}
+            )})`,
+          }}/>
+        ))}
+      </div>
+    );
+  }
+  
+  if (variant === 'gradient') {
+    return (
+      <div style={{
+        width: width * progress, height: 2, margin: '0 auto',
+        background: `linear-gradient(90deg, transparent, ${color}, transparent)`,
+        borderRadius: 1,
+      }}/>
+    );
+  }
+  
+  // Default: line
+  return (
+    <div style={{
+      width: width * progress, height: 2,
+      backgroundColor: color, borderRadius: 1, margin: '0 auto',
+    }}/>
+  );
+};
+```
+- `variant='line'` — solid accent line (default)
+- `variant='dots'` — three dots with scale-in animation
+- `variant='gradient'` — gradient line that fades at edges
 
 ### 2.4 Safe Zones
 ```
