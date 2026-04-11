@@ -612,7 +612,10 @@ const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CS
 ```tsx
 const Fd:React.FC<{children:React.ReactNode;fi?:number;fo?:number;dur:number}> = ({children,fi=10,fo=10,dur}) => {
   const frame = useCurrentFrame();
-  return <div style={{opacity:interpolate(frame,[0,fi,dur-fo,dur],[0,1,1,0],{extrapolateRight:'clamp'}),position:'absolute',inset:0}}>{children}</div>;
+  const _fi = Math.max(1, fi);
+  const _fo = Math.max(1, fo);
+  const _end = Math.max(_fi + 1, dur - _fo);
+  return <div style={{opacity:interpolate(frame,[0,_fi,_end,dur],[0,1,1,0],{extrapolateRight:'clamp'}),position:'absolute',inset:0}}>{children}</div>;
 };
 ```
 - Last section: use `fo={1}` so it stays visible until end
