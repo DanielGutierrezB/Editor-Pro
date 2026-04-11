@@ -155,56 +155,66 @@ class RemotionManager {
    */
   _replaceBrandIcons(tsxCode) {
     const brandMap = {
-      // Map common lucide icon usage patterns to brand SVGs
-      'meta': { icons: ['Globe', 'Building'], svg: 'meta.svg' },
+      'meta': { icons: ['Globe', 'Building', 'Layers'], svg: 'meta.svg' },
       'facebook': { icons: ['Facebook', 'ThumbsUp'], svg: 'facebook.svg' },
-      'instagram': { icons: ['Camera', 'Image'], svg: 'instagram.svg' },
-      'whatsapp': { icons: ['MessageCircle', 'Phone'], svg: 'whatsapp.svg' },
-      'google': { icons: ['Search', 'Globe'], svg: 'google.svg' },
-      'youtube': { icons: ['Play', 'Video'], svg: 'youtube.svg' },
+      'instagram': { icons: ['Camera', 'Image', 'Aperture'], svg: 'instagram.svg' },
+      'whatsapp': { icons: ['MessageCircle', 'Phone', 'MessageSquare'], svg: 'whatsapp.svg' },
+      'google': { icons: ['Search', 'Chrome'], svg: 'google.svg' },
+      'youtube': { icons: ['Play', 'Video', 'PlayCircle'], svg: 'youtube.svg' },
       'tiktok': { icons: ['Music', 'Film'], svg: 'tiktok.svg' },
       'linkedin': { icons: ['Linkedin', 'Briefcase'], svg: 'linkedin.svg' },
-      'twitter': { icons: ['Twitter', 'AtSign'], svg: 'twitter.svg' },
+      'twitter': { icons: ['Twitter', 'AtSign', 'Bird'], svg: 'twitter.svg' },
+      'telegram': { icons: ['Send', 'MessageCircle'], svg: 'telegram.svg' },
+      'slack': { icons: ['Hash', 'MessageSquare'], svg: 'slack.svg' },
+      'github': { icons: ['Github', 'Code'], svg: 'github.svg' },
+      'apple': { icons: ['Apple', 'Smartphone'], svg: 'apple.svg' },
+      'microsoft': { icons: ['Monitor', 'Grid'], svg: 'microsoft.svg' },
+      'amazon': { icons: ['ShoppingCart', 'Package'], svg: 'amazon.svg' },
+      'netflix': { icons: ['Film', 'Tv'], svg: 'netflix.svg' },
+      'spotify': { icons: ['Music', 'Headphones'], svg: 'spotify.svg' },
     };
 
-    // Only apply if transcript/description mentions a brand
-    // Check if any brand keywords exist in the TSX comments or text content
     let changed = false;
+    const availableLogos = fs.readdirSync(path.join(this.projectPath, 'public', 'logos')).filter(f => f.endsWith('.svg'));
+
     Object.keys(brandMap).forEach(brand => {
       const regex = new RegExp(brand, 'i');
       if (!regex.test(tsxCode)) return;
-
-      // This brand is mentioned — check if its icons are used without the proper SVG
-      if (tsxCode.includes("staticFile('logos/" + brandMap[brand].svg + "')")) return; // Already using SVG
-
-      // Add staticFile import if not present
-      if (!tsxCode.includes('staticFile')) {
-        tsxCode = tsxCode.replace(
-          /from\s*['"]remotion['"]/,
-          match => match.replace("from 'remotion'", "from 'remotion'").replace('from "remotion"', 'from "remotion"')
-        );
-        // Ensure staticFile is in the import
-        if (!tsxCode.includes('staticFile')) {
-          tsxCode = tsxCode.replace(
-            /(import\s*\{[^}]*)(}\s*from\s*['"]remotion['"])/,
-            '$1, staticFile$2'
-          );
+      
+      const svgFile = brandMap[brand].svg;
+      // Only replace if we have the SVG file
+      if (!availableLogos.includes(svgFile)) return;
+      
+      // Already using the correct SVG
+      if (tsxCode.includes("staticFile('logos/" + svgFile + "')")) return;
+      
+      // Replace lucide icons that represent this brand with the real SVG
+      brandMap[brand].icons.forEach(icon => {
+        // Match <IconName size={...} color={...} .../> patterns
+        const iconRegex = new RegExp('<' + icon + '\\s+[^>]*\\/>', 'g');
+        if (iconRegex.test(tsxCode)) {
+          console.log(`[RemotionManager] Replacing <${icon}/> with ${svgFile} for brand "${brand}"`);
+          tsxCode = tsxCode.replace(iconRegex, 
+            `<Img src={staticFile('logos/${svgFile}')} style={{width:60,height:60,objectFit:'contain'}} />`);
+          changed = true;
         }
-      }
-
-      // Ensure Img is imported
-      if (!tsxCode.includes('Img') || !/(import\s*\{[^}]*\bImg\b)/.test(tsxCode)) {
-        tsxCode = tsxCode.replace(
-          /(import\s*\{[^}]*)(}\s*from\s*['"]remotion['"])/,
-          '$1, Img$2'
-        );
-      }
-
-      changed = true;
+      });
     });
 
     if (changed) {
-      console.log('[RemotionManager] Brand references detected — ensure staticFile/Img imports available');
+      // Ensure staticFile and Img are imported
+      if (!/\bstaticFile\b/.test(tsxCode.match(/import\s*\{[^}]*\}\s*from\s*['"]remotion['"]/)?.[0] || '')) {
+        tsxCode = tsxCode.replace(
+          /(import\s*\{)([^}]*)(}\s*from\s*['"]remotion['"])/,
+          (m, p1, p2, p3) => {
+            let imports = p2;
+            if (!imports.includes('staticFile')) imports += ', staticFile';
+            if (!imports.includes('Img')) imports += ', Img';
+            return p1 + imports + p3;
+          }
+        );
+      }
+      console.log('[RemotionManager] Brand icons replaced with local SVGs');
     }
 
     return tsxCode;
