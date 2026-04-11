@@ -37,11 +37,13 @@ REGLAS DE TIMING:
 - Solo hacer motions más largos (15-30s) cuando el concepto genuinamente lo requiere (un proceso de muchos pasos, una comparación elaborada)
 
 REGLAS DE COBERTURA:
-- Cubrir el 80-95% del video con motions
-- El profesor SIEMPRE debe tener apoyo visual, incluso en transiciones entre conceptos
-- Solo dejar sin motion: silencios largos (>3s), risas, saludos al inicio/final
+- Cubrir el 100% del video con motions — SIN GAPS entre clips
+- El endTime de una propuesta debe ser IGUAL al startTime de la siguiente (cobertura continua)
+- El profesor SIEMPRE debe tener apoyo visual en cada segundo del video
+- Solo dejar sin motion: silencios largos (>5s) al inicio o final
 - Preferir más motions de menor duración que pocos motions largos
-- Para un video de 5 minutos, mínimo 12-15 propuestas
+- Para un video de 2 minutos, mínimo 12-15 propuestas
+- Para un video de 5 minutos, mínimo 20-25 propuestas
 
 Tipos de visual y cuándo usar cada uno:
 - Comparaciones (A vs B) → type: 'comparison'

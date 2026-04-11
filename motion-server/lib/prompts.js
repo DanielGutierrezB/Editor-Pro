@@ -629,7 +629,7 @@ For brand logos, import { staticFile } from 'remotion' and use <Img src={staticF
 Available logos (in public/logos/):
 - meta.svg, facebook.svg, instagram.svg, whatsapp.svg, google.svg, youtube.svg, tiktok.svg, linkedin.svg, twitter.svg, slack.svg, telegram.svg, github.svg, apple.svg, microsoft.svg, amazon.svg, netflix.svg, spotify.svg, pinterest.svg, snapchat.svg
 
-If the brand is NOT in this list, use a lucide-react icon instead (e.g., Globe for websites, Smartphone for apps, Monitor for desktop, Cloud for cloud services, Shield for security, Mail for email).
+If the brand is NOT in this list, DO NOT use any logo or icon for it. Only use logos we actually have as SVGs. Never fake a brand logo with a lucide-react icon.
 DO NOT use cdn.brandfetch.io or any external URL for logos. NEVER reference brandfetch in any way.
 DO NOT load images from external CDNs or URLs.`;
 
