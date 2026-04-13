@@ -243,7 +243,7 @@
             brandfetchKey: aiConfig.brandfetchKey || ""
         };
 
-        self._post("/api/generate", body, function(err, result) {
+        self._post("/api/generate/template", body, function(err, result) {
             if (timedOut) return;
             if (err) { clearTimeout(pipelineTimer); return callback(err); }
             if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
