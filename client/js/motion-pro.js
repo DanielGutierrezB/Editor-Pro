@@ -279,6 +279,7 @@
                         endTime: proposal.endTime,
                         type: proposal.type,
                         description: proposal.description,
+                        group: proposal.group || '',
                         baseTrackIndex: -1,
                         versions: [versionData],
                         activeVersion: version,
