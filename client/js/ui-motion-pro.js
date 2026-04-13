@@ -208,28 +208,31 @@
     }
 
     function _mpUpdateStyleSwatches(palette) {
-        var bgEl = document.getElementById("mp-style-bg");
-        var cardEl = document.getElementById("mp-style-card");
-        var accentEl = document.getElementById("mp-style-accent");
-        var labelEl = document.getElementById("mp-style-label");
+        var swatches = document.querySelectorAll('.mp-swatch');
+        swatches.forEach(function(sw) {
+            var key = sw.getAttribute('data-color-key');
+            if (key && palette[key]) {
+                sw.style.background = palette[key];
+            }
+        });
+        var label = document.getElementById("mp-style-label");
+        if (label) label.textContent = "Personalizado";
         var resetBtn = document.getElementById("btn-mp-reset-style");
-        if (bgEl) bgEl.style.background = palette.bg;
-        if (cardEl) cardEl.style.background = palette.card;
-        if (accentEl) accentEl.style.background = palette.accent;
-        if (labelEl) labelEl.textContent = "Personalizado";
         if (resetBtn) resetBtn.style.display = "";
     }
 
     function _mpResetStyleSwatches() {
-        var bgEl = document.getElementById("mp-style-bg");
-        var cardEl = document.getElementById("mp-style-card");
-        var accentEl = document.getElementById("mp-style-accent");
-        var labelEl = document.getElementById("mp-style-label");
+        var defaults = { bg: '#1a1d23', card: '#2d323a', accent: '#0ae98d', orange: '#fb923c', purple: '#a78bfa', red: '#f87171', text: '#ffffff' };
+        var swatches = document.querySelectorAll('.mp-swatch');
+        swatches.forEach(function(sw) {
+            var key = sw.getAttribute('data-color-key');
+            if (key && defaults[key]) {
+                sw.style.background = defaults[key];
+            }
+        });
+        var label = document.getElementById("mp-style-label");
+        if (label) label.textContent = "Default";
         var resetBtn = document.getElementById("btn-mp-reset-style");
-        if (bgEl) bgEl.style.background = "#1a1d23";
-        if (cardEl) cardEl.style.background = "#2d323a";
-        if (accentEl) accentEl.style.background = "#0ae98d";
-        if (labelEl) labelEl.textContent = "Default";
         if (resetBtn) resetBtn.style.display = "none";
     }
 
@@ -448,6 +451,25 @@
             });
         }
 
+        // Click swatch → HEX color picker
+        document.querySelectorAll('.mp-swatch').forEach(function(sw) {
+            sw.addEventListener('click', function() {
+                var key = sw.getAttribute('data-color-key');
+                var currentColor = sw.style.background || '#000000';
+                var hex = prompt('Color HEX para "' + (sw.title || key) + '":', _rgbToHexFromStyle(currentColor));
+                if (hex && /^#[0-9a-fA-F]{6}$/.test(hex)) {
+                    sw.style.background = hex;
+                    if (!state.customPalette) state.customPalette = {};
+                    state.customPalette[key] = hex;
+                    if (key === 'accent') state.customPalette.green = hex;
+                    if (motionPro) motionPro.customPalette = state.customPalette;
+                    localStorage.setItem("mp_custom_palette", JSON.stringify(state.customPalette));
+                    var label = document.getElementById("mp-style-label");
+                    if (label) label.textContent = "Personalizado";
+                }
+            });
+        });
+
         // Load saved palette on init
         var savedPalette = localStorage.getItem("mp_custom_palette");
         if (savedPalette) {
@@ -458,6 +480,17 @@
                 _mpUpdateStyleSwatches(palette);
             } catch (e) { /* ignore corrupt data */ }
         }
+    }
+
+    function _rgbToHexFromStyle(style) {
+        if (style.startsWith('#')) return style;
+        var match = style.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+        if (match) {
+            return '#' + [match[1], match[2], match[3]].map(function(v) {
+                return parseInt(v).toString(16).padStart(2, '0');
+            }).join('');
+        }
+        return '#000000';
     }
 
     // ─── Server management ────────────────────────────────────────
@@ -884,6 +917,31 @@
                 return;
             }
 
+            // Post-process validation of proposals
+            proposals.forEach(function(p, i) {
+                // Fix 1: reveal with 1 item → callout
+                if (p.type === 'reveal' && p.description && p.description.split(',').length <= 1) {
+                    var wordCount = (p.transcriptSegment || '').split(' ').length;
+                    if (wordCount < 20) {
+                        p.type = 'callout';
+                        var clipNum = String(i + 1).length < 2 ? "0" + (i + 1) : String(i + 1);
+                        p.id = clipNum + "-callout-" + seqPrefix;
+                    }
+                }
+                // Fix 2: gauge → metrics (gauge template removed)
+                if (p.type === 'gauge') {
+                    p.type = 'metrics';
+                    var clipNum2 = String(i + 1).length < 2 ? "0" + (i + 1) : String(i + 1);
+                    p.id = clipNum2 + "-metrics-" + seqPrefix;
+                }
+                // Fix 3: ui → cards (ui template inappropriate for educational content)
+                if (p.type === 'ui') {
+                    p.type = 'cards';
+                    var clipNum3 = String(i + 1).length < 2 ? "0" + (i + 1) : String(i + 1);
+                    p.id = clipNum3 + "-cards-" + seqPrefix;
+                }
+            });
+
             motionPro.proposals = proposals;
             motionPro.saveState();
             mpShowStep(2);
@@ -1283,6 +1341,9 @@
             state.mpGenerating = false;
             // hideElement("mp-generate-progress"); // removed — using inline bar in Step 2 only
             hideElement("mp-generate-progress-inline");
+            // Hide Step 2 header progress bar
+            var step2Wrap = document.getElementById("mp-step2-progress");
+            if (step2Wrap) step2Wrap.classList.add("hidden");
             refreshMPHeaderProgressVisibility();
             motionPro.saveState();
             mpRenderControlPanel();
@@ -1311,6 +1372,9 @@
                     state.mpGenerating = false;
                     // hideElement("mp-generate-progress"); // removed — using inline bar in Step 2 only
                     hideElement("mp-generate-progress-inline");
+                    // Hide Step 2 header progress bar on cancel
+                    var step2WrapCancel = document.getElementById("mp-step2-progress");
+                    if (step2WrapCancel) step2WrapCancel.classList.add("hidden");
                     refreshMPHeaderProgressVisibility();
                     motionPro.saveState();
                     mpRenderControlPanel();
@@ -1577,7 +1641,10 @@
         // Do not clear mpGenerating here — this runs after each motion during batch generation
         // and would hide the progress bar and confuse state until the pipeline finishes.
 
-        var motions = motionPro.motions;
+        // Sort motions by startTime before rendering
+        var motions = motionPro.motions.slice().sort(function(a, b) {
+            return (a.startTime || 0) - (b.startTime || 0);
+        });
         showElement("mp-motions-summary");
         var countEl = document.getElementById("mp-motions-count");
         if (countEl) countEl.textContent = motions.length;
@@ -1888,6 +1955,11 @@
         var textInline = document.getElementById("mp-generate-progress-text-inline");
         if (fillInline) fillInline.style.width = pct + "%";
         if (textInline) textInline.textContent = text || "";
+        // Update Step 2 header mini progress bar (visible when collapsed)
+        var step2Fill = document.getElementById("mp-step2-progress-fill");
+        var step2Wrap = document.getElementById("mp-step2-progress");
+        if (step2Fill) step2Fill.style.width = pct + "%";
+        if (step2Wrap && pct > 0) step2Wrap.classList.remove("hidden");
         refreshMPHeaderProgressVisibility();
     }
 

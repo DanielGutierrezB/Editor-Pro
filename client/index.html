@@ -1009,11 +1009,15 @@
                                     <button id="btn-mp-import-style" class="btn btn-sm btn-ghost" title="Importar imagen de referencia">🎨 Importar</button>
                                 </div>
                             </div>
-                            <div id="mp-style-preview" style="display:flex; gap:6px; align-items:center;">
-                                <div id="mp-style-bg" style="width:24px; height:24px; border-radius:4px; background:#1a1d23; border:1px solid rgba(255,255,255,0.1);"></div>
-                                <div id="mp-style-card" style="width:24px; height:24px; border-radius:4px; background:#2d323a; border:1px solid rgba(255,255,255,0.1);"></div>
-                                <div id="mp-style-accent" style="width:24px; height:24px; border-radius:4px; background:#0ae98d; border:1px solid rgba(255,255,255,0.1);"></div>
-                                <span id="mp-style-label" style="font-size:10px; color:var(--text-muted); margin-left:4px;">Default</span>
+                            <div id="mp-style-preview" style="display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
+                                <div class="mp-swatch" data-color-key="bg" style="width:20px; height:20px; border-radius:3px; background:#1a1d23; border:1px solid rgba(255,255,255,0.15); cursor:pointer;" title="Background"></div>
+                                <div class="mp-swatch" data-color-key="card" style="width:20px; height:20px; border-radius:3px; background:#2d323a; border:1px solid rgba(255,255,255,0.15); cursor:pointer;" title="Card"></div>
+                                <div class="mp-swatch" data-color-key="accent" style="width:20px; height:20px; border-radius:3px; background:#0ae98d; border:1px solid rgba(255,255,255,0.15); cursor:pointer;" title="Accent"></div>
+                                <div class="mp-swatch" data-color-key="orange" style="width:20px; height:20px; border-radius:3px; background:#fb923c; border:1px solid rgba(255,255,255,0.15); cursor:pointer;" title="Warning"></div>
+                                <div class="mp-swatch" data-color-key="purple" style="width:20px; height:20px; border-radius:3px; background:#a78bfa; border:1px solid rgba(255,255,255,0.15); cursor:pointer;" title="Secondary"></div>
+                                <div class="mp-swatch" data-color-key="red" style="width:20px; height:20px; border-radius:3px; background:#f87171; border:1px solid rgba(255,255,255,0.15); cursor:pointer;" title="Danger"></div>
+                                <div class="mp-swatch" data-color-key="text" style="width:20px; height:20px; border-radius:3px; background:#ffffff; border:1px solid rgba(255,255,255,0.15); cursor:pointer;" title="Text"></div>
+                                <span id="mp-style-label" style="font-size:9px; color:var(--text-muted); margin-left:4px;">Default</span>
                             </div>
                             <input type="file" id="mp-style-file-input" accept="image/*" style="display:none">
                         </div>
@@ -1040,6 +1044,11 @@
                         <span class="rec-step-num">2</span>
                         <span class="rec-step-title">Selección y Generación</span>
                         <span id="mp-step-hint-2" class="rec-step-hint"></span>
+                        <span id="mp-step2-progress" class="mp-step2-progress hidden" style="flex:1; max-width:120px; margin-left:8px;">
+                            <div style="height:3px; background:var(--bg-active); border-radius:2px; overflow:hidden;">
+                                <div id="mp-step2-progress-fill" style="height:100%; width:0%; background:var(--accent); border-radius:2px; transition:none;"></div>
+                            </div>
+                        </span>
                         <span class="rec-step-check">✓</span>
                         <span class="rec-step-arrow">▸</span>
                     </div>
