@@ -34,7 +34,7 @@ app.get('/api/status', (_req, res) => {
 });
 
 // Rhythm analysis — detects pauses, emphasis, tempo changes from transcript timestamps
-const { analyzeRhythm, formatRhythmForPrompt } = require('./lib/rhythm-analyzer');
+const { analyzeRhythm, formatRhythmForPrompt, preSegment } = require('./lib/rhythm-analyzer');
 
 app.post('/api/rhythm', (req, res) => {
   try {
@@ -42,12 +42,14 @@ app.post('/api/rhythm', (req, res) => {
     if (!transcriptJson) return res.status(400).json({ error: 'Missing transcriptJson' });
 
     const rhythmData = analyzeRhythm(transcriptJson);
-    const promptText = formatRhythmForPrompt(rhythmData);
+    const segments = preSegment(transcriptJson);
+    const promptText = formatRhythmForPrompt(rhythmData, segments);
 
     res.json({
       markers: rhythmData.markers,
       summary: rhythmData.summary,
       sentences: rhythmData.sentences,
+      preSegments: segments,
       promptText: promptText,
     });
   } catch(e) {

@@ -129,9 +129,74 @@ function analyzeRhythm(transcriptJson) {
 }
 
 /**
+ * Pre-segment transcript using natural pauses (> 0.5s gaps between words).
+ * Returns an array of segments with start/end times and text.
+ */
+function preSegment(transcriptJson) {
+  const segments = transcriptJson.segments || [];
+  const allWords = [];
+  
+  segments.forEach(seg => {
+    (seg.words || []).forEach(w => {
+      if (w.type === 'word' && w.text) {
+        allWords.push({
+          text: w.text,
+          start: w.start,
+          end: w.start + w.duration,
+          eos: w.eos || false,
+        });
+      }
+    });
+  });
+  
+  if (allWords.length < 2) return [];
+  
+  // Find natural break points: pauses > 0.5s between words
+  const breakPoints = [0]; // start
+  for (let i = 1; i < allWords.length; i++) {
+    const gap = allWords[i].start - allWords[i-1].end;
+    if (gap > 0.5) {
+      breakPoints.push(i);
+    }
+  }
+  
+  // Build segments from break points
+  const result = [];
+  for (let i = 0; i < breakPoints.length; i++) {
+    const startIdx = breakPoints[i];
+    const endIdx = (i + 1 < breakPoints.length) ? breakPoints[i + 1] - 1 : allWords.length - 1;
+    
+    const segWords = allWords.slice(startIdx, endIdx + 1);
+    const text = segWords.map(w => w.text).join(' ');
+    
+    result.push({
+      startTime: parseFloat(segWords[0].start.toFixed(1)),
+      endTime: parseFloat(segWords[segWords.length - 1].end.toFixed(1)),
+      text: text,
+      wordCount: segWords.length,
+    });
+  }
+  
+  // Merge very short segments (< 3 words) with their neighbor
+  const merged = [];
+  for (let i = 0; i < result.length; i++) {
+    if (result[i].wordCount < 3 && merged.length > 0) {
+      // Merge with previous
+      merged[merged.length - 1].endTime = result[i].endTime;
+      merged[merged.length - 1].text += ' ' + result[i].text;
+      merged[merged.length - 1].wordCount += result[i].wordCount;
+    } else {
+      merged.push({...result[i]});
+    }
+  }
+  
+  return merged;
+}
+
+/**
  * Format rhythm data as text to append to the analysis prompt
  */
-function formatRhythmForPrompt(rhythmData) {
+function formatRhythmForPrompt(rhythmData, preSegments) {
   if (!rhythmData || !rhythmData.markers || rhythmData.markers.length === 0) {
     return '';
   }
@@ -163,7 +228,16 @@ function formatRhythmForPrompt(rhythmData) {
   text += '- Usar callouts/reveals en momentos de ÉNFASIS\n';
   text += '- Ajustar la cantidad de contenido según el TEMPO (rápido = menos items, lento = más items)\n';
   
+  if (preSegments && preSegments.length > 0) {
+    text += '\n\nSEGMENTOS NATURALES DEL NARRADOR (usa estos como guía para los cortes de clips):\n';
+    preSegments.forEach((seg, i) => {
+      text += `  Segmento ${i+1} [${seg.startTime}s - ${seg.endTime}s] (${seg.wordCount} palabras): "${seg.text.substring(0, 80)}${seg.text.length > 80 ? '...' : ''}"\n`;
+    });
+    text += '\nCada segmento natural PUEDE ser un clip. NO cortes un segmento a la mitad.\n';
+    text += 'Si un segmento es una enumeración (lista de items), es UN solo clip.\n';
+  }
+  
   return text;
 }
 
-module.exports = { analyzeRhythm, formatRhythmForPrompt };
+module.exports = { analyzeRhythm, formatRhythmForPrompt, preSegment };
