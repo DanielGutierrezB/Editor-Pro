@@ -297,6 +297,15 @@
                             return;
                         }
                         if (result.path) {
+                            // Copy frame to Motion-Pro session folder
+                            if (_mpOutputDir && fs) {
+                                try {
+                                    var refDir = path.join(_mpOutputDir, "reference");
+                                    if (!fs.existsSync(refDir)) fs.mkdirSync(refDir, {recursive:true});
+                                    var destPath = path.join(refDir, "style-reference.png");
+                                    fs.copyFileSync(result.path, destPath);
+                                } catch(copyErr) { console.warn("Could not copy reference frame:", copyErr.message); }
+                            }
                             // Load the captured frame and extract palette
                             _extractPaletteFromImage("file://" + result.path, function(err, palette) {
                                 if (err) {
