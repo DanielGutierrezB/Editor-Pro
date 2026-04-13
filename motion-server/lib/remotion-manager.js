@@ -606,6 +606,7 @@ class RemotionManager {
       '--muted',
       '--image-format=jpeg',
       '--jpeg-quality=100',
+      '--concurrency=1',
     ];
 
     const proc = spawn(npxPath, args, {
