@@ -48,8 +48,9 @@ REGLAS DE COBERTURA:
 - El profesor SIEMPRE debe tener apoyo visual en cada segundo del video
 - Solo dejar sin motion: silencios largos (>5s) al inicio o final
 - Preferir más motions de menor duración que pocos motions largos
-- Para un video de 2 minutos, mínimo 12-15 propuestas
-- Para un video de 5 minutos, mínimo 20-25 propuestas
+- Para un video de 1-2 minutos, mínimo 14-18 propuestas (un motion cada 7-10 segundos)
+- Para un video de 3-5 minutos, mínimo 20-30 propuestas
+- REGLA: divide el video en segmentos de 7-10 segundos. Cada segmento = 1 propuesta.
 
 Tipos de visual y cuándo usar cada uno:
 - Comparaciones (A vs B) → type: 'comparison'

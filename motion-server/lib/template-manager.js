@@ -22,8 +22,61 @@ class TemplateManager {
     return this.templates[type] || this.templates['title']; // fallback to title
   }
 
-  fillTemplate(type, contentValues, compositionId, durationFrames, proposalStartTime) {
+  /**
+   * Match item labels/titles against transcript words to find accurate timestamps.
+   * Returns item array with corrected time fields.
+   */
+  matchTimestamps(items, transcriptSegment, clipStartTime) {
+    if (!items || !Array.isArray(items) || !transcriptSegment) return items;
+
+    // Parse transcript lines: "[0.2s] Hay algo que..."
+    const lines = transcriptSegment.split('\n');
+    const wordTimestamps = [];
+
+    lines.forEach(line => {
+      const timeMatch = line.match(/\[(\d+\.?\d*)s?\]/);
+      if (timeMatch) {
+        const absTime = parseFloat(timeMatch[1]);
+        const words = line.replace(/\[\d+\.?\d*s?\]\s*/, '').toLowerCase().split(/\s+/);
+        words.forEach(w => {
+          wordTimestamps.push({ word: w.replace(/[.,;:!?]/g, ''), absTime });
+        });
+      }
+    });
+
+    return items.map((item, i) => {
+      // Get the key text from the item
+      const searchText = (item.label || item.title || item.text || '').toLowerCase();
+      const searchWords = searchText.split(/\s+/).filter(w => w.length > 3); // only significant words
+
+      // Find the first matching word in the transcript
+      let bestTime = null;
+      for (const sw of searchWords) {
+        const match = wordTimestamps.find(wt => wt.word.includes(sw) || sw.includes(wt.word));
+        if (match) {
+          bestTime = match.absTime - clipStartTime; // convert to relative time
+          break;
+        }
+      }
+
+      if (bestTime !== null && bestTime >= 0) {
+        item.time = parseFloat(bestTime.toFixed(1));
+      }
+
+      return item;
+    });
+  }
+
+  fillTemplate(type, contentValues, compositionId, durationFrames, proposalStartTime, transcriptSegment) {
     let tsx = this.getTemplate(type);
+
+    // Match timestamps for arrays with text
+    const arrayKeysToMatch = ['ITEMS', 'CARDS_DATA', 'NODES', 'LIST_ITEMS', 'STEPS_DATA', 'STAGES', 'EVENTS', 'REVEAL_ITEMS'];
+    arrayKeysToMatch.forEach(key => {
+      if (contentValues[key] && Array.isArray(contentValues[key])) {
+        contentValues[key] = this.matchTimestamps(contentValues[key], transcriptSegment, proposalStartTime || 0);
+      }
+    });
 
     // Inject clip startTime for timestamp calculations
     tsx = tsx.replace(/const CLIP_START_TIME = .*?;/, `const CLIP_START_TIME = ${proposalStartTime || 0};`);

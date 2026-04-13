@@ -23,12 +23,12 @@ const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({c
 
 const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CSSProperties}> = ({d,children,from='up',style}) => {
   const frame = useCurrentFrame();
-  const progress = interpolate(frame-d, [0, 20], [0, 1], {
+  const progress = interpolate(frame-d, [0, 30], [0, 1], {
     easing: Easing.bezier(0.16, 1, 0.3, 1),
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
-  const y = from==='up'?interpolate(progress,[0,1],[80,0]):from==='down'?interpolate(progress,[0,1],[-80,0]):0;
-  const x = from==='left'?interpolate(progress,[0,1],[80,0]):from==='right'?interpolate(progress,[0,1],[-80,0]):0;
+  const y = from==='up'?interpolate(progress,[0,1],[50,0]):from==='down'?interpolate(progress,[0,1],[-50,0]):0;
+  const x = from==='left'?interpolate(progress,[0,1],[50,0]):from==='right'?interpolate(progress,[0,1],[-50,0]):0;
   const sc = from==='pop'?interpolate(progress,[0,1],[0.85,1]):1;
   return <div style={{transform:`translate(${x}px,${y}px) scale(${sc})`,opacity:progress,...style}}>{children}</div>;
 };
@@ -116,15 +116,17 @@ function readingFrames(text: string): number {
 }
 
 function baItemDelay(item: any, index: number, totalItems: number, items: any[], baseDelay: number, dur: number): number {
+  const maxDelay = dur - 90; // leave 3s hold at end
+  const evenStagger = Math.floor(maxDelay / Math.max(totalItems, 1));
+
   const t = getItemTime(item);
   if (t !== undefined && t > 0) {
-    return Math.round(t * 30);
+    const tsDelay = Math.round(t * 30);
+    return Math.min(tsDelay, maxDelay);
   }
-  if (index === 0) return baseDelay + 10;
-  const prevItem = items[index - 1];
-  const prevText = getItemText(prevItem);
-  const prevDel = baItemDelay(prevItem, index - 1, totalItems, items, baseDelay, dur);
-  return Math.min(prevDel + readingFrames(prevText), dur - 60);
+
+  // Even distribution fallback
+  return Math.min(baseDelay + 10 + index * evenStagger, maxDelay);
 }
 
 const Section1:React.FC = () => {
