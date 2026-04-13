@@ -606,7 +606,7 @@ class RemotionManager {
       compositionId,
       outputPath,
       '--codec=prores',
-      '--prores-profile=4444',
+      '--prores-profile=lt',
       
       
       '--muted',
