@@ -13,7 +13,7 @@ import * as LucideIcons from 'lucide-react';
 const C = {
   bg:'#1a1d23', card:'#2d323a', accent:'#0ae98d', green:'#0ae98d',
   orange:'#fb923c', purple:'#a78bfa', red:'#f87171', text:'#ffffff',
-  dim:'rgba(255,255,255,0.55)', border:'rgba(255,255,255,0.08)',
+  dim:'rgba(255,255,255,0.7)', border:'rgba(255,255,255,0.08)',
   glow:'rgba(10,233,141,0.08)',
 };
 
@@ -64,10 +64,10 @@ const GlowCard:React.FC<{
   return (
     <E d={d} from={from} style={{width, ...style}}>
       <div style={{
-        backgroundColor: C.card, borderRadius: 16, padding: 32,
+        backgroundColor: C.card, borderRadius: 16, padding: "36px 36px 44px 36px", minHeight: 220,
         border: active ? `1px solid ${accent}30` : `1px solid ${C.border}`,
         boxShadow: shadows[active ? Math.max(elevation, 3) : elevation],
-        position: 'relative', overflow: 'hidden',
+        position: 'relative', overflow: 'visible',
       }}>
         {active && (<div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2,
           background: `linear-gradient(90deg, transparent, ${accent}, transparent)`, opacity: 0.6,
@@ -104,12 +104,12 @@ const OdometerDigit:React.FC<{value:number;d:number;fontSize?:number;color?:stri
 };
 
 const AnimatedMetric:React.FC<{value:number;suffix:string;label:string;d:number;accent?:string}> = ({value,suffix,label,d,accent=C.accent}) => (
-  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:12}}>
+  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:16}}>
     <div style={{display:'flex',alignItems:'baseline',gap:4}}>
-      <OdometerDigit value={value} d={d} fontSize={96} color={accent}/>
-      <E d={d+15} from="pop"><span style={{fontSize:48,fontWeight:700,color:accent}}>{suffix}</span></E>
+      <OdometerDigit value={value} d={d} fontSize={72} color={accent}/>
+      <E d={d+15} from="pop"><span style={{fontSize:36,fontWeight:700,color:accent}}>{suffix}</span></E>
     </div>
-    <E d={d+20} from="up"><span style={{fontSize:22,fontWeight:400,color:C.dim,textTransform:'uppercase',letterSpacing:3}}>{label}</span></E>
+    <E d={d+20} from="up"><span style={{fontSize:18,fontWeight:500,color:C.dim}}>{label}</span></E>
   </div>
 );
 

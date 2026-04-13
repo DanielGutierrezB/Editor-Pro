@@ -13,7 +13,7 @@ import * as LucideIcons from 'lucide-react';
 const C = {
   bg:'#1a1d23', card:'#2d323a', accent:'#0ae98d', green:'#0ae98d',
   orange:'#fb923c', purple:'#a78bfa', red:'#f87171', text:'#ffffff',
-  dim:'rgba(255,255,255,0.55)', border:'rgba(255,255,255,0.08)',
+  dim:'rgba(255,255,255,0.7)', border:'rgba(255,255,255,0.08)',
   glow:'rgba(10,233,141,0.08)',
 };
 
@@ -52,10 +52,10 @@ const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}
 const TITLE = "Inversión por Plataforma";
 const SUBTITLE = "Distribución del presupuesto Q4 2024";
 const BARS = [
-  { label: "Meta", value: 45, color: "accent" },
-  { label: "Google", value: 32, color: "orange" },
-  { label: "TikTok", value: 18, color: "purple" },
-  { label: "LinkedIn", value: 12, color: "red" },
+  {label:"Meta", value:45, color:"#0AE88A"},
+  {label:"Google", value:32, color:"#0099DD"},
+  {label:"TikTok", value:18, color:"#F3B562"},
+  {label:"LinkedIn", value:12, color:"#F06060"},
 ];
 const VALUE_SUFFIX = "%";
 
@@ -63,11 +63,13 @@ const VALUE_SUFFIX = "%";
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
+const fmtValue = (v:number):string => v >= 1000 ? (v/1000).toFixed(v%1000===0?0:1)+'K' : String(v);
+
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {fps, durationInFrames: dur} = useVideoConfig();
   const maxValue = Math.max(...BARS.map(d => d.value));
-  const maxBarH = 380;
+  const maxBarH = 440;
   const barW = Math.min(120, Math.floor(1200 / BARS.length));
 
   return (
@@ -75,7 +77,7 @@ const Section1:React.FC = () => {
       <Safe style={{justifyContent:'space-between', alignItems:'center'}}>
         <div style={{textAlign:'center', marginBottom:48, width:'100%'}}>
           <E d={0} from="up">
-            <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
+            <div style={{fontSize:42, fontWeight:400, color:C.text}}>{TITLE}</div>
           </E>
           {SUBTITLE && (
             <E d={8} from="up">
@@ -85,7 +87,7 @@ const Section1:React.FC = () => {
         </div>
         <div style={{display:'flex', gap:Math.min(40, Math.floor(800 / BARS.length)), alignItems:'flex-end', justifyContent:'center'}}>
           {BARS.map((d, i) => {
-            const barColor = (C as any)[d.color] || C.accent;
+            const barColor = d.color || C.accent;
             const barProgress = spring({
               frame: frame - 25 - i * 8, fps,
               config: {damping: 18, mass: 0.5, stiffness: 80},
@@ -99,17 +101,18 @@ const Section1:React.FC = () => {
             return (
               <div key={i} style={{display:'flex', flexDirection:'column', alignItems:'center', gap:8}}>
                 <div style={{
-                  fontSize:24, fontWeight:700, color:barColor,
+                  fontSize:22, fontWeight:700, color:'#ffffff',
+                  textShadow:'0 0 4px rgba(0,0,0,0.8)',
                   opacity: interpolate(barProgress, [0.3, 0.6], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'}),
                 }}>
-                  {countValue}{VALUE_SUFFIX}
+                  {fmtValue(countValue)}{VALUE_SUFFIX}
                 </div>
                 <div style={{
-                  width:barW, height:barH, borderRadius:'8px 8px 4px 4px',
-                  backgroundColor:barColor, boxShadow:`0 0 20px ${barColor}20`,
+                  width:barW, height:barH, borderRadius:'6px 6px 0 0',
+                  backgroundColor:barColor,
                 }}/>
                 <div style={{
-                  fontSize:20, fontWeight:700, color:C.dim, marginTop:4,
+                  fontSize:16, fontWeight:500, color:C.dim, marginTop:4,
                   opacity: interpolate(barProgress, [0, 0.3], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'}),
                 }}>
                   {d.label}
