@@ -68,6 +68,8 @@ const fmtValue = (v:number):string => v >= 1000 ? (v/1000).toFixed(v%1000===0?0:
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {fps, durationInFrames: dur} = useVideoConfig();
+  const holdFrames = 60;
+  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 30) / Math.max(BARS.length, 1)));
   const maxValue = Math.max(...BARS.map(d => d.value));
   const maxBarH = 440;
   const barW = Math.min(120, Math.floor(1200 / BARS.length));
@@ -88,8 +90,9 @@ const Section1:React.FC = () => {
         <div style={{display:'flex', gap:Math.min(40, Math.floor(800 / BARS.length)), alignItems:'flex-end', justifyContent:'center'}}>
           {BARS.map((d, i) => {
             const barColor = d.color || C.accent;
+            const barDelay = 30 + i * itemStagger;
             const barProgress = spring({
-              frame: frame - 25 - i * 8, fps,
+              frame: frame - barDelay, fps,
               config: {damping: 18, mass: 0.5, stiffness: 80},
             });
             const barH = interpolate(barProgress, [0, 1], [0, (d.value / maxValue) * maxBarH], {

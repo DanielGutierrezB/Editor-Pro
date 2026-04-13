@@ -99,7 +99,8 @@ const NODES = [
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const staggerDelay = 10;
+  const holdFrames = 60;
+  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 30) / Math.max(NODES.length, 1)));
 
   return (
     <Fd dur={dur} fo={1}>
@@ -110,7 +111,7 @@ const Section1:React.FC = () => {
         <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:16, width:'100%'}}>
           {NODES.map((node, i) => {
             const accentColor = (C as any)[node.accent] || C.accent;
-            const nodeStart = 10 + i * staggerDelay;
+            const nodeStart = 30 + i * itemStagger;
             const nodeWidth = Math.min(360, Math.floor(1400 / NODES.length));
             return (
               <React.Fragment key={i}>

@@ -64,7 +64,8 @@ const STAGES = [
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const staggerDelay = 8;
+  const holdFrames = 60;
+  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 15) / Math.max(STAGES.length, 1)));
 
   return (
     <Fd dur={dur} fo={1}>
@@ -75,8 +76,8 @@ const Section1:React.FC = () => {
         <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:12, width:'100%'}}>
           {STAGES.map((stage, i) => {
             const accentColor = (C as any)[stage.accent] || C.accent;
-            const stageStart = 10 + i * staggerDelay;
-            const isActive = i === STAGES.length - 1 || (frame >= stageStart && frame < 10 + (i + 1) * staggerDelay + 30);
+            const stageStart = 15 + i * itemStagger;
+            const isActive = i === STAGES.length - 1 || (frame >= stageStart && frame < 15 + (i + 1) * itemStagger + 30);
             const widthPercent = 100 - (i * (50 / Math.max(STAGES.length - 1, 1)));
             return (
               <React.Fragment key={i}>

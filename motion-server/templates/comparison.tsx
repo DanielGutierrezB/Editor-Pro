@@ -108,6 +108,14 @@ const Section1:React.FC = () => {
   const {durationInFrames: dur} = useVideoConfig();
   const leftColor = (C as any)[LEFT.accent] || C.red;
   const rightColor = (C as any)[RIGHT.accent] || C.accent;
+  const holdFrames = 60;
+  const totalElements = 3; // left card, VS, right card
+  const elementStagger = Math.max(8, Math.floor((dur - holdFrames - 20) / totalElements));
+  const leftStart = 20;
+  const vsStart = 20 + elementStagger;
+  const rightStart = 20 + 2 * elementStagger;
+  const leftPointStagger = Math.max(8, Math.floor(elementStagger / Math.max(LEFT.points.length, 1)));
+  const rightPointStagger = Math.max(8, Math.floor(elementStagger / Math.max(RIGHT.points.length, 1)));
 
   return (
     <Fd dur={dur} fo={1}>
@@ -116,14 +124,14 @@ const Section1:React.FC = () => {
           <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
         <div style={{display:'flex', gap:40, justifyContent:'center', alignItems:'stretch', width:'100%'}}>
-          <GlowCard d={10} from="left" accent={leftColor} elevation={2} active={false} width={600} style={{flex:1}}>
+          <GlowCard d={leftStart} from="left" accent={leftColor} elevation={2} active={false} width={600} style={{flex:1}}>
             <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:24}}>
               <Icon name={LEFT.icon} size={28} color={leftColor}/>
               <div style={{fontSize:28, fontWeight:700, color:leftColor}}>{LEFT.title}</div>
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {LEFT.points.map((item, i) => (
-                <E key={i} d={20 + i * 8} from="left">
+                <E key={i} d={leftStart + 10 + i * leftPointStagger} from="left">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>
                     <div style={{width:6, height:6, borderRadius:3, backgroundColor:leftColor, flexShrink:0}}/>
                     <span style={{fontSize:22, color:C.dim}}>{item}</span>
@@ -132,7 +140,7 @@ const Section1:React.FC = () => {
               ))}
             </div>
           </GlowCard>
-          <E d={25} from="pop" style={{alignSelf:'center'}}>
+          <E d={vsStart} from="pop" style={{alignSelf:'center'}}>
             <div style={{
               width:52, height:52, borderRadius:26, background:C.card,
               border:`1px solid ${C.border}`,
@@ -141,14 +149,14 @@ const Section1:React.FC = () => {
               boxShadow:'0 8px 24px rgba(0,0,0,0.4)',
             }}>VS</div>
           </E>
-          <GlowCard d={30} from="right" accent={rightColor} elevation={4} active={true} width={600} style={{flex:1}}>
+          <GlowCard d={rightStart} from="right" accent={rightColor} elevation={4} active={true} width={600} style={{flex:1}}>
             <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:24}}>
               <Icon name={RIGHT.icon} size={28} color={rightColor}/>
               <div style={{fontSize:28, fontWeight:700, color:rightColor}}>{RIGHT.title}</div>
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {RIGHT.points.map((item, i) => (
-                <E key={i} d={40 + i * 8} from="right">
+                <E key={i} d={rightStart + 10 + i * rightPointStagger} from="right">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>
                     <div style={{width:6, height:6, borderRadius:3, backgroundColor:rightColor, flexShrink:0}}/>
                     <span style={{fontSize:22, color:C.text}}>{item}</span>

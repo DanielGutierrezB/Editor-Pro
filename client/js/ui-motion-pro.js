@@ -750,16 +750,9 @@
                         '<div class="mp-proposal-desc">' + esc(p.description) + '</div>' +
                     '</div>';
 
-                // Dim generated items
+                // Hide generated items from selection
                 if (p.generated) {
-                    card.style.opacity = '0.5';
-                    card.style.pointerEvents = 'none';
-                    var badge = document.createElement("span");
-                    badge.className = "mp-generated-badge";
-                    badge.textContent = " ✅";
-                    badge.style.marginLeft = "6px";
-                    var topRow = card.querySelector(".mp-proposal-top");
-                    if (topRow) topRow.appendChild(badge);
+                    card.style.display = 'none';
                 }
 
                 var cb = card.querySelector("input[type=checkbox]");

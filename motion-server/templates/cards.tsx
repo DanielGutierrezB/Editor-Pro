@@ -99,7 +99,8 @@ const CARDS_DATA = [
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const staggerDelay = 10;
+  const holdFrames = 60;
+  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 30) / Math.max(CARDS_DATA.length, 1)));
 
   return (
     <Fd dur={dur} fo={1}>
@@ -110,7 +111,7 @@ const Section1:React.FC = () => {
         <div style={{display:'flex', gap:40, justifyContent:'center', alignItems:'stretch', width:'100%'}}>
           {CARDS_DATA.map((card, i) => {
             const accentColor = (C as any)[card.accent] || C.accent;
-            const cardStart = 10 + i * staggerDelay;
+            const cardStart = 30 + i * itemStagger;
             const cardWidth = Math.min(520, Math.floor(1500 / CARDS_DATA.length));
             return (
               <React.Fragment key={i}>

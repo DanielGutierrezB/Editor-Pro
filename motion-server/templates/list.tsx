@@ -100,6 +100,8 @@ const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
   const accentColor = (C as any)[ACCENT_KEY] || C.accent;
+  const holdFrames = 60;
+  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 25) / Math.max(LIST_ITEMS.length, 1)));
   const framesPerItem = Math.floor(dur / LIST_ITEMS.length);
   const activeItem = Math.min(Math.floor(frame / framesPerItem), LIST_ITEMS.length - 1);
 
@@ -124,7 +126,7 @@ const Section1:React.FC = () => {
             const isActive = i === activeItem;
             const isPast = i < activeItem;
             return (
-              <CascadeItem key={i} d={10} index={i}>
+              <CascadeItem key={i} d={25 + i * itemStagger} index={0}>
                 <div style={{
                   display:'flex', alignItems:'center', gap:20, padding:'16px 24px',
                   borderRadius:12,

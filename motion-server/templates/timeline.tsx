@@ -64,7 +64,8 @@ const EVENTS = [
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const staggerDelay = 8;
+  const holdFrames = 60;
+  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 20) / Math.max(EVENTS.length, 1)));
 
   const lineProgress = interpolate(frame, [10, 50], [0, 1], {
     extrapolateLeft:'clamp', extrapolateRight:'clamp',
@@ -91,7 +92,7 @@ const Section1:React.FC = () => {
           </div>
           {EVENTS.map((event, i) => {
             const accentColor = (C as any)[event.accent] || C.accent;
-            const nodeStart = 10 + i * staggerDelay;
+            const nodeStart = 20 + i * itemStagger;
             const xPos = 40 + i * nodeSpacing;
             return (
               <E key={i} d={nodeStart} from="pop" style={{

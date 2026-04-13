@@ -136,7 +136,8 @@ const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
   const accentColor = (C as any)[ACCENT_KEY] || C.accent;
-  const staggerDelay = 8;
+  const holdFrames = 60;
+  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 40) / Math.max(REVEAL_ITEMS.length, 1)));
   const titlePhase = interpolate(frame, [25, 40], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
 
   return (
@@ -151,7 +152,7 @@ const Section1:React.FC = () => {
         </MorphPosition>
         <div style={{marginTop:48, display:'flex', flexDirection:'column', gap:20, alignItems:'center', width:'100%', maxWidth:800}}>
           {REVEAL_ITEMS.map((item, i) => {
-            const itemStart = 30 + i * staggerDelay;
+            const itemStart = 40 + i * itemStagger;
             return (
               <E key={i} d={itemStart} from="up" style={{width:'100%'}}>
                 <div style={{

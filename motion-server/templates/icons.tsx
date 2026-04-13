@@ -81,6 +81,8 @@ const ITEMS = [
 
 const Section1:React.FC = () => {
   const {durationInFrames: dur} = useVideoConfig();
+  const holdFrames = 60;
+  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 30) / Math.max(ITEMS.length, 1)));
 
   return (
     <Fd dur={dur} fo={1}>
@@ -92,7 +94,7 @@ const Section1:React.FC = () => {
           {ITEMS.map((item, i) => {
             const accentColor = (C as any)[item.accent] || C.accent;
             return (
-              <CascadeItem key={i} d={15} index={i}>
+              <CascadeItem key={i} d={30 + i * itemStagger} index={0}>
                 <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:20}}>
                   <div style={{
                     width:180, height:180, borderRadius:90, background:C.card,

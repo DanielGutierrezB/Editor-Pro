@@ -152,6 +152,8 @@ const METRICS = [
 
 const Section1:React.FC = () => {
   const {durationInFrames: dur} = useVideoConfig();
+  const holdFrames = 60;
+  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 20) / Math.max(METRICS.length, 1)));
 
   return (
     <Fd dur={dur} fo={1}>
@@ -163,7 +165,7 @@ const Section1:React.FC = () => {
         <div style={{display:'flex', gap:60, justifyContent:'center', alignItems:'stretch', flexWrap:'wrap'}}>
           {METRICS.map((m, i) => {
             const accentColor = (C as any)[m.accent] || C.accent;
-            const delay = 5 + i * 5;
+            const delay = 20 + i * itemStagger;
             return (
               <GlowCard key={i} d={delay} accent={accentColor} elevation={i === 0 ? 4 : 2}
                 width={Math.min(340, Math.floor(1500 / METRICS.length))} active={i === 0}>

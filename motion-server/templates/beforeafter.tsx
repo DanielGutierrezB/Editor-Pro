@@ -101,6 +101,14 @@ const AFTER = {
 
 const Section1:React.FC = () => {
   const {durationInFrames: dur} = useVideoConfig();
+  const holdFrames = 60;
+  const totalElements = 3; // before card, divider, after card
+  const elementStagger = Math.max(8, Math.floor((dur - holdFrames - 20) / totalElements));
+  const beforeStart = 20;
+  const dividerStart = 20 + elementStagger;
+  const afterStart = 20 + 2 * elementStagger;
+  const beforePointStagger = Math.max(8, Math.floor(elementStagger / Math.max(BEFORE.items.length, 1)));
+  const afterPointStagger = Math.max(8, Math.floor(elementStagger / Math.max(AFTER.items.length, 1)));
 
   return (
     <Fd dur={dur} fo={1}>
@@ -109,14 +117,14 @@ const Section1:React.FC = () => {
           <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
         <div style={{display:'flex', gap:0, justifyContent:'center', alignItems:'stretch', width:'100%'}}>
-          <GlowCard d={10} from="left" accent={C.red} elevation={2} active={false} width={'45%'}>
+          <GlowCard d={beforeStart} from="left" accent={C.red} elevation={2} active={false} width={'45%'}>
             <div style={{textAlign:'center', marginBottom:20, display:'flex', flexDirection:'column', alignItems:'center'}}>
               <div style={{marginBottom:8}}><Icon name="XCircle" size={44} color={C.red}/></div>
               <div style={{fontSize:28, fontWeight:700, color:C.red}}>{BEFORE.label}</div>
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {BEFORE.items.map((item, i) => (
-                <E key={i} d={20 + i * 8} from="left">
+                <E key={i} d={beforeStart + 10 + i * beforePointStagger} from="left">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>
                     <div style={{width:6, height:6, borderRadius:3, backgroundColor:C.red, flexShrink:0}}/>
                     <span style={{fontSize:22, color:C.dim}}>{item}</span>
@@ -125,17 +133,17 @@ const Section1:React.FC = () => {
               ))}
             </div>
           </GlowCard>
-          <E d={20} from="up" style={{alignSelf:'stretch', margin:'0 24px'}}>
+          <E d={dividerStart} from="up" style={{alignSelf:'stretch', margin:'0 24px'}}>
             <div style={{width:2, height:'100%', backgroundColor:C.dim, opacity:0.3}}/>
           </E>
-          <GlowCard d={25} from="right" accent={C.accent} elevation={4} active={true} width={'45%'}>
+          <GlowCard d={afterStart} from="right" accent={C.accent} elevation={4} active={true} width={'45%'}>
             <div style={{textAlign:'center', marginBottom:20, display:'flex', flexDirection:'column', alignItems:'center'}}>
               <div style={{marginBottom:8}}><Icon name="CheckCircle" size={44} color={C.accent}/></div>
               <div style={{fontSize:28, fontWeight:700, color:C.accent}}>{AFTER.label}</div>
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {AFTER.items.map((item, i) => (
-                <E key={i} d={35 + i * 8} from="right">
+                <E key={i} d={afterStart + 10 + i * afterPointStagger} from="right">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>
                     <div style={{width:6, height:6, borderRadius:3, backgroundColor:C.accent, flexShrink:0}}/>
                     <span style={{fontSize:22, color:C.text}}>{item}</span>
