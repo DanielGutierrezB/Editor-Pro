@@ -104,13 +104,14 @@ const OdometerDigit:React.FC<{value:number;d:number;fontSize?:number;color?:stri
 };
 
 const AnimatedMetric:React.FC<{value:number;suffix:string;label:string;d:number;accent?:string}> = ({value,suffix,label,d,accent=C.accent}) => (
-  <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'space-between',height:140}}>
-    <div style={{height:36}}/>
-    <div style={{display:'flex',alignItems:'baseline',gap:4}}>
-      <OdometerDigit value={value} d={d} fontSize={64} color={accent}/>
-      <E d={d+15} from="pop"><span style={{fontSize:32,fontWeight:700,color:accent}}>{suffix}</span></E>
+  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:0,width:'100%'}}>
+    <div style={{height:80,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+        <OdometerDigit value={value} d={d} fontSize={64} color={accent}/>
+        <E d={d+15} from="pop"><span style={{fontSize:32,fontWeight:700,color:accent}}>{suffix}</span></E>
+      </div>
     </div>
-    <E d={d+20} from="up"><span style={{fontSize:18,fontWeight:500,color:C.dim}}>{label}</span></E>
+    <E d={d+20} from="up"><span style={{fontSize:18,fontWeight:500,color:C.dim,marginTop:12}}>{label}</span></E>
   </div>
 );
 
@@ -166,8 +167,10 @@ const Section1:React.FC = () => {
             return (
               <GlowCard key={i} d={delay} accent={accentColor} elevation={i === 0 ? 4 : 2}
                 width={Math.min(340, Math.floor(1500 / METRICS.length))} active={i === 0}>
-                <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:16, flex:1, justifyContent:'center'}}>
-                  <Icon name={m.icon} size={36} color={accentColor}/>
+                <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:0, flex:1, justifyContent:'center', width:'100%'}}>
+                  <div style={{height:48,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:8}}>
+                    <Icon name={m.icon} size={36} color={accentColor}/>
+                  </div>
                   <AnimatedMetric value={m.value} suffix={m.suffix} label={m.label}
                     d={delay + 10} accent={accentColor}/>
                 </div>
