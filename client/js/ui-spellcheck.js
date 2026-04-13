@@ -90,6 +90,7 @@
         state.analyzing = true;
         state.clipResults = {};
         expandSection("spellcheck");
+        if (window.EPLogger) EPLogger.log("spellcheck", "start", "wordCount=" + (state.textClips ? state.textClips.length : 0));
 
         hideElement("sc-results");
         hideElement("sc-empty");
@@ -110,6 +111,7 @@
                 setProgress("sc-progress-fill", "sc-progress-text", 15, "Leyendo clips de texto del XML...");
 
                 state.textClips = parseTextClipsFromXML(data.path);
+                if (window.EPLogger) EPLogger.log("spellcheck", "start", "wordCount=" + state.textClips.length);
 
                 if (state.textClips.length === 0) {
                     finishSpellCheck();
@@ -123,6 +125,7 @@
                 analyzeClipSequential(0);
 
             } catch(e) {
+                if (window.EPLogger) EPLogger.error("spellcheck", "error", e.message);
                 finishSpellCheck();
                 showToast("Error: " + e.message, "error");
             } finally {
@@ -301,15 +304,18 @@
         });
 
         if (markers.length === 0) {
+            if (window.EPLogger) EPLogger.log("spellcheck", "complete", "0 issues found");
             finishSpellCheck();
             showToast("Análisis completado — sin correcciones necesarias", "success");
             return;
         }
 
+        if (window.EPLogger) EPLogger.log("spellcheck", "complete", markers.length + " issues found");
         setProgress("sc-progress-fill", "sc-progress-text", 95, "Colocando " + markers.length + " marcador(es)...");
 
         csInterface.evalScript('clearMarkersByPrefix("[SC]")', function() {
             writeAndPlaceMarkers(markers, function(ok) {
+                if (!ok && window.EPLogger) EPLogger.error("spellcheck", "error", "Failed to place correction markers");
                 finishSpellCheck();
                 showToast(ok
                     ? markers.length + " marcador(es) de corrección colocados en la secuencia"
@@ -358,6 +364,7 @@
         if (state.customDictionary.indexOf(word) === -1) {
             state.customDictionary.push(word);
             saveDictionary();
+            if (window.EPLogger) EPLogger.log("spellcheck", "dict-add", word);
             showToast("'" + word + "' agregada al diccionario", "success");
         }
         input.value = "";
@@ -369,6 +376,7 @@
         if (state.customDictionary.indexOf(word) === -1) {
             state.customDictionary.push(word);
             saveDictionary();
+            if (window.EPLogger) EPLogger.log("spellcheck", "dict-add", word);
             showToast("'" + word + "' agregada al diccionario", "success");
         }
     }

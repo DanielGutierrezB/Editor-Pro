@@ -242,6 +242,7 @@
     // ─── Consistency checking ────────────────────────────────────
     function checkConsistency(layers) {
         var issues = [];
+        if (window.EPLogger) EPLogger.log("context-rules", "load", layers.length + " rules loaded");
         if (layers.length < 2) return issues;
 
         var styles = {};
@@ -309,6 +310,7 @@
     function checkRedundancy(text, lang) {
         var issues = [];
         lang = lang || "es";
+        if (window.EPLogger) EPLogger.log("context-rules", "apply", "checkRedundancy");
 
         var esRedundant = [
             { pattern: /\bsubir\s+(?:para\s+)?arriba\b/gi, suggestion: "subir", explanation: "\"Subir arriba\" es redundante, \"subir\" ya implica dirección hacia arriba." },
@@ -359,6 +361,7 @@
     // ─── Apply confusion rules ───────────────────────────────────
     function checkConfusions(text, lang) {
         var issues = [];
+        if (window.EPLogger) EPLogger.log("context-rules", "apply", "checkConfusions");
         var confusions = lang === "es" ? ES_CONFUSIONS : EN_CONFUSIONS;
 
         confusions.forEach(function(group) {
@@ -392,6 +395,7 @@
     // ─── Motion graphics specific checks ─────────────────────────
     function checkMotionGraphicsStyle(text, textType, lang) {
         var issues = [];
+        if (window.EPLogger) EPLogger.log("context-rules", "apply", "checkMotionGraphicsStyle");
         var wordCount = text.trim().split(/\s+/).length;
 
         if (textType === "title" && wordCount > 8) {

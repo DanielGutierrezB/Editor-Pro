@@ -109,6 +109,8 @@
         disableBtn("btn-editsuggestions2");
 
         var timedTranscript = buildTimedTranscript();
+        if (window.EPLogger) EPLogger.log("edit-suggestions", "analysis-start", "segmentCount=" + (timedTranscript ? timedTranscript.split("\n").length : 0));
+        if (window.EPLogger) EPLogger.log("edit-suggestions", "api-call", "provider=" + (aiAnalyzer.getProviderName ? aiAnalyzer.getProviderName() : "ai"));
 
         aiAnalyzer.analyzeEditSuggestions2(timedTranscript, getPromptContext("es2"), function(result) {
             setES2Progress(100, "Completado");
@@ -120,11 +122,13 @@
                     enableBtn("btn-editsuggestions2");
 
                     if (result.error) {
+                        if (window.EPLogger) EPLogger.error("edit-suggestions", "error", result.error);
                         showToast("Error: " + result.error, "error");
                         showElement("es2-empty");
                         return;
                     }
 
+                    if (window.EPLogger) EPLogger.log("edit-suggestions", "api-response", "responseLen=" + JSON.stringify(result).length);
                     state.es2Highlights = result.highlights || [];
                     state.es2Suggestions = result.suggestions || [];
                     state.es2Errors = postProcessES2Errors(result.errors || []);

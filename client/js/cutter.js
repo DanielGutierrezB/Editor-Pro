@@ -530,6 +530,7 @@
     function doAnalyze() {
         state.singleProcessing = true;
         state.singleStopping = false;
+        if (window.EPLogger) EPLogger.log("cutter", "analyze-start", "markers=pending");
 
         dom.emptyState.classList.add("hidden");
         dom.resultsSection.classList.add("hidden");
@@ -544,6 +545,7 @@
 
         evalScript("getActiveSequenceInfo()", function(seqData) {
             if (seqData.error) {
+                if (window.EPLogger) EPLogger.error("cutter", "error", seqData.error);
                 dom.analyzeProgress.classList.add("hidden");
                 dom.emptyState.classList.remove("hidden");
                 finishSingleProcessing();
@@ -581,6 +583,7 @@
                 }
 
                 if (markerData.error) {
+                    if (window.EPLogger) EPLogger.error("cutter", "error", markerData.error);
                     dom.analyzeProgress.classList.add("hidden");
                     dom.emptyState.classList.remove("hidden");
                     finishSingleProcessing();
@@ -589,6 +592,7 @@
                 }
 
                 state.markers = markerData.markers || [];
+                if (window.EPLogger) EPLogger.log("cutter", "analyze-start", "markers=" + state.markers.length);
                 dom.analyzeProgressText.textContent = "Analizando " + state.markers.length + " marcadores...";
 
                 var result = parseMarkers(state.markers);
@@ -607,6 +611,12 @@
                 state.removeZones = result.removeZones;
                 state.warnings = result.warnings || [];
                 state.analyzed = true;
+
+                if (window.EPLogger) {
+                    result.removeZones.forEach(function(z) {
+                        EPLogger.log("cutter", "zone-detect", "start=" + z.start.toFixed(2) + " end=" + z.end.toFixed(2));
+                    });
+                }
 
                 setTimeout(function() {
                     dom.analyzeProgress.classList.add("hidden");
@@ -697,6 +707,7 @@
             try {
                 fs.writeFileSync(tmpPath, cutData, "utf8");
             } catch(e) {
+                if (window.EPLogger) EPLogger.error("cutter", "error", e.message);
                 dom.analyzeProgress.classList.add("hidden");
                 dom.resultsSection.classList.remove("hidden");
                 finishSingleProcessing();
@@ -727,6 +738,7 @@
                 var s = cutResult.stats || {};
 
                 if (cutResult.error) {
+                    if (window.EPLogger) EPLogger.error("cutter", "error", cutResult.error);
                     dom.analyzeProgress.classList.add("hidden");
                     finishSingleProcessing();
                     dom.resultsSection.classList.remove("hidden");
@@ -735,6 +747,7 @@
                 }
 
                 dom.analyzeProgressFill.style.width = "100%";
+                if (window.EPLogger) EPLogger.log("cutter", "execute", (s.removed || 0) + " cuts applied");
 
                 // Load remaining markers
                 evalScript("getPostCutMarkers()", function(markerResult) {
