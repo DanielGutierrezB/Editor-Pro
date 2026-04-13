@@ -60,6 +60,9 @@ class RemotionManager {
 
     // Use proposal duration directly (templates use durationInFrames from useVideoConfig)
     this._registerInRoot(compositionId, durationFrames);
+    // Save duration metadata so _rebuildRoot can use the correct duration
+    const metaPath = path.join(this.compositionsDir, `${compositionId}.duration`);
+    fs.writeFileSync(metaPath, String(durationFrames), 'utf8');
     return filePath;
   }
 
@@ -494,6 +497,12 @@ class RemotionManager {
           return; // skip this file
         }
         fs.copyFileSync(path.join(srcFolder, f), path.join(this.compositionsDir, f));
+        // Also copy duration metadata if it exists
+        const durationFile = f.replace('.tsx', '.duration');
+        const durationPath = path.join(srcFolder, durationFile);
+        if (fs.existsSync(durationPath)) {
+          fs.copyFileSync(durationPath, path.join(this.compositionsDir, durationFile));
+        }
       });
     }
 
@@ -509,6 +518,11 @@ class RemotionManager {
     const src = path.join(this.compositionsDir, `${compositionId}.tsx`);
     if (fs.existsSync(src)) {
       fs.copyFileSync(src, path.join(srcDir, `${compositionId}.tsx`));
+    }
+    // Also copy duration metadata
+    const metaSrc = path.join(this.compositionsDir, `${compositionId}.duration`);
+    if (fs.existsSync(metaSrc)) {
+      fs.copyFileSync(metaSrc, path.join(srcDir, `${compositionId}.duration`));
     }
   }
 
@@ -545,40 +559,25 @@ class RemotionManager {
         return; // skip this file
       }
 
+      // Read saved duration from metadata file (set during writeComposition)
+      const metaPath = path.join(this.compositionsDir, `${id}.duration`);
       let totalFrames = 300;
-
-      // Method 1: Traditional <Sequence from={X} durationInFrames={Y}>
-      let maxEnd = 0;
-      const fromDur = content.match(/<Sequence\s+from=\{(\d+)\}\s+durationInFrames=\{(\d+)\}/g) || [];
-      fromDur.forEach(m => {
-        const match = m.match(/from=\{(\d+)\}\s+durationInFrames=\{(\d+)\}/);
-        if (match) {
-          const end = parseInt(match[1]) + parseInt(match[2]);
-          if (end > maxEnd) maxEnd = end;
-        }
-      });
-
-      // Method 2: TransitionSeries — sum ALL durationInFrames values (they're sequential)
-      if (maxEnd === 0 && content.indexOf('TransitionSeries') !== -1) {
-        const allDurs = content.match(/durationInFrames=\{(\d+)\}/g) || [];
-        let sum = 0;
-        allDurs.forEach(d => {
-          const val = d.match(/(\d+)/);
-          if (val) sum += parseInt(val[1]);
+      if (fs.existsSync(metaPath)) {
+        const saved = parseInt(fs.readFileSync(metaPath, 'utf8').trim(), 10);
+        if (saved > 0) totalFrames = saved;
+      } else {
+        // Fallback: try to parse from TSX (for old compositions without metadata)
+        let maxEnd = 0;
+        const fromDur = content.match(/<Sequence\s+from=\{(\d+)\}\s+durationInFrames=\{(\d+)\}/g) || [];
+        fromDur.forEach(m => {
+          const match = m.match(/from=\{(\d+)\}\s+durationInFrames=\{(\d+)\}/);
+          if (match) {
+            const end = parseInt(match[1]) + parseInt(match[2]);
+            if (end > maxEnd) maxEnd = end;
+          }
         });
-        if (sum > 0) maxEnd = sum;
+        if (maxEnd > 0) totalFrames = maxEnd + 6;
       }
-
-      // Method 3: If still 0, find ALL durationInFrames and use the largest sum
-      if (maxEnd === 0) {
-        const allDurs = content.match(/durationInFrames=\{(\d+)\}/g) || [];
-        allDurs.forEach(d => {
-          const val = parseInt(d.match(/(\d+)/)[1]);
-          if (val > maxEnd) maxEnd = val;
-        });
-      }
-
-      if (maxEnd > 0) totalFrames = maxEnd + 6;
       this._registerInRoot(id, totalFrames);
     });
   }
