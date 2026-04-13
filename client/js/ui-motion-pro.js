@@ -87,7 +87,7 @@
         srtSegmentsToSttResult   = global._epSrtSegmentsToSttResult;
         renderTranscriptFromSegments = global._epRenderTranscriptFromSegments;
         bindCollapsibles         = global._epBindCollapsibles;
-        MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0.35;
+        MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0;
     }
 
     function mpInit() {
