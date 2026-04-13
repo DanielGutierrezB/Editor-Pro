@@ -49,6 +49,7 @@ const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
+const CLIP_START_TIME = 0; // Will be replaced by template-manager
 const TITLE = "Inversión por Plataforma";
 const SUBTITLE = "Distribución del presupuesto Q4 2024";
 const BARS = [
@@ -63,13 +64,29 @@ const VALUE_SUFFIX = "%";
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
+function readingFrames(text: string): number {
+  const words = text.split(' ').length;
+  if (words <= 4) return 45;
+  if (words <= 8) return 75;
+  return 105;
+}
+
+function itemDelay(item: {time?: number; label?: string; title?: string; text?: string}, index: number, totalItems: number, items: any[], dur: number): number {
+  if (item.time !== undefined && item.time > 0) {
+    return Math.round(item.time * 30);
+  }
+  if (index === 0) return 30;
+  const prevItem = items[index - 1];
+  const prevText = prevItem.label || prevItem.title || prevItem.text || '';
+  const prevDelay = itemDelay(prevItem, index - 1, totalItems, items, dur);
+  return Math.min(prevDelay + readingFrames(prevText), dur - 60);
+}
+
 const fmtValue = (v:number):string => v >= 1000 ? (v/1000).toFixed(v%1000===0?0:1)+'K' : String(v);
 
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {fps, durationInFrames: dur} = useVideoConfig();
-  const holdFrames = 60;
-  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 30) / Math.max(BARS.length, 1)));
   const maxValue = Math.max(...BARS.map(d => d.value));
   const maxBarH = 440;
   const barW = Math.min(120, Math.floor(1200 / BARS.length));
@@ -90,7 +107,7 @@ const Section1:React.FC = () => {
         <div style={{display:'flex', gap:Math.min(40, Math.floor(800 / BARS.length)), alignItems:'flex-end', justifyContent:'center'}}>
           {BARS.map((d, i) => {
             const barColor = d.color || C.accent;
-            const barDelay = 30 + i * itemStagger;
+            const barDelay = itemDelay(d, i, BARS.length, BARS, dur);
             const barProgress = spring({
               frame: frame - barDelay, fps,
               config: {damping: 18, mass: 0.5, stiffness: 80},

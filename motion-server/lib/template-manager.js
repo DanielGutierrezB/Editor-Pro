@@ -22,8 +22,11 @@ class TemplateManager {
     return this.templates[type] || this.templates['title']; // fallback to title
   }
 
-  fillTemplate(type, contentValues, compositionId, durationFrames) {
+  fillTemplate(type, contentValues, compositionId, durationFrames, proposalStartTime) {
     let tsx = this.getTemplate(type);
+
+    // Inject clip startTime for timestamp calculations
+    tsx = tsx.replace(/const CLIP_START_TIME = .*?;/, `const CLIP_START_TIME = ${proposalStartTime || 0};`);
 
     // Replace string content values
     if (contentValues.TITLE) {

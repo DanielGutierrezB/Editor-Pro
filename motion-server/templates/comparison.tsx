@@ -85,6 +85,7 @@ const GlowCard:React.FC<{
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
+const CLIP_START_TIME = 0; // Will be replaced by template-manager
 const TITLE = "Enfoque Tradicional vs Digital";
 const LEFT = {
   title: "Tradicional",
@@ -103,6 +104,33 @@ const RIGHT = {
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
+function getPointText(item: any): string {
+  return typeof item === 'string' ? item : (item.text || item.label || item.title || '');
+}
+
+function getPointTime(item: any): number | undefined {
+  return typeof item === 'object' && item !== null ? item.time : undefined;
+}
+
+function readingFrames(text: string): number {
+  const words = text.split(' ').length;
+  if (words <= 4) return 45;
+  if (words <= 8) return 75;
+  return 105;
+}
+
+function pointDelay(item: any, index: number, totalItems: number, items: any[], baseDelay: number, dur: number): number {
+  const t = getPointTime(item);
+  if (t !== undefined && t > 0) {
+    return Math.round(t * 30);
+  }
+  if (index === 0) return baseDelay + 10;
+  const prevItem = items[index - 1];
+  const prevText = getPointText(prevItem);
+  const prevDel = pointDelay(prevItem, index - 1, totalItems, items, baseDelay, dur);
+  return Math.min(prevDel + readingFrames(prevText), dur - 60);
+}
+
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
@@ -114,8 +142,6 @@ const Section1:React.FC = () => {
   const leftStart = 20;
   const vsStart = 20 + elementStagger;
   const rightStart = 20 + 2 * elementStagger;
-  const leftPointStagger = Math.max(8, Math.floor(elementStagger / Math.max(LEFT.points.length, 1)));
-  const rightPointStagger = Math.max(8, Math.floor(elementStagger / Math.max(RIGHT.points.length, 1)));
 
   return (
     <Fd dur={dur} fo={1}>
@@ -131,10 +157,10 @@ const Section1:React.FC = () => {
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {LEFT.points.map((item, i) => (
-                <E key={i} d={leftStart + 10 + i * leftPointStagger} from="left">
+                <E key={i} d={pointDelay(item, i, LEFT.points.length, LEFT.points, leftStart, dur)} from="left">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>
                     <div style={{width:6, height:6, borderRadius:3, backgroundColor:leftColor, flexShrink:0}}/>
-                    <span style={{fontSize:22, color:C.dim}}>{item}</span>
+                    <span style={{fontSize:22, color:C.dim}}>{getPointText(item)}</span>
                   </div>
                 </E>
               ))}
@@ -156,10 +182,10 @@ const Section1:React.FC = () => {
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {RIGHT.points.map((item, i) => (
-                <E key={i} d={rightStart + 10 + i * rightPointStagger} from="right">
+                <E key={i} d={pointDelay(item, i, RIGHT.points.length, RIGHT.points, rightStart, dur)} from="right">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>
                     <div style={{width:6, height:6, borderRadius:3, backgroundColor:rightColor, flexShrink:0}}/>
-                    <span style={{fontSize:22, color:C.text}}>{item}</span>
+                    <span style={{fontSize:22, color:C.text}}>{getPointText(item)}</span>
                   </div>
                 </E>
               ))}

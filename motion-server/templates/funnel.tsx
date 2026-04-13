@@ -49,6 +49,7 @@ const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
+const CLIP_START_TIME = 0; // Will be replaced by template-manager
 const TITLE = "Embudo de Ventas";
 const STAGES = [
   { icon: "Eye", title: "Awareness", pct: "10,000", accent: "accent" },
@@ -61,11 +62,27 @@ const STAGES = [
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
+function readingFrames(text: string): number {
+  const words = text.split(' ').length;
+  if (words <= 4) return 45;
+  if (words <= 8) return 75;
+  return 105;
+}
+
+function itemDelay(item: {time?: number; label?: string; title?: string; text?: string}, index: number, totalItems: number, items: any[], dur: number): number {
+  if (item.time !== undefined && item.time > 0) {
+    return Math.round(item.time * 30);
+  }
+  if (index === 0) return 15;
+  const prevItem = items[index - 1];
+  const prevText = prevItem.label || prevItem.title || prevItem.text || '';
+  const prevDelay = itemDelay(prevItem, index - 1, totalItems, items, dur);
+  return Math.min(prevDelay + readingFrames(prevText), dur - 60);
+}
+
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const holdFrames = 60;
-  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 15) / Math.max(STAGES.length, 1)));
 
   return (
     <Fd dur={dur} fo={1}>
@@ -76,8 +93,9 @@ const Section1:React.FC = () => {
         <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:12, width:'100%'}}>
           {STAGES.map((stage, i) => {
             const accentColor = (C as any)[stage.accent] || C.accent;
-            const stageStart = 15 + i * itemStagger;
-            const isActive = i === STAGES.length - 1 || (frame >= stageStart && frame < 15 + (i + 1) * itemStagger + 30);
+            const stageStart = itemDelay(stage, i, STAGES.length, STAGES, dur);
+            const nextStart = i < STAGES.length - 1 ? itemDelay(STAGES[i+1], i+1, STAGES.length, STAGES, dur) : dur;
+            const isActive = i === STAGES.length - 1 || (frame >= stageStart && frame < nextStart + 30);
             const widthPercent = 100 - (i * (50 / Math.max(STAGES.length - 1, 1)));
             return (
               <React.Fragment key={i}>

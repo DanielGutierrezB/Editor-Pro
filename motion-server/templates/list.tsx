@@ -82,6 +82,7 @@ const AccentSeparator:React.FC<{
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
+const CLIP_START_TIME = 0; // Will be replaced by template-manager
 const TITLE = "Checklist de Lanzamiento";
 const SUBTITLE = "4 pasos esenciales para tu campaña";
 const LIST_ITEMS = [
@@ -96,12 +97,37 @@ const ACCENT_KEY = "accent";
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
+function getItemText(item: any): string {
+  return typeof item === 'string' ? item : (item.text || item.label || item.title || '');
+}
+
+function getItemTime(item: any): number | undefined {
+  return typeof item === 'object' && item !== null ? item.time : undefined;
+}
+
+function readingFrames(text: string): number {
+  const words = text.split(' ').length;
+  if (words <= 4) return 45;
+  if (words <= 8) return 75;
+  return 105;
+}
+
+function listItemDelay(item: any, index: number, totalItems: number, items: any[], dur: number): number {
+  const t = getItemTime(item);
+  if (t !== undefined && t > 0) {
+    return Math.round(t * 30);
+  }
+  if (index === 0) return 25;
+  const prevItem = items[index - 1];
+  const prevText = getItemText(prevItem);
+  const prevDelay = listItemDelay(prevItem, index - 1, totalItems, items, dur);
+  return Math.min(prevDelay + readingFrames(prevText), dur - 60);
+}
+
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
   const accentColor = (C as any)[ACCENT_KEY] || C.accent;
-  const holdFrames = 60;
-  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 25) / Math.max(LIST_ITEMS.length, 1)));
   const framesPerItem = Math.floor(dur / LIST_ITEMS.length);
   const activeItem = Math.min(Math.floor(frame / framesPerItem), LIST_ITEMS.length - 1);
 
@@ -125,8 +151,10 @@ const Section1:React.FC = () => {
           {LIST_ITEMS.map((item, i) => {
             const isActive = i === activeItem;
             const isPast = i < activeItem;
+            const delay = listItemDelay(item, i, LIST_ITEMS.length, LIST_ITEMS, dur);
+            const text = getItemText(item);
             return (
-              <CascadeItem key={i} d={25 + i * itemStagger} index={0}>
+              <CascadeItem key={i} d={delay} index={0}>
                 <div style={{
                   display:'flex', alignItems:'center', gap:20, padding:'16px 24px',
                   borderRadius:12,
@@ -149,7 +177,7 @@ const Section1:React.FC = () => {
                     fontSize:24, fontWeight: isActive ? 700 : 400,
                     color: isActive ? C.text : isPast ? C.dim : 'rgba(255,255,255,0.4)',
                   }}>
-                    {item}
+                    {text}
                   </span>
                 </div>
               </CascadeItem>

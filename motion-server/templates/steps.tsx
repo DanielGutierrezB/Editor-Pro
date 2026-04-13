@@ -119,6 +119,7 @@ const ProgressDots:React.FC<{
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
+const CLIP_START_TIME = 0; // Will be replaced by template-manager
 const STEPS_DATA = [
   { icon: "Search", title: "Investigación", desc: "Analiza tu mercado objetivo y competencia", accent: "accent" },
   { icon: "Target", title: "Segmentación", desc: "Define tu audiencia ideal con datos demográficos", accent: "orange" },
@@ -128,6 +129,13 @@ const STEPS_DATA = [
 // ============================================================
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
+
+function stepStartFrame(step: {time?: number}, index: number, totalSteps: number, totalFrames: number): number {
+  if (step.time !== undefined && step.time > 0) {
+    return Math.round(step.time * 30);
+  }
+  return Math.floor(index * (totalFrames / totalSteps));
+}
 
 const StepSection:React.FC<{stepIndex:number; step:typeof STEPS_DATA[0]}> = ({stepIndex, step}) => {
   const {durationInFrames: dur} = useVideoConfig();
@@ -173,17 +181,22 @@ const StepSection:React.FC<{stepIndex:number; step:typeof STEPS_DATA[0]}> = ({st
 
 export const MyComposition:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
-  const framesPerStep = Math.floor(durationInFrames / STEPS_DATA.length);
 
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>
-      {STEPS_DATA.map((step, i) => (
-        <Sequence key={i} from={i * framesPerStep}
-          durationInFrames={i === STEPS_DATA.length - 1 ? durationInFrames - i * framesPerStep : framesPerStep}
-          premountFor={10}>
-          <StepSection stepIndex={i} step={step}/>
-        </Sequence>
-      ))}
+      {STEPS_DATA.map((step, i) => {
+        const from = stepStartFrame(step, i, STEPS_DATA.length, durationInFrames);
+        const nextFrom = i < STEPS_DATA.length - 1
+          ? stepStartFrame(STEPS_DATA[i+1], i+1, STEPS_DATA.length, durationInFrames)
+          : durationInFrames;
+        return (
+          <Sequence key={i} from={from}
+            durationInFrames={nextFrom - from}
+            premountFor={10}>
+            <StepSection stepIndex={i} step={step}/>
+          </Sequence>
+        );
+      })}
     </AbsoluteFill>
   );
 };

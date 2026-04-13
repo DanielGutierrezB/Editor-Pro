@@ -85,6 +85,7 @@ const GlowCard:React.FC<{
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
+const CLIP_START_TIME = 0; // Will be replaced by template-manager
 const TITLE = "Evolución del Proceso";
 const BEFORE = {
   label: "Antes",
@@ -99,6 +100,33 @@ const AFTER = {
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
+function getItemText(item: any): string {
+  return typeof item === 'string' ? item : (item.text || item.label || item.title || '');
+}
+
+function getItemTime(item: any): number | undefined {
+  return typeof item === 'object' && item !== null ? item.time : undefined;
+}
+
+function readingFrames(text: string): number {
+  const words = text.split(' ').length;
+  if (words <= 4) return 45;
+  if (words <= 8) return 75;
+  return 105;
+}
+
+function baItemDelay(item: any, index: number, totalItems: number, items: any[], baseDelay: number, dur: number): number {
+  const t = getItemTime(item);
+  if (t !== undefined && t > 0) {
+    return Math.round(t * 30);
+  }
+  if (index === 0) return baseDelay + 10;
+  const prevItem = items[index - 1];
+  const prevText = getItemText(prevItem);
+  const prevDel = baItemDelay(prevItem, index - 1, totalItems, items, baseDelay, dur);
+  return Math.min(prevDel + readingFrames(prevText), dur - 60);
+}
+
 const Section1:React.FC = () => {
   const {durationInFrames: dur} = useVideoConfig();
   const holdFrames = 60;
@@ -107,8 +135,6 @@ const Section1:React.FC = () => {
   const beforeStart = 20;
   const dividerStart = 20 + elementStagger;
   const afterStart = 20 + 2 * elementStagger;
-  const beforePointStagger = Math.max(8, Math.floor(elementStagger / Math.max(BEFORE.items.length, 1)));
-  const afterPointStagger = Math.max(8, Math.floor(elementStagger / Math.max(AFTER.items.length, 1)));
 
   return (
     <Fd dur={dur} fo={1}>
@@ -124,10 +150,10 @@ const Section1:React.FC = () => {
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {BEFORE.items.map((item, i) => (
-                <E key={i} d={beforeStart + 10 + i * beforePointStagger} from="left">
+                <E key={i} d={baItemDelay(item, i, BEFORE.items.length, BEFORE.items, beforeStart, dur)} from="left">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>
                     <div style={{width:6, height:6, borderRadius:3, backgroundColor:C.red, flexShrink:0}}/>
-                    <span style={{fontSize:22, color:C.dim}}>{item}</span>
+                    <span style={{fontSize:22, color:C.dim}}>{getItemText(item)}</span>
                   </div>
                 </E>
               ))}
@@ -143,10 +169,10 @@ const Section1:React.FC = () => {
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {AFTER.items.map((item, i) => (
-                <E key={i} d={afterStart + 10 + i * afterPointStagger} from="right">
+                <E key={i} d={baItemDelay(item, i, AFTER.items.length, AFTER.items, afterStart, dur)} from="right">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>
                     <div style={{width:6, height:6, borderRadius:3, backgroundColor:C.accent, flexShrink:0}}/>
-                    <span style={{fontSize:22, color:C.text}}>{item}</span>
+                    <span style={{fontSize:22, color:C.text}}>{getItemText(item)}</span>
                   </div>
                 </E>
               ))}

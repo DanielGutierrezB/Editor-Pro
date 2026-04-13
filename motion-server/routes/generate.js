@@ -107,7 +107,7 @@ router.post('/template', (req, res) => {
 
       // Fill template with content values
       const tsxCode = templateManager.fillTemplate(
-        proposal.type, contentValues, compositionId, durationFrames
+        proposal.type, contentValues, compositionId, durationFrames, proposal.startTime
       );
 
       // Write and register composition

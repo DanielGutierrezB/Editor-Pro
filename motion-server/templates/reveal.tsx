@@ -119,6 +119,7 @@ const MorphPosition:React.FC<{children:React.ReactNode;phase:number;fromY:number
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
+const CLIP_START_TIME = 0; // Will be replaced by template-manager
 const TITLE = "Machine Learning";
 const REVEAL_ITEMS = [
   { text: "Los datos entrenan el modelo" },
@@ -132,12 +133,28 @@ const ACCENT_KEY = "accent";
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
+function readingFrames(text: string): number {
+  const words = text.split(' ').length;
+  if (words <= 4) return 45;
+  if (words <= 8) return 75;
+  return 105;
+}
+
+function itemDelay(item: {time?: number; label?: string; title?: string; text?: string}, index: number, totalItems: number, items: any[], dur: number): number {
+  if (item.time !== undefined && item.time > 0) {
+    return Math.round(item.time * 30);
+  }
+  if (index === 0) return 40;
+  const prevItem = items[index - 1];
+  const prevText = prevItem.label || prevItem.title || prevItem.text || '';
+  const prevDelay = itemDelay(prevItem, index - 1, totalItems, items, dur);
+  return Math.min(prevDelay + readingFrames(prevText), dur - 60);
+}
+
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
   const accentColor = (C as any)[ACCENT_KEY] || C.accent;
-  const holdFrames = 60;
-  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 40) / Math.max(REVEAL_ITEMS.length, 1)));
   const titlePhase = interpolate(frame, [25, 40], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
 
   return (
@@ -152,7 +169,7 @@ const Section1:React.FC = () => {
         </MorphPosition>
         <div style={{marginTop:48, display:'flex', flexDirection:'column', gap:20, alignItems:'center', width:'100%', maxWidth:800}}>
           {REVEAL_ITEMS.map((item, i) => {
-            const itemStart = 40 + i * itemStagger;
+            const itemStart = itemDelay(item, i, REVEAL_ITEMS.length, REVEAL_ITEMS, dur);
             return (
               <E key={i} d={itemStart} from="up" style={{width:'100%'}}>
                 <div style={{

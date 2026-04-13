@@ -49,6 +49,7 @@ const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
+const CLIP_START_TIME = 0; // Will be replaced by template-manager
 const TITLE = "Evolución del Proyecto";
 const EVENTS = [
   { icon: "Lightbulb", label: "Idea", time: "2022", accent: "accent" },
@@ -61,11 +62,27 @@ const EVENTS = [
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
+function readingFrames(text: string): number {
+  const words = text.split(' ').length;
+  if (words <= 4) return 45;
+  if (words <= 8) return 75;
+  return 105;
+}
+
+function eventDelay(item: {showTime?: number; label?: string; title?: string; text?: string}, index: number, totalItems: number, items: any[], dur: number): number {
+  if (item.showTime !== undefined && item.showTime > 0) {
+    return Math.round(item.showTime * 30);
+  }
+  if (index === 0) return 20;
+  const prevItem = items[index - 1];
+  const prevText = prevItem.label || prevItem.title || prevItem.text || '';
+  const prevDelay = eventDelay(prevItem, index - 1, totalItems, items, dur);
+  return Math.min(prevDelay + readingFrames(prevText), dur - 60);
+}
+
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const holdFrames = 60;
-  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 20) / Math.max(EVENTS.length, 1)));
 
   const lineProgress = interpolate(frame, [10, 50], [0, 1], {
     extrapolateLeft:'clamp', extrapolateRight:'clamp',
@@ -92,7 +109,7 @@ const Section1:React.FC = () => {
           </div>
           {EVENTS.map((event, i) => {
             const accentColor = (C as any)[event.accent] || C.accent;
-            const nodeStart = 20 + i * itemStagger;
+            const nodeStart = eventDelay(event, i, EVENTS.length, EVENTS, dur);
             const xPos = 40 + i * nodeSpacing;
             return (
               <E key={i} d={nodeStart} from="pop" style={{

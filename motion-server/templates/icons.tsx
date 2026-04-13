@@ -68,6 +68,7 @@ const CascadeItem:React.FC<{d:number;index:number;children:React.ReactNode}> = (
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
+const CLIP_START_TIME = 0; // Will be replaced by template-manager
 const TITLE = "Nuestros Pilares";
 const ITEMS = [
   { icon: "Shield", label: "Seguridad", accent: "accent" },
@@ -79,10 +80,26 @@ const ITEMS = [
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
+function readingFrames(text: string): number {
+  const words = text.split(' ').length;
+  if (words <= 4) return 45;
+  if (words <= 8) return 75;
+  return 105;
+}
+
+function itemDelay(item: {time?: number; label?: string; title?: string; text?: string}, index: number, totalItems: number, items: any[], dur: number): number {
+  if (item.time !== undefined && item.time > 0) {
+    return Math.round(item.time * 30);
+  }
+  if (index === 0) return 30;
+  const prevItem = items[index - 1];
+  const prevText = prevItem.label || prevItem.title || prevItem.text || '';
+  const prevDelay = itemDelay(prevItem, index - 1, totalItems, items, dur);
+  return Math.min(prevDelay + readingFrames(prevText), dur - 60);
+}
+
 const Section1:React.FC = () => {
   const {durationInFrames: dur} = useVideoConfig();
-  const holdFrames = 60;
-  const itemStagger = Math.max(8, Math.floor((dur - holdFrames - 30) / Math.max(ITEMS.length, 1)));
 
   return (
     <Fd dur={dur} fo={1}>
@@ -93,8 +110,9 @@ const Section1:React.FC = () => {
         <div style={{display:'flex', gap:ITEMS.length <= 3 ? 140 : 100, justifyContent:'center', flexWrap:'wrap'}}>
           {ITEMS.map((item, i) => {
             const accentColor = (C as any)[item.accent] || C.accent;
+            const delay = itemDelay(item, i, ITEMS.length, ITEMS, dur);
             return (
-              <CascadeItem key={i} d={30 + i * itemStagger} index={0}>
+              <CascadeItem key={i} d={delay} index={0}>
                 <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:20}}>
                   <div style={{
                     width:180, height:180, borderRadius:90, background:C.card,
