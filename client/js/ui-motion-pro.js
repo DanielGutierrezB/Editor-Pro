@@ -451,23 +451,33 @@
             });
         }
 
-        // Click swatch → HEX color picker
+        // Click swatch → native color picker (no prompt())
+        var _colorInput = document.createElement('input');
+        _colorInput.type = 'color';
+        _colorInput.style.cssText = 'position:absolute;opacity:0;width:0;height:0;pointer-events:none;';
+        document.body.appendChild(_colorInput);
+        var _activeSwatchKey = null;
+
         document.querySelectorAll('.mp-swatch').forEach(function(sw) {
             sw.addEventListener('click', function() {
-                var key = sw.getAttribute('data-color-key');
-                var currentColor = sw.style.background || '#000000';
-                var hex = prompt('Color HEX para "' + (sw.title || key) + '":', _rgbToHexFromStyle(currentColor));
-                if (hex && /^#[0-9a-fA-F]{6}$/.test(hex)) {
-                    sw.style.background = hex;
-                    if (!state.customPalette) state.customPalette = {};
-                    state.customPalette[key] = hex;
-                    if (key === 'accent') state.customPalette.green = hex;
-                    if (motionPro) motionPro.customPalette = state.customPalette;
-                    localStorage.setItem("mp_custom_palette", JSON.stringify(state.customPalette));
-                    var label = document.getElementById("mp-style-label");
-                    if (label) label.textContent = "Personalizado";
-                }
+                _activeSwatchKey = sw.getAttribute('data-color-key');
+                _colorInput.value = _rgbToHexFromStyle(sw.style.background || '#000000');
+                _colorInput.click();
             });
+        });
+
+        _colorInput.addEventListener('input', function() {
+            if (!_activeSwatchKey) return;
+            var hex = _colorInput.value;
+            var sw = document.querySelector('.mp-swatch[data-color-key="' + _activeSwatchKey + '"]');
+            if (sw) sw.style.background = hex;
+            if (!state.customPalette) state.customPalette = {};
+            state.customPalette[_activeSwatchKey] = hex;
+            if (_activeSwatchKey === 'accent') state.customPalette.green = hex;
+            if (motionPro) motionPro.customPalette = state.customPalette;
+            localStorage.setItem("mp_custom_palette", JSON.stringify(state.customPalette));
+            var label = document.getElementById("mp-style-label");
+            if (label) label.textContent = "Personalizado";
         });
 
         // Load saved palette on init
