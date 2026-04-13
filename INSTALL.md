@@ -105,7 +105,7 @@ Espera a que termine de descargar (~30 segundos).
 ### En Windows:
 Abre **PowerShell** y escribe estos comandos uno por uno:
 ```bash
-cd ~\Desktop
+cd ~\Videos
 ```
 ```bash
 git clone https://github.com/DanielGutierrezB/Editor-Pro.git
