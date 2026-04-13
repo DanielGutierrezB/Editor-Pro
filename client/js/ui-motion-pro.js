@@ -278,8 +278,45 @@
 
     function mpInitStyleImport() {
         var importBtn = document.getElementById("btn-mp-import-style");
+        var captureBtn = document.getElementById("btn-mp-capture-frame");
         var fileInput = document.getElementById("mp-style-file-input");
         var resetBtn = document.getElementById("btn-mp-reset-style");
+
+        // Capture current frame from Premiere
+        if (captureBtn) {
+            captureBtn.addEventListener("click", function() {
+                captureBtn.textContent = "⏳ Capturando...";
+                captureBtn.disabled = true;
+                csInterface.evalScript('exportCurrentFrame()', function(res) {
+                    captureBtn.textContent = "📷 Capturar Frame";
+                    captureBtn.disabled = false;
+                    try {
+                        var result = JSON.parse(res);
+                        if (result.error) {
+                            showToast("Error al capturar: " + result.error, "error");
+                            return;
+                        }
+                        if (result.path) {
+                            // Load the captured frame and extract palette
+                            _extractPaletteFromImage("file://" + result.path, function(err, palette) {
+                                if (err) {
+                                    showToast("Error al extraer colores: " + err.message, "error");
+                                    return;
+                                }
+                                state.customPalette = palette;
+                                if (motionPro) motionPro.customPalette = palette;
+                                localStorage.setItem("mp_custom_palette", JSON.stringify(palette));
+                                _mpUpdateStyleSwatches(palette);
+                                showToast("Paleta extraída del frame actual", "success");
+                                if (window.EPLogger) EPLogger.log("motion-pro", "style-capture", "bg=" + palette.bg + " accent=" + palette.accent);
+                            });
+                        }
+                    } catch(e) {
+                        showToast("Error: " + e.message, "error");
+                    }
+                });
+            });
+        }
 
         if (importBtn && fileInput) {
             importBtn.addEventListener("click", function() {
