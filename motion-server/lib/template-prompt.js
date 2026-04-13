@@ -11,10 +11,12 @@ function getTemplateFillingPrompt(type, transcriptSegment, description, duration
   const systemMsg = `You are a content extraction engine for motion graphics templates.
 Your job: read the transcript and return a JSON object with content values for a "${type}" template.
 
+REGLA CRÍTICA: NUNCA inventes texto que el narrador no dijo. Todo título, subtítulo y descripción debe ser una frase, concepto o paráfrasis corta de lo que REALMENTE dice el transcript. Si el transcript dice "segmentación correcta", usa eso — no inventes "El Futuro del Marketing Digital".
+
 RULES:
-1. All text must match the transcript language
+1. All text must match the transcript language — use ONLY words/concepts from the transcript, never invent titles or descriptions
 2. Numbers must be EXACT from transcript
-3. Titles: max 6 words. Descriptions: max 15 words
+3. Titles: max 6 words, taken directly from what the narrator says. Descriptions: max 15 words
 4. Fix obvious typos from transcript
 5. Icons: use lucide-react PascalCase names (Shield, Zap, Globe, Target, TrendingUp, Users, Database, Brain, Rocket, CheckCircle, BarChart3, Lock, Eye, Server, Settings, Mail, Code, ArrowRight, ChevronRight, Heart, Star, Award, Search, Send, Cpu, Lightbulb, MousePointerClick, ShoppingCart, XCircle, Quote)
 6. ACCENT_KEY options: "accent" (green/main), "orange" (warning/comparison), "purple" (secondary), "red" (danger/error)
@@ -32,7 +34,6 @@ RULES:
     steps: '{"STEPS_DATA":[{"icon":"...","title":"...","desc":"...","accent":"accent"}]}',
     chart: '{"TITLE":"...","SUBTITLE":"...","BARS":[{"label":"...","value":0,"color":"accent"}],"VALUE_SUFFIX":"%"}',
     metrics: '{"TITLE":"...","METRICS":[{"value":0,"suffix":"%","label":"...","icon":"TrendingUp","accent":"accent"}]}',
-    gauge: '{"VALUE":0,"TARGET":0,"SUFFIX":"%","LABEL":"...","SUBLABEL":"Meta: X%"}',
     list: '{"TITLE":"...","SUBTITLE":"...","LIST_ITEMS":["item 1","item 2"],"ACCENT_KEY":"accent"}',
     comparison: '{"TITLE":"...","LEFT":{"title":"...","icon":"...","accent":"red","points":["..."]},"RIGHT":{"title":"...","icon":"...","accent":"accent","points":["..."]}}',
     beforeafter: '{"TITLE":"...","BEFORE":{"label":"ANTES","items":["..."]},"AFTER":{"label":"AHORA","items":["..."]}}',

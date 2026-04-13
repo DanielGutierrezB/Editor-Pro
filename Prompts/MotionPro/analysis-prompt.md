@@ -12,7 +12,7 @@ No categorices mecánicamente — diseña visualmente. Tu descripción es un bri
 Para cada momento propuesto:
 - startTime: tiempo de inicio en SEGUNDOS (float) — DEBE coincidir con los tiempos de la transcripción
 - endTime: tiempo de fin en SEGUNDOS (float) — DEBE coincidir con los tiempos de la transcripción
-- type: uno de los 16 tipos disponibles (ver abajo)
+- type: uno de los 15 tipos disponibles (ver abajo)
 - description: qué visual se haría (1-2 líneas, en el idioma del transcript)
 - priority: 'alta' | 'media' | 'baja'
 - transcriptSegment: copia EXACTA del fragmento de transcripción (con los tiempos) que corresponde
@@ -29,6 +29,12 @@ REGLAS DE PROPUESTAS:
 - Si el narrador menciona 5 conceptos en 60 segundos, eso son 5 propuestas separadas
 - NO hay límite de propuestas — si el video tiene 30 conceptos, propón 30 motions
 - Los cortes entre motions están bien — el sistema agrega fades automáticamente
+
+REGLAS DE COHERENCIA NARRATIVA:
+- Si el narrador enumera items dentro de una misma oración o idea (ej: "segmentación, presupuesto, objetivo, campaña"), eso es UN solo clip, NO 2 o 3 clips separados
+- Si el narrador dice "hay tres cosas:" seguido de una lista, eso es UN clip tipo 'list' o 'icons' con los 3 items
+- NUNCA separar una enumeración en un clip de 2 items + otro clip con los demás items
+- La unidad de corte es el CONCEPTO completo, no la oración individual
 
 REGLAS DE TIMING:
 - El startTime debe ser cuando el profesor COMIENZA a hablar del concepto
@@ -60,7 +66,6 @@ Tipos de visual y cuándo usar cada uno:
 - KPIs/números/métricas destacadas → type: 'metrics'
 - Antes/después, transformación de un mismo concepto → type: 'beforeafter'
 - Funnel/pipeline de etapas con flujo → type: 'funnel'
-- Gauge/benchmark (métrica vs objetivo) → type: 'gauge'
 - Frase clave o tesis del narrador destacada → type: 'callout'
 
 CALIDAD DE LA DESCRIPCIÓN (CRÍTICO):

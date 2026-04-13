@@ -252,7 +252,6 @@
             diagram: 5,      // Forest (dark green)
             funnel: 14,      // Brown
             chart: 3,        // Lavender
-            gauge: 7,        // Mango (orange)
             metrics: 0,      // Violet
             list: 10,        // Teal
             timeline: 1,     // Iris
@@ -741,6 +740,18 @@
                         '<div class="mp-proposal-desc">' + esc(p.description) + '</div>' +
                     '</div>';
 
+                // Dim generated items
+                if (p.generated) {
+                    card.style.opacity = '0.5';
+                    card.style.pointerEvents = 'none';
+                    var badge = document.createElement("span");
+                    badge.className = "mp-generated-badge";
+                    badge.textContent = " ✅";
+                    badge.style.marginLeft = "6px";
+                    var topRow = card.querySelector(".mp-proposal-top");
+                    if (topRow) topRow.appendChild(badge);
+                }
+
                 var cb = card.querySelector("input[type=checkbox]");
                 (function(idx, startTime) {
                     cb.addEventListener("change", function() {
@@ -967,10 +978,10 @@
 
             if (errors.length > 0) {
                 if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", done + "/" + total + " done, " + errors.length + " errors");
-                showToast(errors.length + " errores, " + (total - errors.length) + " generados", "error");
+                showToast("✅ " + (total - errors.length) + " motions generados en " + totalTime + "s (" + errors.length + " errores)", "error");
             } else {
                 if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", total + "/" + total + " done, 0 errors");
-                showToast(total + " motions generados y colocados en timeline", "success");
+                showToast("✅ " + total + " motions generados en " + totalTime + "s", "success");
             }
         }
 
@@ -1033,6 +1044,7 @@
                                     if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result2.motionId || "?") + " (retry success)");
                                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando " + done + "/" + total + " en timeline...");
                                     mpPlaceSingleInTimeline(result2.motionId, function() {
+                                        proposal.generated = true;
                                         motionPro.saveState();
                                         mpRenderControlPanel();
                                         launchWorker();
@@ -1051,6 +1063,7 @@
                     if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result.motionId || "?"));
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando " + done + "/" + total + " en timeline...");
                     mpPlaceSingleInTimeline(result.motionId, function() {
+                        proposal.generated = true;
                         motionPro.saveState();
                         mpRenderControlPanel();
                         launchWorker(); // Launch next
