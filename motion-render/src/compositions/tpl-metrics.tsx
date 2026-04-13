@@ -104,10 +104,11 @@ const OdometerDigit:React.FC<{value:number;d:number;fontSize?:number;color?:stri
 };
 
 const AnimatedMetric:React.FC<{value:number;suffix:string;label:string;d:number;accent?:string}> = ({value,suffix,label,d,accent=C.accent}) => (
-  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:16}}>
+  <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'space-between',height:140}}>
+    <div style={{height:36}}/>
     <div style={{display:'flex',alignItems:'baseline',gap:4}}>
-      <OdometerDigit value={value} d={d} fontSize={72} color={accent}/>
-      <E d={d+15} from="pop"><span style={{fontSize:36,fontWeight:700,color:accent}}>{suffix}</span></E>
+      <OdometerDigit value={value} d={d} fontSize={64} color={accent}/>
+      <E d={d+15} from="pop"><span style={{fontSize:32,fontWeight:700,color:accent}}>{suffix}</span></E>
     </div>
     <E d={d+20} from="up"><span style={{fontSize:18,fontWeight:500,color:C.dim}}>{label}</span></E>
   </div>
