@@ -3051,6 +3051,19 @@ html, body {
     max-height: none;
     overflow-y: auto;
 }
+.mp-motions-list .mp-group-header {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    padding: 8px 0 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
 .mp-motion-card {
     background: var(--bg-raised);
     border: 1px solid var(--border);

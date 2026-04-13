@@ -56,6 +56,7 @@ Tipos de visual y cuándo usar cada uno:
 - Comparaciones (A vs B) → type: 'comparison'
 - Procesos paso a paso → type: 'steps'
 - Datos/estadísticas → type: 'chart'
+  En la descripción del chart, especifica el tipo: "bar chart de X" o "line chart con tendencia de X" o "progress bars comparando X"
 - Listados de conceptos (2-4 items visuales) → type: 'icons'
 - Flujos causa-efecto → type: 'cards'
 - Diagramas técnicos, arquitectura → type: 'diagram'

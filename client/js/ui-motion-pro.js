@@ -915,6 +915,7 @@
         state.mpGenerating = true;
         state.mpGenerateCancelRequested = false;
         showElement("mp-generate-progress");
+        showElement("mp-generate-progress-inline");
         mpSetProgress("mp-generate", 5, "Preparando carpeta del proyecto...");
 
         // Get sequence FPS for Remotion
@@ -967,6 +968,7 @@
             state.mpGenerateCancelRequested = false;
             state.mpGenerating = false;
             hideElement("mp-generate-progress");
+            hideElement("mp-generate-progress-inline");
             refreshMPHeaderProgressVisibility();
             motionPro.saveState();
             mpRenderControlPanel();
@@ -994,6 +996,7 @@
                     state.mpGenerateCancelRequested = false;
                     state.mpGenerating = false;
                     hideElement("mp-generate-progress");
+                    hideElement("mp-generate-progress-inline");
                     refreshMPHeaderProgressVisibility();
                     motionPro.saveState();
                     mpRenderControlPanel();
@@ -1265,8 +1268,29 @@
         var countEl = document.getElementById("mp-motions-count");
         if (countEl) countEl.textContent = motions.length;
 
-        for (var i = 0; i < motions.length; i++) {
-            var m = motions[i];
+        // Group motions by their group field
+        var groups = {};
+        var groupOrder = [];
+        motions.forEach(function(m) {
+            var grp = m.group || 'Sin grupo';
+            if (!groups[grp]) { groups[grp] = []; groupOrder.push(grp); }
+            groups[grp].push(m);
+        });
+
+        groupOrder.forEach(function(grpName) {
+            var grpItems = groups[grpName];
+
+            // Group header
+            var header = document.createElement('div');
+            header.className = 'mp-group-header';
+            header.innerHTML =
+                '<span class="mp-group-icon">📦</span>' +
+                '<span class="mp-group-name">' + esc(grpName) + '</span>' +
+                '<span class="mp-group-count">(' + grpItems.length + ')</span>';
+            list.appendChild(header);
+
+        for (var i = 0; i < grpItems.length; i++) {
+            var m = grpItems[i];
             var activeV = motionPro.getActiveVersion(m.id);
             var typeInfo = MotionPro.TYPES[m.type] || { label: m.type, color: "#818cf8" };
 
@@ -1535,6 +1559,7 @@
                 });
             })(m.id, m.startTime);
         }
+        }); // end groupOrder.forEach
         mpUpdateMotionProEmptyState();
     }
 
@@ -1544,6 +1569,11 @@
         if (fill) fill.style.width = pct + "%";
         if (txt) txt.textContent = text || "";
         setProgress("mp-progress-header-fill", "mp-progress-header-text", pct, text || "");
+        // Also update inline progress bar in Step 2
+        var fillInline = document.getElementById("mp-generate-progress-fill-inline");
+        var textInline = document.getElementById("mp-generate-progress-text-inline");
+        if (fillInline) fillInline.style.width = pct + "%";
+        if (textInline) textInline.textContent = text || "";
         refreshMPHeaderProgressVisibility();
     }
 

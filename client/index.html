@@ -1041,6 +1041,14 @@
                             <button id="btn-mp-select-all" class="btn btn-sm btn-ghost">Seleccionar todos</button>
                             <button id="btn-mp-generate" class="btn btn-sm btn-success btn-disabled" title="Genera motion graphics para las propuestas seleccionadas">🎬 Generar Seleccionados</button>
                         </div>
+                        <div id="mp-generate-progress-inline" class="progress-bar mp-generate-progress-wrap hidden" style="margin-top:8px">
+                            <div class="mp-generate-progress-row">
+                                <div class="mp-generate-progress-main">
+                                    <div class="progress-track"><div id="mp-generate-progress-fill-inline" class="progress-fill" style="width:0%"></div></div>
+                                    <span id="mp-generate-progress-text-inline" class="progress-text">Generando motions...</span>
+                                </div>
+                            </div>
+                        </div>
                         <div id="mp-proposal-list" class="mp-proposal-list"></div>
                     </div>
                 </div>
