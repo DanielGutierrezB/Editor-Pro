@@ -605,6 +605,8 @@ class RemotionManager {
       '--image-format=jpeg',
       '--jpeg-quality=100',
       '--concurrency=1',
+      '--timeout=60000',
+      '--delay-render-timeout=30000',
     ];
 
     const proc = spawn(npxPath, args, {
