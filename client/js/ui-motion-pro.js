@@ -124,25 +124,50 @@
             var darkQuarter = colors.slice(0, Math.floor(colors.length * 0.25));
             var bg = _avgColor(darkQuarter);
 
-            // Get brightest 10% for accent
-            var brightTenth = colors.slice(Math.floor(colors.length * 0.9));
-            var accent = _avgColor(brightTenth);
-
-            // Get middle for card color
-            var middle = colors.slice(Math.floor(colors.length * 0.3), Math.floor(colors.length * 0.4));
-            var card = _avgColor(middle);
-
-            // Ensure accent has enough contrast with bg
-            var accentBrightness = (accent.r + accent.g + accent.b) / 3;
+            // Generate COMPLEMENTARY accent color (not extract from image)
+            // The accent should contrast with the bg, not match it
             var bgBrightness = (bg.r + bg.g + bg.b) / 3;
-            if (accentBrightness - bgBrightness < 100) {
-                accent.r = Math.min(255, accent.r + 80);
-                accent.g = Math.min(255, accent.g + 80);
-                accent.b = Math.min(255, accent.b + 80);
+            
+            // Find the dominant hue of the bg to pick a complementary accent
+            var bgMax = Math.max(bg.r, bg.g, bg.b);
+            var bgMin = Math.min(bg.r, bg.g, bg.b);
+            var bgHue = 0;
+            if (bgMax !== bgMin) {
+                if (bgMax === bg.r) bgHue = 60 * ((bg.g - bg.b) / (bgMax - bgMin));
+                else if (bgMax === bg.g) bgHue = 60 * (2 + (bg.b - bg.r) / (bgMax - bgMin));
+                else bgHue = 60 * (4 + (bg.r - bg.g) / (bgMax - bgMin));
+                if (bgHue < 0) bgHue += 360;
             }
+            
+            // Pick accent from complementary/triadic hue with high saturation+brightness
+            var accentHue = (bgHue + 160) % 360; // ~complementary
+            // Convert HSL to RGB (accent: high saturation, high lightness)
+            function hslToRgb(h, s, l) {
+                var c = (1 - Math.abs(2*l - 1)) * s;
+                var x = c * (1 - Math.abs((h/60) % 2 - 1));
+                var m = l - c/2;
+                var r1=0,g1=0,b1=0;
+                if(h<60){r1=c;g1=x;}else if(h<120){r1=x;g1=c;}else if(h<180){g1=c;b1=x;}
+                else if(h<240){g1=x;b1=c;}else if(h<300){r1=x;b1=c;}else{r1=c;b1=x;}
+                return {r:Math.round((r1+m)*255),g:Math.round((g1+m)*255),b:Math.round((b1+m)*255)};
+            }
+            var accent = hslToRgb(accentHue, 0.8, 0.65); // vivid, bright
+
+            // Card is slightly lighter than bg
+            var card = {
+                r: Math.min(255, bg.r + 20),
+                g: Math.min(255, bg.g + 20),
+                b: Math.min(255, bg.b + 20)
+            };
 
             var textColor = bgBrightness < 128 ? '#ffffff' : '#1a1d23';
             var dimColor = bgBrightness < 128 ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
+
+            // Secondary colors that complement the accent
+            var secondaryHue = (accentHue + 90) % 360;
+            var warningHue = (accentHue + 180) % 360;
+            var secondary = hslToRgb(secondaryHue, 0.7, 0.6);
+            var warning = hslToRgb(warningHue, 0.7, 0.6);
 
             var palette = {
                 bg: _rgbToHex(bg),
@@ -153,8 +178,8 @@
                 border: bgBrightness < 128 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
                 glow: _hexToRgba(_rgbToHex(accent), 0.08),
                 green: _rgbToHex(accent),
-                orange: '#fb923c',
-                purple: '#a78bfa',
+                orange: _rgbToHex(warning),
+                purple: _rgbToHex(secondary),
                 red: '#f87171',
             };
 
