@@ -7,7 +7,7 @@ import "@fontsource/dm-sans/500.css";
 import "@fontsource/dm-sans/600.css";
 import "@fontsource/dm-sans/700.css";
 import React from 'react';
-import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Img, Easing} from 'remotion';
+import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, delayRender, continueRender, spring, Sequence, Img, Easing} from 'remotion';
 import * as LucideIcons from 'lucide-react';
 
 const C = {
@@ -139,6 +139,8 @@ function stepStartFrame(step: {time?: number}, index: number, totalSteps: number
 
 const StepSection:React.FC<{stepIndex:number; step:typeof STEPS_DATA[0]}> = ({stepIndex, step}) => {
   const {durationInFrames: dur} = useVideoConfig();
+  // Font guard — block render until DM Sans loads
+  const [_fontOk] = React.useState(() => { const h = delayRender("Loading font"); if (typeof document !== "undefined") { document.fonts.ready.then(() => continueRender(h)); } else { continueRender(h); } return true; });
   const accentColor = (C as any)[step.accent] || C.accent;
 
   return (
@@ -181,6 +183,7 @@ const StepSection:React.FC<{stepIndex:number; step:typeof STEPS_DATA[0]}> = ({st
 
 export const MyComposition:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
+  // Font guard — block render until DM Sans loads
 
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>

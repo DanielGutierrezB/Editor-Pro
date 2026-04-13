@@ -7,7 +7,7 @@ import "@fontsource/dm-sans/500.css";
 import "@fontsource/dm-sans/600.css";
 import "@fontsource/dm-sans/700.css";
 import React from 'react';
-import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequence, Img, Easing} from 'remotion';
+import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, delayRender, continueRender, spring, Sequence, Img, Easing} from 'remotion';
 import * as LucideIcons from 'lucide-react';
 
 const C = {
@@ -131,6 +131,8 @@ function baItemDelay(item: any, index: number, totalItems: number, items: any[],
 
 const Section1:React.FC = () => {
   const {durationInFrames: dur} = useVideoConfig();
+  // Font guard — block render until DM Sans loads
+  const [_fontOk] = React.useState(() => { const h = delayRender("Loading font"); if (typeof document !== "undefined") { document.fonts.ready.then(() => continueRender(h)); } else { continueRender(h); } return true; });
   const holdFrames = 60;
   const totalElements = 3; // before card, divider, after card
   const elementStagger = Math.max(8, Math.floor((dur - holdFrames - 20) / totalElements));
@@ -188,6 +190,7 @@ const Section1:React.FC = () => {
 
 export const MyComposition:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
+  // Font guard — block render until DM Sans loads
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>
       <Sequence from={0} durationInFrames={durationInFrames} premountFor={10}>

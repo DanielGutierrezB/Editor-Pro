@@ -606,11 +606,11 @@ class RemotionManager {
       compositionId,
       outputPath,
       '--codec=prores',
+      '--prores-profile=4444',
       
       
       '--muted',
-      '--image-format=jpeg',
-      '--jpeg-quality=100',
+      '--image-format=png',
       '--concurrency=1',
       '--timeout=60000',
       '--delay-render-timeout=30000',
