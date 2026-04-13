@@ -158,14 +158,14 @@ const Section1:React.FC = () => {
           <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
           <AccentSeparator d={8} width={60} variant="line"/>
         </E>
-        <div style={{display:'flex', gap:60, justifyContent:'center', alignItems:'flex-start', flexWrap:'wrap'}}>
+        <div style={{display:'flex', gap:60, justifyContent:'center', alignItems:'stretch', flexWrap:'wrap'}}>
           {METRICS.map((m, i) => {
             const accentColor = (C as any)[m.accent] || C.accent;
             const delay = 12 + i * 8;
             return (
               <GlowCard key={i} d={delay} accent={accentColor} elevation={i === 0 ? 4 : 2}
                 width={Math.min(340, Math.floor(1500 / METRICS.length))} active={i === 0}>
-                <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:16}}>
+                <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:16, flex:1, justifyContent:'center'}}>
                   <Icon name={m.icon} size={36} color={accentColor}/>
                   <AnimatedMetric value={m.value} suffix={m.suffix} label={m.label}
                     d={delay + 10} accent={accentColor}/>
