@@ -90,12 +90,135 @@
         MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0;
     }
 
+    // ─── Color Extraction (client-side canvas) ─────────────────
+
+    function _extractPaletteFromImage(imageSrc, callback) {
+        var img = new Image();
+        img.onload = function() {
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            var w = 100; // downsample for speed
+            var h = Math.round(img.height * (w / img.width));
+            canvas.width = w;
+            canvas.height = h;
+            ctx.drawImage(img, 0, 0, w, h);
+
+            var imageData = ctx.getImageData(0, 0, w, h).data;
+            var colors = [];
+
+            // Sample every 4th pixel (stride 16 in RGBA)
+            for (var i = 0; i < imageData.length; i += 16) {
+                colors.push({
+                    r: imageData[i],
+                    g: imageData[i + 1],
+                    b: imageData[i + 2]
+                });
+            }
+
+            // Sort by brightness
+            colors.sort(function(a, b) {
+                return (a.r + a.g + a.b) - (b.r + b.g + b.b);
+            });
+
+            // Get darkest 25% for background
+            var darkQuarter = colors.slice(0, Math.floor(colors.length * 0.25));
+            var bg = _avgColor(darkQuarter);
+
+            // Get brightest 10% for accent
+            var brightTenth = colors.slice(Math.floor(colors.length * 0.9));
+            var accent = _avgColor(brightTenth);
+
+            // Get middle for card color
+            var middle = colors.slice(Math.floor(colors.length * 0.3), Math.floor(colors.length * 0.4));
+            var card = _avgColor(middle);
+
+            // Ensure accent has enough contrast with bg
+            var accentBrightness = (accent.r + accent.g + accent.b) / 3;
+            var bgBrightness = (bg.r + bg.g + bg.b) / 3;
+            if (accentBrightness - bgBrightness < 100) {
+                accent.r = Math.min(255, accent.r + 80);
+                accent.g = Math.min(255, accent.g + 80);
+                accent.b = Math.min(255, accent.b + 80);
+            }
+
+            var textColor = bgBrightness < 128 ? '#ffffff' : '#1a1d23';
+            var dimColor = bgBrightness < 128 ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
+
+            var palette = {
+                bg: _rgbToHex(bg),
+                card: _rgbToHex(card),
+                accent: _rgbToHex(accent),
+                text: textColor,
+                dim: dimColor,
+                border: bgBrightness < 128 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                glow: _hexToRgba(_rgbToHex(accent), 0.08),
+                green: _rgbToHex(accent),
+                orange: '#fb923c',
+                purple: '#a78bfa',
+                red: '#f87171',
+            };
+
+            callback(null, palette);
+        };
+        img.onerror = function() {
+            callback(new Error('No se pudo cargar la imagen'));
+        };
+        img.src = imageSrc;
+    }
+
+    function _avgColor(colors) {
+        var r = 0, g = 0, b = 0;
+        colors.forEach(function(c) { r += c.r; g += c.g; b += c.b; });
+        var n = colors.length || 1;
+        return { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) };
+    }
+
+    function _rgbToHex(c) {
+        return '#' + [c.r, c.g, c.b].map(function(v) {
+            return v.toString(16).padStart(2, '0');
+        }).join('');
+    }
+
+    function _hexToRgba(hex, alpha) {
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    }
+
+    function _mpUpdateStyleSwatches(palette) {
+        var bgEl = document.getElementById("mp-style-bg");
+        var cardEl = document.getElementById("mp-style-card");
+        var accentEl = document.getElementById("mp-style-accent");
+        var labelEl = document.getElementById("mp-style-label");
+        var resetBtn = document.getElementById("btn-mp-reset-style");
+        if (bgEl) bgEl.style.background = palette.bg;
+        if (cardEl) cardEl.style.background = palette.card;
+        if (accentEl) accentEl.style.background = palette.accent;
+        if (labelEl) labelEl.textContent = "Personalizado";
+        if (resetBtn) resetBtn.style.display = "";
+    }
+
+    function _mpResetStyleSwatches() {
+        var bgEl = document.getElementById("mp-style-bg");
+        var cardEl = document.getElementById("mp-style-card");
+        var accentEl = document.getElementById("mp-style-accent");
+        var labelEl = document.getElementById("mp-style-label");
+        var resetBtn = document.getElementById("btn-mp-reset-style");
+        if (bgEl) bgEl.style.background = "#1a1d23";
+        if (cardEl) cardEl.style.background = "#2d323a";
+        if (accentEl) accentEl.style.background = "#0ae98d";
+        if (labelEl) labelEl.textContent = "Default";
+        if (resetBtn) resetBtn.style.display = "none";
+    }
+
     function mpInit() {
         _initRefs();
         mpUpdateServerUI();
         mpCheckServerStatus();
         mpUpdateAnalyzeButton();
         mpBindStepHeaders();
+        mpInitStyleImport();
 
         // On init, restart server to ensure clean state
         if (motionPro) {
@@ -149,6 +272,71 @@
     function mpShowStep(num) {
         var el = document.getElementById(num === 2 ? "mp-proposals-section" : num === 3 ? "mp-control-section" : null);
         if (el) el.style.display = "";
+    }
+
+    // ─── Style Import Initialization ─────────────────────────────
+
+    function mpInitStyleImport() {
+        var importBtn = document.getElementById("btn-mp-import-style");
+        var fileInput = document.getElementById("mp-style-file-input");
+        var resetBtn = document.getElementById("btn-mp-reset-style");
+
+        if (importBtn && fileInput) {
+            importBtn.addEventListener("click", function() {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener("change", function(evt) {
+                var file = evt.target.files[0];
+                if (!file) return;
+
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    _extractPaletteFromImage(e.target.result, function(err, palette) {
+                        if (err) {
+                            showToast("Error al extraer colores: " + err.message, "error");
+                            return;
+                        }
+
+                        // Save palette to state + motionPro + localStorage
+                        state.customPalette = palette;
+                        if (motionPro) motionPro.customPalette = palette;
+                        localStorage.setItem("mp_custom_palette", JSON.stringify(palette));
+
+                        // Update preview swatches
+                        _mpUpdateStyleSwatches(palette);
+
+                        showToast("Paleta extraída: " + palette.bg + " / " + palette.accent, "success");
+                        if (window.EPLogger) EPLogger.log("motion-pro", "style-import", "bg=" + palette.bg + " accent=" + palette.accent);
+                    });
+                };
+                reader.readAsDataURL(file);
+                // Reset input so re-selecting same file triggers change
+                fileInput.value = "";
+            });
+        }
+
+        if (resetBtn) {
+            resetBtn.addEventListener("click", function() {
+                state.customPalette = null;
+                if (motionPro) motionPro.customPalette = null;
+                localStorage.removeItem("mp_custom_palette");
+                _mpResetStyleSwatches();
+                showToast("Paleta restaurada a default", "info");
+                if (window.EPLogger) EPLogger.log("motion-pro", "style-reset", "default palette");
+            });
+        }
+
+        // Load saved palette on init
+        var savedPalette = localStorage.getItem("mp_custom_palette");
+        if (savedPalette) {
+            try {
+                var palette = JSON.parse(savedPalette);
+                state.customPalette = palette;
+                if (motionPro) motionPro.customPalette = palette;
+                _mpUpdateStyleSwatches(palette);
+            } catch (e) { /* ignore corrupt data */ }
+        }
     }
 
     // ─── Server management ────────────────────────────────────────

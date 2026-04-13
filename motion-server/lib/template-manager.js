@@ -67,8 +67,13 @@ class TemplateManager {
     });
   }
 
-  fillTemplate(type, contentValues, compositionId, durationFrames, proposalStartTime, transcriptSegment) {
+  fillTemplate(type, contentValues, compositionId, durationFrames, proposalStartTime, transcriptSegment, customPalette) {
     let tsx = this.getTemplate(type);
+
+    // Apply custom palette if provided
+    if (customPalette) {
+      tsx = this._applyCustomPalette(tsx, customPalette);
+    }
 
     // Match timestamps for arrays with text
     const arrayKeysToMatch = ['ITEMS', 'CARDS_DATA', 'NODES', 'LIST_ITEMS', 'STEPS_DATA', 'STAGES', 'EVENTS', 'REVEAL_ITEMS'];
@@ -153,6 +158,22 @@ class TemplateManager {
     const safeCompName = /^\d/.test(compName) ? 'M' + compName : compName;
     tsx = tsx.replace(/export const MyComposition/g, `export const ${safeCompName}`);
 
+    return tsx;
+  }
+
+  _applyCustomPalette(tsx, palette) {
+    // Replace the C palette object values in template source
+    // Uses regex to handle the const C = { ... } block
+    if (palette.bg) tsx = tsx.replace(/bg:'#1a1d23'/g, `bg:'${palette.bg}'`);
+    if (palette.card) tsx = tsx.replace(/card:'#2d323a'/g, `card:'${palette.card}'`);
+    if (palette.accent) {
+      tsx = tsx.replace(/accent:'#0ae98d'/g, `accent:'${palette.accent}'`);
+      tsx = tsx.replace(/green:'#0ae98d'/g, `green:'${palette.accent}'`);
+    }
+    if (palette.text) tsx = tsx.replace(/text:'#ffffff'/g, `text:'${palette.text}'`);
+    if (palette.dim) tsx = tsx.replace(/dim:'rgba\(255,255,255,0\.7\)'/g, `dim:'${palette.dim}'`);
+    if (palette.border) tsx = tsx.replace(/border:'rgba\(255,255,255,0\.08\)'/g, `border:'${palette.border}'`);
+    if (palette.glow) tsx = tsx.replace(/glow:'rgba\(10,233,141,0\.08\)'/g, `glow:'${palette.glow}'`);
     return tsx;
   }
 

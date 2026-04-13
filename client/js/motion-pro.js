@@ -240,7 +240,8 @@
             model: aiConfig.model,
             apiKey: aiConfig.apiKey,
             sessionDir: outputDir || "",
-            brandfetchKey: aiConfig.brandfetchKey || ""
+            brandfetchKey: aiConfig.brandfetchKey || "",
+            customPalette: self.customPalette || null
         };
 
         self._post("/api/generate/template", body, function(err, result) {

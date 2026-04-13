@@ -999,6 +999,24 @@
                                 <button id="btn-mp-prompt-reset" class="btn btn-sm btn-ghost">↩ Restaurar Original</button>
                             </div>
                         </div>
+                        <!-- Estilo Visual — Course style extraction -->
+                        <div class="mp-style-section" style="margin-bottom:8px; padding:8px; background:var(--bg-surface); border-radius:6px;">
+                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                                <span style="font-size:11px; font-weight:700; color:var(--text-primary);">Estilo Visual</span>
+                                <div style="display:flex; gap:4px;">
+                                    <button id="btn-mp-reset-style" class="btn btn-sm btn-ghost" title="Restaurar paleta default" style="display:none; font-size:10px;">↩ Reset</button>
+                                    <button id="btn-mp-import-style" class="btn btn-sm btn-ghost" title="Importar frame de referencia del curso">🎨 Importar Frame</button>
+                                </div>
+                            </div>
+                            <div id="mp-style-preview" style="display:flex; gap:6px; align-items:center;">
+                                <div id="mp-style-bg" style="width:24px; height:24px; border-radius:4px; background:#1a1d23; border:1px solid rgba(255,255,255,0.1);"></div>
+                                <div id="mp-style-card" style="width:24px; height:24px; border-radius:4px; background:#2d323a; border:1px solid rgba(255,255,255,0.1);"></div>
+                                <div id="mp-style-accent" style="width:24px; height:24px; border-radius:4px; background:#0ae98d; border:1px solid rgba(255,255,255,0.1);"></div>
+                                <span id="mp-style-label" style="font-size:10px; color:var(--text-muted); margin-left:4px;">Default</span>
+                            </div>
+                            <input type="file" id="mp-style-file-input" accept="image/*" style="display:none">
+                        </div>
+
                         <div class="action-bar">
                             <button id="btn-mp-analyze" class="btn-analyze btn-analyze-alt btn-disabled" title="Analizar transcripción para identificar momentos de motion graphics">
                                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">

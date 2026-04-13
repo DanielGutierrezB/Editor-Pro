@@ -79,7 +79,7 @@ router.post('/', (req, res) => {
 // Template-based generation — AI fills content values only, template handles layout
 // ──────────────────────────────────────────────────────────────────────────────
 router.post('/template', (req, res) => {
-  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir } = req.body;
+  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette } = req.body;
 
   if (!proposal || !transcriptSegment) {
     return res.status(400).json({ error: 'Missing proposal or transcriptSegment' });
@@ -105,9 +105,9 @@ router.post('/template', (req, res) => {
 
       const contentValues = JSON.parse(jsonStr);
 
-      // Fill template with content values
+      // Fill template with content values (apply custom palette if provided)
       const tsxCode = templateManager.fillTemplate(
-        proposal.type, contentValues, compositionId, durationFrames, proposal.startTime, transcriptSegment
+        proposal.type, contentValues, compositionId, durationFrames, proposal.startTime, transcriptSegment, customPalette
       );
 
       // Write and register composition
