@@ -121,7 +121,7 @@ const Section1:React.FC = () => {
     <Fd dur={dur} fo={1}>
       <div style={{position:'absolute', inset:0, zIndex:-1,
         background:`radial-gradient(circle at 50% 50%, ${accentColor}06, transparent 70%)`}}/>
-      <Safe style={{justifyContent:'center', alignItems:'center'}}>
+      <Safe style={{justifyContent:'center', alignItems:'center', paddingTop:80}}>
         <E d={0} from="pop">
           <Icon name={ICON_NAME} size={72} color={accentColor}/>
         </E>
@@ -133,6 +133,10 @@ const Section1:React.FC = () => {
         </div>
         <div style={{height:28}}/>
         <AccentSeparator d={15 + PHRASE.split(' ').length * 4 + 10} width={80} color={accentColor} variant="gradient"/>
+        {/* Attribution */}
+        <E d={15 + PHRASE.split(' ').length * 4 + 15} from="up">
+          <div style={{fontSize:22, color:C.dim, marginTop:16}}>— Principio fundamental</div>
+        </E>
       </Safe>
     </Fd>
   );

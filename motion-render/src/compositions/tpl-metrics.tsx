@@ -140,7 +140,7 @@ const AccentSeparator:React.FC<{
 const TITLE = "Resultados del Q4";
 const METRICS = [
   { value: 73, suffix: "%", label: "Conversión", icon: "TrendingUp", accent: "accent" },
-  { value: 2400, suffix: "", label: "Usuarios activos", icon: "Users", accent: "orange" },
+  { value: 2400, suffix: "+", label: "Usuarios activos", icon: "Users", accent: "orange" },
   { value: 99, suffix: "%", label: "Satisfacción", icon: "Heart", accent: "purple" },
 ];
 
@@ -161,7 +161,7 @@ const Section1:React.FC = () => {
         <div style={{display:'flex', gap:60, justifyContent:'center', alignItems:'flex-start', flexWrap:'wrap'}}>
           {METRICS.map((m, i) => {
             const accentColor = (C as any)[m.accent] || C.accent;
-            const delay = 20 + i * 15;
+            const delay = 12 + i * 8;
             return (
               <GlowCard key={i} d={delay} accent={accentColor} elevation={i === 0 ? 4 : 2}
                 width={Math.min(340, Math.floor(1500 / METRICS.length))} active={i === 0}>

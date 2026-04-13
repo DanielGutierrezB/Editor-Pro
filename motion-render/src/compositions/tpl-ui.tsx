@@ -101,7 +101,7 @@ const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
   const accentColor = (C as any)[ACCENT_KEY] || C.accent;
-  const framesPerField = Math.floor((dur - 90) / FIELDS.length);
+  const fieldStagger = 10;
 
   return (
     <Fd dur={dur} fo={1}>
@@ -114,16 +114,16 @@ const Section1:React.FC = () => {
           </E>
           <div style={{display:'flex', flexDirection:'column', gap:20}}>
             {FIELDS.map((field, i) => {
-              const fieldStart = 15 + i * framesPerField;
-              const isActive = frame >= fieldStart && frame < fieldStart + framesPerField;
+              const fieldStart = 10 + i * fieldStagger;
+              const isActive = frame >= fieldStart && frame < fieldStart + fieldStagger + 20;
               const typingProgress = interpolate(
-                frame - fieldStart - 10, [0, 35], [0, 1],
+                frame - fieldStart - 5, [0, 25], [0, 1],
                 {extrapolateLeft:'clamp', extrapolateRight:'clamp'}
               );
               const displayedText = field.value.substring(0, Math.floor(field.value.length * typingProgress));
               return (
                 <E key={i} d={fieldStart} from="up">
-                  <div style={{fontSize:18, fontWeight:700, color:C.dim, marginBottom:8, textTransform:'uppercase', letterSpacing:1}}>
+                  <div style={{fontSize:20, fontWeight:700, color:C.dim, marginBottom:8, textTransform:'uppercase', letterSpacing:1}}>
                     {field.label}
                   </div>
                   <div style={{
@@ -133,9 +133,9 @@ const Section1:React.FC = () => {
                     boxShadow: isActive ? `0 0 20px ${accentColor}15` : 'none',
                     display:'flex', alignItems:'center',
                   }}>
-                    <span style={{fontSize:22, fontWeight:400, color: frame >= fieldStart + 10 ? C.text : C.dim}}>
-                      {frame >= fieldStart + 10 ? displayedText : ''}
-                      {isActive && frame >= fieldStart + 10 && (
+                    <span style={{fontSize:22, fontWeight:400, color: frame >= fieldStart + 5 ? C.text : C.dim}}>
+                      {frame >= fieldStart + 5 ? displayedText : ''}
+                      {isActive && frame >= fieldStart + 5 && (
                         <span style={{
                           opacity: Math.floor(frame / 8) % 2 === 0 ? 1 : 0,
                           color: accentColor,
@@ -147,12 +147,12 @@ const Section1:React.FC = () => {
               );
             })}
           </div>
-          <E d={15 + FIELDS.length * framesPerField} from="up" style={{marginTop:28}}>
+          <E d={10 + FIELDS.length * fieldStagger + 5} from="up" style={{marginTop:28}}>
             <div style={{
               height:56, borderRadius:10,
               backgroundColor:accentColor, display:'flex', alignItems:'center', justifyContent:'center',
             }}>
-              <span style={{fontSize:20, fontWeight:700, color:C.bg}}>Crear cuenta</span>
+              <span style={{fontSize:22, fontWeight:700, color:C.bg}}>Crear cuenta</span>
             </div>
           </E>
         </GlowCard>

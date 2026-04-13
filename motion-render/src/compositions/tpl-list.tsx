@@ -140,7 +140,7 @@ const Section1:React.FC = () => {
                     {isPast ? (
                       <LucideIcons.CheckCircle size={22} color={C.bg} strokeWidth={2.5}/>
                     ) : (
-                      <span style={{fontSize:16, fontWeight:700, color: isActive ? accentColor : C.dim}}>{i + 1}</span>
+                      <span style={{fontSize:20, fontWeight:700, color: isActive ? accentColor : C.dim}}>{i + 1}</span>
                     )}
                   </div>
                   <span style={{
