@@ -93,12 +93,14 @@ Debe mostrar algo como `git version 2.x.x`.
 ### En Mac:
 Abre **Terminal** y escribe estos comandos uno por uno (copia y pega cada línea):
 ```bash
-cd ~/Desktop
+cd ~/Movies
 ```
 ```bash
 git clone https://github.com/DanielGutierrezB/Editor-Pro.git
 ```
 Espera a que termine de descargar (~30 segundos).
+
+> ⚠️ **IMPORTANTE**: NO clonar en Desktop ni Documents si usas iCloud. iCloud sincroniza esas carpetas y corrompe `node_modules`. Usa `~/Movies/` que no se sincroniza.
 
 ### En Windows:
 Abre **PowerShell** y escribe estos comandos uno por uno:
@@ -118,14 +120,14 @@ Espera a que termine de descargar (~30 segundos).
 
 ### En Mac:
 ```bash
-cd ~/Desktop/Editor-Pro/motion-server
+cd ~/Movies/Editor-Pro/motion-server
 ```
 ```bash
 npm install
 ```
 Espera a que termine (~30 segundos). Luego:
 ```bash
-cd ~/Desktop/Editor-Pro/motion-render
+cd ~/Movies/Editor-Pro/motion-render
 ```
 ```bash
 npm install
@@ -134,14 +136,14 @@ npm install
 
 ### En Windows:
 ```bash
-cd ~\Desktop\Editor-Pro\motion-server
+cd ~\Movies\Editor-Pro\motion-server
 ```
 ```bash
 npm install
 ```
 Espera. Luego:
 ```bash
-cd ~\Desktop\Editor-Pro\motion-render
+cd ~\Movies\Editor-Pro\motion-render
 ```
 ```bash
 npm install
@@ -194,7 +196,7 @@ Copia y pega este comando COMPLETO en Terminal (es una sola línea):
 mkdir -p ~/Library/Application\ Support/Adobe/CEP/extensions
 ```
 ```bash
-ln -s ~/Desktop/Editor-Pro ~/Library/Application\ Support/Adobe/CEP/extensions/com.codigo.editorpro
+ln -s ~/Movies/Editor-Pro ~/Library/Application\ Support/Adobe/CEP/extensions/com.codigo.editorpro
 ```
 
 Para verificar que funcionó:
@@ -274,7 +276,7 @@ Debe mostrar `com.codigo.editorpro`.
 ### Actualizar la herramienta:
 Cuando Daniel avise que hay una actualización:
 ```bash
-cd ~/Desktop/Editor-Pro
+cd ~/Movies/Editor-Pro
 git pull origin main
 ```
 Luego recarga el panel en Premiere (botón 🔄 en la esquina superior derecha del panel).
@@ -332,7 +334,7 @@ Cada clip de motion graphics cuesta entre $0.02 y $0.20 dependiendo del modelo:
 - Necesitas versión 23.0 (2023) o superior
 
 ### "Los motions no se generan / se quedan en 0%"
-- Abre la terminal y navega a `~/Desktop/Editor-Pro/motion-server`
+- Abre la terminal y navega a `~/Movies/Editor-Pro/motion-server`
 - Ejecuta `npm install` de nuevo
 - Recarga el panel en Premiere
 
