@@ -186,4 +186,177 @@ function _sendOpenAI(cfg, model, apiKey, systemMsg, userMsg, callback) {
   req.end();
 }
 
-module.exports = { sendLLM };
+/**
+ * sendLLMWithVision — like sendLLM but includes a base64 image in the user message.
+ * Supports OpenRouter, OpenAI, Anthropic, Google, and Ollama vision models.
+ */
+function sendLLMWithVision({ provider, model, apiKey, systemMsg, userMsg, imageBase64 }, callback) {
+  const cfg = PROVIDERS[provider];
+  if (!cfg) return callback(new Error('Unknown provider: ' + provider));
+
+  const dataUri = 'data:image/png;base64,' + imageBase64;
+
+  if (provider === 'anthropic') {
+    return _sendAnthropicVision(cfg, model, apiKey, systemMsg, userMsg, imageBase64, callback);
+  }
+  if (provider === 'google') {
+    return _sendGoogleVision(model, apiKey, systemMsg, userMsg, imageBase64, callback);
+  }
+  if (provider === 'ollama') {
+    return _sendOllamaVision(cfg, model, systemMsg, userMsg, imageBase64, callback);
+  }
+  // openai + openrouter share the same OpenAI-compatible vision format
+  return _sendOpenAIVision(cfg, model, apiKey, systemMsg, userMsg, dataUri, callback);
+}
+
+function _sendAnthropicVision(cfg, model, apiKey, systemMsg, userMsg, imageBase64, callback) {
+  const body = JSON.stringify({
+    model: model || 'claude-sonnet-4-20250514',
+    max_tokens: 4096,
+    system: systemMsg,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageBase64 } },
+        { type: 'text', text: userMsg },
+      ],
+    }],
+  });
+
+  const req = https.request({
+    hostname: cfg.host,
+    path: cfg.path,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+  }, (res) => {
+    let data = '';
+    res.on('data', (chunk) => { data += chunk; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        const text = parsed.content?.[0]?.text || '';
+        callback(null, text);
+      } catch (e) {
+        callback(new Error('Parse error: ' + e.message));
+      }
+    });
+  });
+  req.on('error', callback);
+  req.write(body);
+  req.end();
+}
+
+function _sendGoogleVision(model, apiKey, systemMsg, userMsg, imageBase64, callback) {
+  const m = model || 'gemini-2.0-flash';
+  const body = JSON.stringify({
+    system_instruction: { parts: [{ text: systemMsg }] },
+    contents: [{
+      parts: [
+        { inline_data: { mime_type: 'image/png', data: imageBase64 } },
+        { text: userMsg },
+      ],
+    }],
+    generationConfig: { temperature: 0.7 },
+  });
+
+  const req = https.request({
+    hostname: 'generativelanguage.googleapis.com',
+    path: `/v1beta/models/${m}:generateContent?key=${apiKey}`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  }, (res) => {
+    let data = '';
+    res.on('data', (chunk) => { data += chunk; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        callback(null, text);
+      } catch (e) {
+        callback(new Error('Parse error: ' + e.message));
+      }
+    });
+  });
+  req.on('error', callback);
+  req.write(body);
+  req.end();
+}
+
+function _sendOllamaVision(cfg, model, systemMsg, userMsg, imageBase64, callback) {
+  const body = JSON.stringify({
+    model: model || 'llava',
+    messages: [
+      { role: 'system', content: systemMsg },
+      { role: 'user', content: userMsg, images: [imageBase64] },
+    ],
+    stream: false,
+  });
+
+  const req = http.request({
+    hostname: cfg.host,
+    port: cfg.port,
+    path: cfg.path,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  }, (res) => {
+    let data = '';
+    res.on('data', (chunk) => { data += chunk; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        const text = parsed.message?.content || '';
+        callback(null, text);
+      } catch (e) {
+        callback(new Error('Parse error: ' + e.message));
+      }
+    });
+  });
+  req.on('error', callback);
+  req.write(body);
+  req.end();
+}
+
+function _sendOpenAIVision(cfg, model, apiKey, systemMsg, userMsg, dataUri, callback) {
+  const body = JSON.stringify({
+    model: model || 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: systemMsg },
+      { role: 'user', content: [
+        { type: 'text', text: userMsg },
+        { type: 'image_url', image_url: { url: dataUri } },
+      ]},
+    ],
+    temperature: 0.7,
+  });
+
+  const req = https.request({
+    hostname: cfg.host,
+    path: cfg.path,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+  }, (res) => {
+    let data = '';
+    res.on('data', (chunk) => { data += chunk; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        const text = parsed.choices?.[0]?.message?.content || '';
+        callback(null, text);
+      } catch (e) {
+        callback(new Error('Parse error: ' + e.message));
+      }
+    });
+  });
+  req.on('error', callback);
+  req.write(body);
+  req.end();
+}
+
+module.exports = { sendLLM, sendLLMWithVision };

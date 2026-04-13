@@ -90,7 +90,7 @@
         MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0;
     }
 
-    // ─── Color Extraction (client-side canvas) ─────────────────
+    // ─── Color Extraction (canvas fallback + AI vision) ─────────────────
 
     function _extractPaletteFromImage(imageSrc, callback) {
         var img = new Image();
@@ -106,29 +106,16 @@
             var imageData = ctx.getImageData(0, 0, w, h).data;
             var colors = [];
 
-            // Sample every 4th pixel (stride 16 in RGBA)
             for (var i = 0; i < imageData.length; i += 16) {
-                colors.push({
-                    r: imageData[i],
-                    g: imageData[i + 1],
-                    b: imageData[i + 2]
-                });
+                colors.push({ r: imageData[i], g: imageData[i + 1], b: imageData[i + 2] });
             }
 
-            // Sort by brightness
-            colors.sort(function(a, b) {
-                return (a.r + a.g + a.b) - (b.r + b.g + b.b);
-            });
+            colors.sort(function(a, b) { return (a.r + a.g + a.b) - (b.r + b.g + b.b); });
 
-            // Get darkest 25% for background
             var darkQuarter = colors.slice(0, Math.floor(colors.length * 0.25));
             var bg = _avgColor(darkQuarter);
-
-            // Generate COMPLEMENTARY accent color (not extract from image)
-            // The accent should contrast with the bg, not match it
             var bgBrightness = (bg.r + bg.g + bg.b) / 3;
-            
-            // Find the dominant hue of the bg to pick a complementary accent
+
             var bgMax = Math.max(bg.r, bg.g, bg.b);
             var bgMin = Math.min(bg.r, bg.g, bg.b);
             var bgHue = 0;
@@ -138,10 +125,8 @@
                 else bgHue = 60 * (4 + (bg.r - bg.g) / (bgMax - bgMin));
                 if (bgHue < 0) bgHue += 360;
             }
-            
-            // Pick accent from complementary/triadic hue with high saturation+brightness
-            var accentHue = (bgHue + 160) % 360; // ~complementary
-            // Convert HSL to RGB (accent: high saturation, high lightness)
+
+            var accentHue = (bgHue + 160) % 360;
             function hslToRgb(h, s, l) {
                 var c = (1 - Math.abs(2*l - 1)) * s;
                 var x = c * (1 - Math.abs((h/60) % 2 - 1));
@@ -151,44 +136,55 @@
                 else if(h<240){g1=x;b1=c;}else if(h<300){r1=x;b1=c;}else{r1=c;b1=x;}
                 return {r:Math.round((r1+m)*255),g:Math.round((g1+m)*255),b:Math.round((b1+m)*255)};
             }
-            var accent = hslToRgb(accentHue, 0.8, 0.65); // vivid, bright
-
-            // Card is slightly lighter than bg
-            var card = {
-                r: Math.min(255, bg.r + 20),
-                g: Math.min(255, bg.g + 20),
-                b: Math.min(255, bg.b + 20)
-            };
-
+            var accent = hslToRgb(accentHue, 0.8, 0.65);
+            var card = { r: Math.min(255, bg.r + 20), g: Math.min(255, bg.g + 20), b: Math.min(255, bg.b + 20) };
             var textColor = bgBrightness < 128 ? '#ffffff' : '#1a1d23';
             var dimColor = bgBrightness < 128 ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
-
-            // Secondary colors that complement the accent
             var secondaryHue = (accentHue + 90) % 360;
             var warningHue = (accentHue + 180) % 360;
             var secondary = hslToRgb(secondaryHue, 0.7, 0.6);
             var warning = hslToRgb(warningHue, 0.7, 0.6);
 
             var palette = {
-                bg: _rgbToHex(bg),
-                card: _rgbToHex(card),
-                accent: _rgbToHex(accent),
-                text: textColor,
-                dim: dimColor,
+                bg: _rgbToHex(bg), card: _rgbToHex(card), accent: _rgbToHex(accent),
+                text: textColor, dim: dimColor,
                 border: bgBrightness < 128 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
                 glow: _hexToRgba(_rgbToHex(accent), 0.08),
-                green: _rgbToHex(accent),
-                orange: _rgbToHex(warning),
-                purple: _rgbToHex(secondary),
-                red: '#f87171',
+                green: _rgbToHex(accent), orange: _rgbToHex(warning),
+                purple: _rgbToHex(secondary), red: '#f87171',
             };
-
             callback(null, palette);
         };
-        img.onerror = function() {
-            callback(new Error('No se pudo cargar la imagen'));
-        };
+        img.onerror = function() { callback(new Error('No se pudo cargar la imagen')); };
         img.src = imageSrc;
+    }
+
+    /** AI Vision palette: sends base64 image to server → LLM with vision → palette JSON */
+    function _extractPaletteAI(base64, callback) {
+        if (!motionPro || !aiAnalyzer || !aiAnalyzer.isConfigured()) {
+            return callback(new Error('AI not configured'));
+        }
+        motionPro._post("/api/palette", {
+            imageBase64: base64,
+            provider: state.settings.aiProvider,
+            model: state.settings.aiModel,
+            apiKey: aiAnalyzer.getActiveKey()
+        }, function(err, result) {
+            if (err || !result || !result.palette) {
+                return callback(new Error(err ? err.message : (result && result.error) || 'Sin respuesta de paleta'));
+            }
+            callback(null, result.palette, result.reasoning || '');
+        });
+    }
+
+    /** Apply palette to state, motionPro, localStorage, and UI swatches */
+    function _applyPalette(palette) {
+        state.customPalette = palette;
+        if (motionPro) motionPro.customPalette = palette;
+        localStorage.setItem("mp_custom_palette", JSON.stringify(palette));
+        _mpUpdateStyleSwatches(palette);
+        showToast("Paleta aplicada", "success");
+        if (window.EPLogger) EPLogger.log("motion-pro", "style-applied", "bg=" + palette.bg + " accent=" + palette.accent);
     }
 
     function _avgColor(colors) {
@@ -307,17 +303,17 @@
         var fileInput = document.getElementById("mp-style-file-input");
         var resetBtn = document.getElementById("btn-mp-reset-style");
 
-        // Capture current frame from Premiere
+        // Capture current frame from Premiere → AI vision palette (canvas fallback)
         if (captureBtn) {
             captureBtn.addEventListener("click", function() {
                 captureBtn.textContent = "⏳ Capturando...";
                 captureBtn.disabled = true;
                 csInterface.evalScript('exportCurrentFrame()', function(res) {
-                    captureBtn.textContent = "📷 Capturar Frame";
-                    captureBtn.disabled = false;
                     try {
                         var result = JSON.parse(res);
                         if (result.error) {
+                            captureBtn.textContent = "📷 Capturar Frame";
+                            captureBtn.disabled = false;
                             showToast("Error al capturar: " + result.error, "error");
                             return;
                         }
@@ -331,21 +327,54 @@
                                     fs.copyFileSync(result.path, destPath);
                                 } catch(copyErr) { console.warn("Could not copy reference frame:", copyErr.message); }
                             }
-                            // Load the captured frame and extract palette
-                            _extractPaletteFromImage("file://" + result.path, function(err, palette) {
-                                if (err) {
-                                    showToast("Error al extraer colores: " + err.message, "error");
-                                    return;
-                                }
-                                state.customPalette = palette;
-                                if (motionPro) motionPro.customPalette = palette;
-                                localStorage.setItem("mp_custom_palette", JSON.stringify(palette));
-                                _mpUpdateStyleSwatches(palette);
-                                showToast("Paleta extraída del frame actual", "success");
-                                if (window.EPLogger) EPLogger.log("motion-pro", "style-capture", "bg=" + palette.bg + " accent=" + palette.accent);
-                            });
+
+                            // Try AI vision palette first, fallback to canvas extraction
+                            try {
+                                var imgData = fs.readFileSync(result.path);
+                                var base64 = imgData.toString('base64');
+
+                                captureBtn.textContent = "🎨 Analizando...";
+
+                                _extractPaletteAI(base64, function(err, palette, reasoning) {
+                                    captureBtn.textContent = "📷 Capturar Frame";
+                                    captureBtn.disabled = false;
+
+                                    if (err) {
+                                        console.warn("AI palette failed, using canvas fallback:", err.message);
+                                        // Fallback to canvas-based extraction
+                                        _extractPaletteFromImage("file://" + result.path, function(err2, fallbackPalette) {
+                                            if (err2) {
+                                                showToast("Error al extraer colores: " + err2.message, "error");
+                                                return;
+                                            }
+                                            _applyPalette(fallbackPalette);
+                                            showToast("Paleta extraída (canvas fallback)", "info");
+                                        });
+                                        return;
+                                    }
+
+                                    _applyPalette(palette);
+                                    if (reasoning) {
+                                        showToast("🎨 " + reasoning.substring(0, 80), "info");
+                                    }
+                                    if (window.EPLogger) EPLogger.log("motion-pro", "style-capture-ai", "bg=" + palette.bg + " accent=" + palette.accent);
+                                });
+                            } catch(readErr) {
+                                captureBtn.textContent = "📷 Capturar Frame";
+                                captureBtn.disabled = false;
+                                console.warn("Could not read frame for AI, using canvas fallback:", readErr.message);
+                                _extractPaletteFromImage("file://" + result.path, function(err2, fallbackPalette) {
+                                    if (err2) {
+                                        showToast("Error al extraer colores: " + err2.message, "error");
+                                        return;
+                                    }
+                                    _applyPalette(fallbackPalette);
+                                });
+                            }
                         }
                     } catch(e) {
+                        captureBtn.textContent = "📷 Capturar Frame";
+                        captureBtn.disabled = false;
                         showToast("Error: " + e.message, "error");
                     }
                 });
@@ -361,27 +390,48 @@
                 var file = evt.target.files[0];
                 if (!file) return;
 
+                // Read file as ArrayBuffer to get base64 for AI, and also as DataURL for canvas fallback
                 var reader = new FileReader();
                 reader.onload = function(e) {
-                    _extractPaletteFromImage(e.target.result, function(err, palette) {
+                    var arrayBuffer = e.target.result;
+                    var bytes = new Uint8Array(arrayBuffer);
+                    var binary = '';
+                    for (var i = 0; i < bytes.byteLength; i++) {
+                        binary += String.fromCharCode(bytes[i]);
+                    }
+                    var base64 = window.btoa(binary);
+
+                    if (importBtn) importBtn.textContent = "🎨 Analizando...";
+
+                    _extractPaletteAI(base64, function(err, palette, reasoning) {
+                        if (importBtn) importBtn.textContent = "📁 Importar";
+
                         if (err) {
-                            showToast("Error al extraer colores: " + err.message, "error");
+                            console.warn("AI palette failed for import, using canvas fallback:", err.message);
+                            // Fallback: re-read as DataURL for canvas extraction
+                            var reader2 = new FileReader();
+                            reader2.onload = function(e2) {
+                                _extractPaletteFromImage(e2.target.result, function(err2, fallbackPalette) {
+                                    if (err2) {
+                                        showToast("Error al extraer colores: " + err2.message, "error");
+                                        return;
+                                    }
+                                    _applyPalette(fallbackPalette);
+                                    showToast("Paleta extraída (canvas fallback)", "info");
+                                });
+                            };
+                            reader2.readAsDataURL(file);
                             return;
                         }
 
-                        // Save palette to state + motionPro + localStorage
-                        state.customPalette = palette;
-                        if (motionPro) motionPro.customPalette = palette;
-                        localStorage.setItem("mp_custom_palette", JSON.stringify(palette));
-
-                        // Update preview swatches
-                        _mpUpdateStyleSwatches(palette);
-
-                        showToast("Paleta extraída: " + palette.bg + " / " + palette.accent, "success");
-                        if (window.EPLogger) EPLogger.log("motion-pro", "style-import", "bg=" + palette.bg + " accent=" + palette.accent);
+                        _applyPalette(palette);
+                        if (reasoning) {
+                            showToast("🎨 " + reasoning.substring(0, 80), "info");
+                        }
+                        if (window.EPLogger) EPLogger.log("motion-pro", "style-import-ai", "bg=" + palette.bg + " accent=" + palette.accent);
                     });
                 };
-                reader.readAsDataURL(file);
+                reader.readAsArrayBuffer(file);
                 // Reset input so re-selecting same file triggers change
                 fileInput.value = "";
             });
