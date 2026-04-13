@@ -27,9 +27,9 @@ const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CS
     easing: Easing.bezier(0.16, 1, 0.3, 1),
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
-  const y = from==='up'?interpolate(progress,[0,1],[50,0]):from==='down'?interpolate(progress,[0,1],[-50,0]):0;
-  const x = from==='left'?interpolate(progress,[0,1],[50,0]):from==='right'?interpolate(progress,[0,1],[-50,0]):0;
-  const sc = from==='pop'?interpolate(progress,[0,1],[0.85,1]):1;
+  const y = from==='up'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='down'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
+  const x = from==='left'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='right'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
+  const sc = from==='pop'?interpolate(progress,[0,1],[0.85,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):1;
   return <div style={{transform:`translate(${x}px,${y}px) scale(${sc})`,opacity:progress,...style}}>{children}</div>;
 };
 
@@ -38,7 +38,7 @@ const Fd:React.FC<{children:React.ReactNode;fi?:number;fo?:number;dur:number}> =
   const _fi = Math.max(1, fi);
   const _fo = Math.max(1, fo);
   const _end = Math.max(_fi + 1, dur - _fo);
-  return <div style={{opacity:interpolate(frame,[0,_fi,_end,dur],[0,1,1,0],{extrapolateRight:'clamp'}),position:'absolute',inset:0}}>{children}</div>;
+  return <div style={{opacity:interpolate(frame,[0,_fi,_end,dur],[0,1,1,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}),position:'absolute',inset:0}}>{children}</div>;
 };
 
 const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}> = ({name,size=60,color=C.accent,strokeWidth=1.5}) => {
@@ -85,7 +85,7 @@ const Section1:React.FC = () => {
   const {durationInFrames: dur} = useVideoConfig();
 
   return (
-    <Fd dur={dur} fo={1}>
+    <Fd dur={dur} fo={10}>
       <Safe>
         <E d={0} from="up" style={{marginBottom:48, textAlign:'center', width:'100%'}}>
           <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
@@ -95,7 +95,11 @@ const Section1:React.FC = () => {
             const accentColor = (C as any)[stage.accent] || C.accent;
             const stageStart = itemDelay(stage, i, STAGES.length, STAGES, dur);
             const nextStart = i < STAGES.length - 1 ? itemDelay(STAGES[i+1], i+1, STAGES.length, STAGES, dur) : dur;
-            const isActive = i === STAGES.length - 1 || (frame >= stageStart && frame < nextStart + 30);
+            const activeIn = interpolate(frame - stageStart, [0, 10], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
+            const activeOut = i < STAGES.length - 1
+              ? interpolate(frame - (nextStart + 30), [0, 10], [1, 0], {extrapolateLeft:'clamp', extrapolateRight:'clamp'})
+              : 1;
+            const activeMix = i === STAGES.length - 1 ? activeIn : activeIn * activeOut;
             const widthPercent = 100 - (i * (50 / Math.max(STAGES.length - 1, 1)));
             return (
               <React.Fragment key={i}>
@@ -107,10 +111,10 @@ const Section1:React.FC = () => {
                 <E d={stageStart} from="up" style={{width:`${widthPercent}%`}}>
                   <div style={{
                     display:'flex', alignItems:'center', gap:16, padding:'16px 24px',
-                    backgroundColor: isActive ? C.card : 'transparent',
+                    backgroundColor: `rgba(45,50,58,${activeMix})`,
                     borderRadius:12,
-                    border: isActive ? `1px solid ${accentColor}30` : `1px solid ${C.border}`,
-                    boxShadow: isActive ? `0 8px 32px ${accentColor}15` : 'none',
+                    border: activeMix > 0.5 ? `1px solid ${accentColor}30` : `1px solid ${C.border}`,
+                    boxShadow: activeMix > 0 ? `0 8px 32px ${accentColor}${Math.round(activeMix * 0.15 * 255).toString(16).padStart(2,'0')}` : 'none',
                   }}>
                     <div style={{
                       width:48, height:48, borderRadius:24, background:`${accentColor}15`,

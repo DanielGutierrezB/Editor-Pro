@@ -27,9 +27,9 @@ const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CS
     easing: Easing.bezier(0.16, 1, 0.3, 1),
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
-  const y = from==='up'?interpolate(progress,[0,1],[50,0]):from==='down'?interpolate(progress,[0,1],[-50,0]):0;
-  const x = from==='left'?interpolate(progress,[0,1],[50,0]):from==='right'?interpolate(progress,[0,1],[-50,0]):0;
-  const sc = from==='pop'?interpolate(progress,[0,1],[0.85,1]):1;
+  const y = from==='up'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='down'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
+  const x = from==='left'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='right'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
+  const sc = from==='pop'?interpolate(progress,[0,1],[0.85,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):1;
   return <div style={{transform:`translate(${x}px,${y}px) scale(${sc})`,opacity:progress,...style}}>{children}</div>;
 };
 
@@ -38,7 +38,7 @@ const Fd:React.FC<{children:React.ReactNode;fi?:number;fo?:number;dur:number}> =
   const _fi = Math.max(1, fi);
   const _fo = Math.max(1, fo);
   const _end = Math.max(_fi + 1, dur - _fo);
-  return <div style={{opacity:interpolate(frame,[0,_fi,_end,dur],[0,1,1,0],{extrapolateRight:'clamp'}),position:'absolute',inset:0}}>{children}</div>;
+  return <div style={{opacity:interpolate(frame,[0,_fi,_end,dur],[0,1,1,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}),position:'absolute',inset:0}}>{children}</div>;
 };
 
 const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}> = ({name,size=60,color=C.accent,strokeWidth=1.5}) => {
@@ -104,7 +104,7 @@ const Section1:React.FC = () => {
   const fieldStagger = 10;
 
   return (
-    <Fd dur={dur} fo={1}>
+    <Fd dur={dur} fo={10}>
       <Safe style={{justifyContent:'center', alignItems:'center'}}>
         <GlowCard d={0} accent={accentColor} elevation={3} width={560} active={true}>
           <E d={5} from="up">
@@ -115,11 +115,14 @@ const Section1:React.FC = () => {
           <div style={{display:'flex', flexDirection:'column', gap:20}}>
             {FIELDS.map((field, i) => {
               const fieldStart = 10 + i * fieldStagger;
-              const isActive = frame >= fieldStart && frame < fieldStart + fieldStagger + 20;
+              const focusIn = interpolate(frame - fieldStart, [0, 10], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
+              const focusOut = interpolate(frame - (fieldStart + fieldStagger + 20), [0, 10], [1, 0], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
+              const focusMix = focusIn * focusOut;
               const typingProgress = interpolate(
                 frame - fieldStart - 5, [0, 25], [0, 1],
                 {extrapolateLeft:'clamp', extrapolateRight:'clamp'}
               );
+              const textOpacity = interpolate(frame - fieldStart - 5, [0, 10], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
               const displayedText = field.value.substring(0, Math.floor(field.value.length * typingProgress));
               return (
                 <E key={i} d={fieldStart} from="up">
@@ -129,18 +132,16 @@ const Section1:React.FC = () => {
                   <div style={{
                     height:56, borderRadius:10, padding:'0 20px',
                     backgroundColor:'rgba(255,255,255,0.04)',
-                    border: isActive ? `2px solid ${accentColor}` : `1px solid ${C.border}`,
-                    boxShadow: isActive ? `0 0 20px ${accentColor}15` : 'none',
+                    border: focusMix > 0.5 ? `2px solid ${accentColor}` : `1px solid ${C.border}`,
+                    boxShadow: focusMix > 0 ? `0 0 20px ${accentColor}${Math.round(focusMix * 0.15 * 255).toString(16).padStart(2,'0')}` : 'none',
                     display:'flex', alignItems:'center',
                   }}>
-                    <span style={{fontSize:22, fontWeight:400, color: frame >= fieldStart + 5 ? C.text : C.dim}}>
-                      {frame >= fieldStart + 5 ? displayedText : ''}
-                      {isActive && frame >= fieldStart + 5 && (
-                        <span style={{
-                          opacity: Math.floor(frame / 8) % 2 === 0 ? 1 : 0,
-                          color: accentColor,
-                        }}>|</span>
-                      )}
+                    <span style={{fontSize:22, fontWeight:400, color: C.text, opacity: textOpacity > 0 ? 1 : 0}}>
+                      {displayedText}
+                      <span style={{
+                        opacity: focusMix > 0.5 && textOpacity > 0 ? (Math.floor(frame / 8) % 2 === 0 ? 1 : 0) : 0,
+                        color: accentColor,
+                      }}>|</span>
                     </span>
                   </div>
                 </E>

@@ -27,9 +27,9 @@ const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CS
     easing: Easing.bezier(0.16, 1, 0.3, 1),
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
-  const y = from==='up'?interpolate(progress,[0,1],[50,0]):from==='down'?interpolate(progress,[0,1],[-50,0]):0;
-  const x = from==='left'?interpolate(progress,[0,1],[50,0]):from==='right'?interpolate(progress,[0,1],[-50,0]):0;
-  const sc = from==='pop'?interpolate(progress,[0,1],[0.85,1]):1;
+  const y = from==='up'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='down'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
+  const x = from==='left'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='right'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
+  const sc = from==='pop'?interpolate(progress,[0,1],[0.85,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):1;
   return <div style={{transform:`translate(${x}px,${y}px) scale(${sc})`,opacity:progress,...style}}>{children}</div>;
 };
 
@@ -38,7 +38,7 @@ const Fd:React.FC<{children:React.ReactNode;fi?:number;fo?:number;dur:number}> =
   const _fi = Math.max(1, fi);
   const _fo = Math.max(1, fo);
   const _end = Math.max(_fi + 1, dur - _fo);
-  return <div style={{opacity:interpolate(frame,[0,_fi,_end,dur],[0,1,1,0],{extrapolateRight:'clamp'}),position:'absolute',inset:0}}>{children}</div>;
+  return <div style={{opacity:interpolate(frame,[0,_fi,_end,dur],[0,1,1,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}),position:'absolute',inset:0}}>{children}</div>;
 };
 
 const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}> = ({name,size=60,color=C.accent,strokeWidth=1.5}) => {
@@ -59,7 +59,7 @@ const AnimatedText:React.FC<{
     });
     return (
       <div style={{fontSize, fontWeight, color, textAlign:align, opacity:progress,
-        transform:`translateY(${interpolate(progress,[0,1],[30,0])}px)`}}>{text}</div>
+        transform:`translateY(${interpolate(progress,[0,1],[30,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)`}}>{text}</div>
     );
   }
   return (
@@ -73,7 +73,7 @@ const AnimatedText:React.FC<{
         });
         return (
           <span key={i} style={{ color, opacity: progress,
-            transform: `translateY(${interpolate(progress, [0,1], [20, 0])}px)`, display: 'inline-block',
+            transform: `translateY(${interpolate(progress, [0,1], [20, 0], {extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)`, display: 'inline-block',
           }}>{word}</span>
         );
       })}
@@ -110,7 +110,7 @@ const MorphPosition:React.FC<{children:React.ReactNode;phase:number;fromY:number
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
   return (
-    <div style={{transform:`translate(${interpolate(mp,[0,1],[fromX,toX])}px,${interpolate(mp,[0,1],[fromY,toY])}px) scale(${interpolate(mp,[0,1],[fromScale,toScale])})`,transformOrigin:'center center'}}>
+    <div style={{transform:`translate(${interpolate(mp,[0,1],[fromX,toX],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px,${interpolate(mp,[0,1],[fromY,toY],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px) scale(${interpolate(mp,[0,1],[fromScale,toScale],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})})`,transformOrigin:'center center'}}>
       {children}
     </div>
   );
@@ -158,7 +158,7 @@ const Section1:React.FC = () => {
   const titlePhase = interpolate(frame, [25, 40], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
 
   return (
-    <Fd dur={dur} fo={1}>
+    <Fd dur={dur} fo={10}>
       <Safe>
         <MorphPosition phase={titlePhase} fromY={0} toY={-160} fromScale={1} toScale={0.8} d={0}>
           <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:16}}>
