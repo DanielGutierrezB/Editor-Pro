@@ -418,6 +418,13 @@ class RemotionManager {
   }
 
   _registerInRoot(compositionId, durationFrames) {
+    // Verify the TSX file actually exists before registering
+    const tsxPath = path.join(this.compositionsDir, `${compositionId}.tsx`);
+    if (!fs.existsSync(tsxPath)) {
+      console.warn(`[RemotionManager] Skipping registration of ${compositionId} — TSX file not found`);
+      return;
+    }
+
     let root = fs.readFileSync(this.rootTsxPath, 'utf8');
 
     const componentName = this._componentName(compositionId);
