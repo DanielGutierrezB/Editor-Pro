@@ -163,7 +163,7 @@ const Section1:React.FC = () => {
         <div style={{display:'flex', gap:60, justifyContent:'center', alignItems:'stretch', flexWrap:'wrap'}}>
           {METRICS.map((m, i) => {
             const accentColor = (C as any)[m.accent] || C.accent;
-            const delay = 12 + i * 8;
+            const delay = 5 + i * 5;
             return (
               <GlowCard key={i} d={delay} accent={accentColor} elevation={i === 0 ? 4 : 2}
                 width={Math.min(340, Math.floor(1500 / METRICS.length))} active={i === 0}>
