@@ -33,6 +33,28 @@ app.get('/api/status', (_req, res) => {
   });
 });
 
+// Rhythm analysis — detects pauses, emphasis, tempo changes from transcript timestamps
+const { analyzeRhythm, formatRhythmForPrompt } = require('./lib/rhythm-analyzer');
+
+app.post('/api/rhythm', (req, res) => {
+  try {
+    const { transcriptJson } = req.body;
+    if (!transcriptJson) return res.status(400).json({ error: 'Missing transcriptJson' });
+
+    const rhythmData = analyzeRhythm(transcriptJson);
+    const promptText = formatRhythmForPrompt(rhythmData);
+
+    res.json({
+      markers: rhythmData.markers,
+      summary: rhythmData.summary,
+      sentences: rhythmData.sentences,
+      promptText: promptText,
+    });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Prompts CRUD — reads/writes from centralized Prompts/MotionPro/ folder
 const PROMPTS_CENTRAL = path.resolve(__dirname, '..', 'Prompts', 'MotionPro');
 const promptsLib = path.join(__dirname, 'lib');

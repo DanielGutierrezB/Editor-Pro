@@ -489,7 +489,30 @@
 
         var timedTranscript = buildTimedTranscript();
 
-        aiAnalyzer.analyzeMotionProposals(timedTranscript, getPromptContext("mp"), function(result) {
+        // Enhance transcript with rhythm analysis
+        if (state.transcriptJson && motionPro.serverRunning) {
+            try {
+                motionPro._post("/api/rhythm", { transcriptJson: state.transcriptJson }, function(err, rhythmResult) {
+                    if (!err && rhythmResult && rhythmResult.promptText) {
+                        timedTranscript += rhythmResult.promptText;
+                        if (window.EPLogger) EPLogger.log("motion-pro", "rhythm-analysis",
+                            (rhythmResult.summary.pauseCount || 0) + " pauses, " +
+                            (rhythmResult.summary.topicChangeCount || 0) + " topic changes, " +
+                            (rhythmResult.summary.emphasisCount || 0) + " emphasis points");
+                    }
+                    _mpRunAnalysis(timedTranscript);
+                });
+            } catch(e) {
+                console.warn("[Motion-Pro] Rhythm analysis failed:", e.message);
+                _mpRunAnalysis(timedTranscript);
+            }
+        } else {
+            _mpRunAnalysis(timedTranscript);
+        }
+
+        function _mpRunAnalysis(transcript) {
+
+        aiAnalyzer.analyzeMotionProposals(transcript, getPromptContext("mp"), function(result) {
             mpClearMotionAnalysisHeartbeat();
             if (_mpAnalysisCancelled) return;
             state.mpAnalyzing = false;
@@ -553,6 +576,7 @@
             if (hint) hint.textContent = proposals.length + " momentos (" + analysisTime + "s)";
             showToast(proposals.length + " momentos identificados para motions", "success");
         });
+        } // end _mpRunAnalysis
     }
 
     // ─── Proposals rendering ──────────────────────────────────────

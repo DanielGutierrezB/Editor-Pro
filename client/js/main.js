@@ -824,6 +824,7 @@
                 if (parsed && parsed.words && parsed.words.length > 5) {
                     state.sttResult = parsed;
                     state.lastWhisperResult = parsed;
+                    try { state.transcriptJson = JSON.parse(fs.readFileSync(jsonPath, "utf8")); } catch(_re) {}
                     refreshTraerTranscriptButtons();
                     applySttResultToRecordingNotes(parsed, true);
                     hideElement("recording-empty");
@@ -871,6 +872,7 @@
                         if (p2 && p2.words && p2.words.length > 5) {
                             state.sttResult = p2;
                             state.lastWhisperResult = p2;
+                            try { state.transcriptJson = JSON.parse(fs.readFileSync(fullPath, "utf8")); } catch(_re) {}
                             refreshTraerTranscriptButtons();
                             applySttResultToRecordingNotes(p2, true);
                             hideElement("recording-empty");
@@ -983,6 +985,7 @@
 
             state.sttResult = parsed;
             state.lastWhisperResult = parsed;
+            state.transcriptJson = data; // raw JSON for rhythm analysis
             refreshTraerTranscriptButtons();
             applySttResultToRecordingNotes(parsed, true);
             hideElement("recording-empty");
@@ -2047,6 +2050,7 @@
     function clearTranscript() {
         state.transcript = "";
         state.segments = [];
+        state.transcriptJson = null;
         var textarea = document.getElementById("transcript-input");
         if (textarea) textarea.value = "";
         document.getElementById("transcript-info").textContent = "Sin transcripción cargada";
