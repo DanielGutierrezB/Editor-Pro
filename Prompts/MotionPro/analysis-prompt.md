@@ -60,7 +60,6 @@ Tipos de visual y cuándo usar cada uno:
 - Listados de conceptos (2-4 items visuales) → type: 'icons'
 - Flujos causa-efecto → type: 'cards'
 - Diagramas técnicos, arquitectura → type: 'diagram'
-- Interfaces/formularios → type: 'ui'
 - Intros de sección → type: 'title'
 - Cronología/eventos secuenciales → type: 'timeline'
 - Revelación progresiva de un concepto → type: 'reveal'
@@ -91,5 +90,13 @@ AGRUPACIÓN POR CONCEPTO:
 - Varios motions pueden pertenecer al mismo grupo si son parte del mismo concepto
 - El nombre del grupo debe ser corto (3-6 palabras) y descriptivo
 - Ejemplo: si el narrador habla de "tipos de campañas" durante 30 segundos y mencionas 3 motions sobre ese tema, los 3 llevan group: "Tipos de campañas"
+
+VALIDACIÓN FINAL (aplica antes de responder):
+1. ¿Hay algún reveal con solo 1 item? → Cámbialo a callout
+2. ¿Hay algún concepto que se separó en 2 clips pero debería ser 1? → Fúndelos
+3. ¿Hay gaps entre los endTime de un clip y startTime del siguiente? → Ajusta para cobertura 100%
+4. ¿Cada tipo elegido tiene sentido para el contenido? → Una lista de conceptos NO es un reveal, es un list o icons
+5. ¿Hay mínimo 14 propuestas? → Si no, busca más momentos visualizables
+6. ¿Los títulos son frases del transcript? → No inventes texto que el profesor no dijo
 
 Responde con JSON: {"proposals":[{startTime,endTime,type,description,priority,transcriptSegment,brands,dataPoints,accentColor,visualComplexity,group}]}

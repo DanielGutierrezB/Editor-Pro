@@ -1102,7 +1102,7 @@
         _mpTimers.generateStart = Date.now();
         state.mpGenerating = true;
         state.mpGenerateCancelRequested = false;
-        showElement("mp-generate-progress");
+        // showElement("mp-generate-progress"); // removed — using inline bar in Step 2 only
         showElement("mp-generate-progress-inline");
         mpSetProgress("mp-generate", 5, "Preparando carpeta del proyecto...");
 
@@ -1155,7 +1155,7 @@
         function _onAllComplete() {
             state.mpGenerateCancelRequested = false;
             state.mpGenerating = false;
-            hideElement("mp-generate-progress");
+            // hideElement("mp-generate-progress"); // removed — using inline bar in Step 2 only
             hideElement("mp-generate-progress-inline");
             refreshMPHeaderProgressVisibility();
             motionPro.saveState();
@@ -1183,7 +1183,7 @@
                 if (activeWorkers === 0) {
                     state.mpGenerateCancelRequested = false;
                     state.mpGenerating = false;
-                    hideElement("mp-generate-progress");
+                    // hideElement("mp-generate-progress"); // removed — using inline bar in Step 2 only
                     hideElement("mp-generate-progress-inline");
                     refreshMPHeaderProgressVisibility();
                     motionPro.saveState();
