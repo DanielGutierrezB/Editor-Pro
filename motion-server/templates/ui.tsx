@@ -108,7 +108,7 @@ const Section1:React.FC = () => {
       <Safe style={{justifyContent:'center', alignItems:'center'}}>
         <GlowCard d={0} accent={accentColor} elevation={3} width={560} active={true}>
           <E d={5} from="up">
-            <div style={{fontSize:32, fontWeight:700, color:C.text, textAlign:'center', marginBottom:32}}>
+            <div style={{fontSize:36, fontWeight:700, color:C.text, textAlign:'center', marginBottom:32}}>
               {TITLE}
             </div>
           </E>
@@ -123,7 +123,7 @@ const Section1:React.FC = () => {
               const displayedText = field.value.substring(0, Math.floor(field.value.length * typingProgress));
               return (
                 <E key={i} d={fieldStart} from="up">
-                  <div style={{fontSize:16, fontWeight:700, color:C.dim, marginBottom:8, textTransform:'uppercase', letterSpacing:1}}>
+                  <div style={{fontSize:18, fontWeight:700, color:C.dim, marginBottom:8, textTransform:'uppercase', letterSpacing:1}}>
                     {field.label}
                   </div>
                   <div style={{
@@ -133,7 +133,7 @@ const Section1:React.FC = () => {
                     boxShadow: isActive ? `0 0 20px ${accentColor}15` : 'none',
                     display:'flex', alignItems:'center',
                   }}>
-                    <span style={{fontSize:20, fontWeight:400, color: frame >= fieldStart + 10 ? C.text : C.dim}}>
+                    <span style={{fontSize:22, fontWeight:400, color: frame >= fieldStart + 10 ? C.text : C.dim}}>
                       {frame >= fieldStart + 10 ? displayedText : ''}
                       {isActive && frame >= fieldStart + 10 && (
                         <span style={{

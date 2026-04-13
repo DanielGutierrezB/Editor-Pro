@@ -1,6 +1,6 @@
 // ============================================================
-// TEMPLATE: CALLOUT
-// Description: Key phrase / thesis statement, big centered text
+// TEMPLATE: LIST
+// Description: Animated vertical list with progressive highlight
 // ============================================================
 import "@fontsource/dm-sans/400.css";
 import "@fontsource/dm-sans/500.css";
@@ -47,37 +47,21 @@ const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}
 };
 
 // --- Advanced Components ---
-const AnimatedText:React.FC<{
-  text:string; d:number; fontSize?:number; fontWeight?:number; color?:string;
-  align?:'left'|'center'|'right'; mode?:'word'|'line'|'fade'; framesPerWord?:number;
-}> = ({text, d, fontSize=36, fontWeight=700, color=C.text, align='center', mode='word', framesPerWord=4}) => {
+const CascadeItem:React.FC<{d:number;index:number;children:React.ReactNode}> = ({d,index,children}) => {
   const frame = useCurrentFrame();
-  const words = text.split(' ');
-  if (mode === 'fade') {
-    const progress = interpolate(frame - d, [0, 25], [0, 1], {
-      easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
-    });
-    return (
-      <div style={{fontSize, fontWeight, color, textAlign:align, opacity:progress,
-        transform:`translateY(${interpolate(progress,[0,1],[30,0])}px)`}}>{text}</div>
-    );
-  }
+  const delay = d + index * 8;
+  const dist = 60 + index * 15;
+  const dur = 22 + index * 2;
+  const progress = interpolate(frame - delay, [0, dur], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
   return (
-    <div style={{fontSize, fontWeight, textAlign:align, display:'flex', flexWrap:'wrap',
-      justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
-      gap: `0 ${fontSize * 0.3}px`}}>
-      {words.map((word, i) => {
-        const wordDelay = d + i * framesPerWord;
-        const progress = interpolate(frame - wordDelay, [0, 12], [0, 1], {
-          easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
-        });
-        return (
-          <span key={i} style={{ color, opacity: progress,
-            transform: `translateY(${interpolate(progress, [0,1], [20, 0])}px)`, display: 'inline-block',
-          }}>{word}</span>
-        );
-      })}
-    </div>
+    <div style={{
+      opacity: progress,
+      transform: `translateY(${interpolate(progress,[0,1],[dist,0])}px)`,
+      filter: `blur(${interpolate(progress,[0,0.5,1],[4,1,0])}px)`,
+    }}>{children}</div>
   );
 };
 
@@ -88,13 +72,6 @@ const AccentSeparator:React.FC<{
   const progress = interpolate(frame - d, [0, 25], [0, 1], {
     easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
-  if (variant === 'gradient') {
-    return (
-      <div style={{ width: width * progress, height: 2, margin: '0 auto',
-        background: `linear-gradient(90deg, transparent, ${color}, transparent)`, borderRadius: 1,
-      }}/>
-    );
-  }
   return (
     <div style={{ width: width * progress, height: 2,
       backgroundColor: color, borderRadius: 1, margin: '0 auto',
@@ -105,8 +82,14 @@ const AccentSeparator:React.FC<{
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
-const PHRASE = "El contenido es el rey, pero la distribución es la reina";
-const ICON_NAME = "Quote";
+const TITLE = "Checklist de Lanzamiento";
+const SUBTITLE = "4 pasos esenciales para tu campaña";
+const LIST_ITEMS = [
+  "Definir objetivos claros y medibles",
+  "Identificar la audiencia objetivo",
+  "Establecer métricas de seguimiento",
+  "Optimizar en tiempo real",
+];
 const ACCENT_KEY = "accent";
 
 // ============================================================
@@ -114,31 +97,69 @@ const ACCENT_KEY = "accent";
 // ============================================================
 
 const Section1:React.FC = () => {
+  const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
   const accentColor = (C as any)[ACCENT_KEY] || C.accent;
+  const framesPerItem = Math.floor(dur / LIST_ITEMS.length);
+  const activeItem = Math.min(Math.floor(frame / framesPerItem), LIST_ITEMS.length - 1);
 
   return (
     <Fd dur={dur} fo={1}>
-      <div style={{position:'absolute', inset:0, zIndex:-1,
-        background:`radial-gradient(circle at 50% 50%, ${accentColor}06, transparent 70%)`}}/>
-      <Safe style={{justifyContent:'center', alignItems:'center'}}>
-        <E d={0} from="pop">
-          <Icon name={ICON_NAME} size={72} color={accentColor}/>
-        </E>
-        <div style={{height:32}}/>
-        <AccentSeparator d={8} width={80} color={accentColor} variant="gradient"/>
-        <div style={{height:28}}/>
-        <div style={{maxWidth:1200}}>
-          <AnimatedText text={PHRASE} d={15} fontSize={48} fontWeight={700} color={C.text} mode="word" framesPerWord={4}/>
+      <Safe style={{flexDirection:'row', gap:80}}>
+        <div style={{flex:'0 0 380px', display:'flex', flexDirection:'column', justifyContent:'center'}}>
+          <E d={0} from="left">
+            <div style={{fontSize:42, fontWeight:700, color:C.text, lineHeight:1.3}}>{TITLE}</div>
+          </E>
+          {SUBTITLE && (
+            <E d={8} from="left">
+              <div style={{fontSize:22, color:C.dim, marginTop:16}}>{SUBTITLE}</div>
+            </E>
+          )}
+          <E d={12} from="left">
+            <AccentSeparator d={16} width={60} color={accentColor} variant="line"/>
+          </E>
         </div>
-        <div style={{height:28}}/>
-        <AccentSeparator d={15 + PHRASE.split(' ').length * 4 + 10} width={80} color={accentColor} variant="gradient"/>
+        <div style={{flex:1, display:'flex', flexDirection:'column', gap:16, justifyContent:'center'}}>
+          {LIST_ITEMS.map((item, i) => {
+            const isActive = i === activeItem;
+            const isPast = i < activeItem;
+            return (
+              <CascadeItem key={i} d={10} index={i}>
+                <div style={{
+                  display:'flex', alignItems:'center', gap:20, padding:'16px 24px',
+                  borderRadius:12,
+                  backgroundColor: isActive ? `${accentColor}10` : 'transparent',
+                  borderLeft: isActive ? `3px solid ${accentColor}` : '3px solid transparent',
+                }}>
+                  <div style={{
+                    width:40, height:40, borderRadius:20,
+                    background: isPast ? accentColor : isActive ? `${accentColor}20` : C.card,
+                    border: isPast ? 'none' : `1px solid ${isActive ? accentColor : C.border}`,
+                    display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+                  }}>
+                    {isPast ? (
+                      <LucideIcons.CheckCircle size={22} color={C.bg} strokeWidth={2.5}/>
+                    ) : (
+                      <span style={{fontSize:16, fontWeight:700, color: isActive ? accentColor : C.dim}}>{i + 1}</span>
+                    )}
+                  </div>
+                  <span style={{
+                    fontSize:24, fontWeight: isActive ? 700 : 400,
+                    color: isActive ? C.text : isPast ? C.dim : 'rgba(255,255,255,0.4)',
+                  }}>
+                    {item}
+                  </span>
+                </div>
+              </CascadeItem>
+            );
+          })}
+        </div>
       </Safe>
     </Fd>
   );
 };
 
-export const MyComposition:React.FC = () => {
+export const Tpllist:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>

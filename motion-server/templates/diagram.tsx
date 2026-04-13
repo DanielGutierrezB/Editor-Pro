@@ -99,25 +99,23 @@ const NODES = [
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const framesPerNode = Math.floor((dur - 60) / NODES.length);
+  const staggerDelay = 10;
 
   return (
     <Fd dur={dur} fo={1}>
       <Safe>
-        <E d={0} from="up" style={{marginBottom:50, textAlign:'center', width:'100%'}}>
-          <div style={{fontSize:38, fontWeight:700, color:C.text}}>{TITLE}</div>
+        <E d={0} from="up" style={{marginBottom:48, textAlign:'center', width:'100%'}}>
+          <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
         <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:16, width:'100%'}}>
           {NODES.map((node, i) => {
             const accentColor = (C as any)[node.accent] || C.accent;
-            const nodeStart = 20 + i * framesPerNode;
-            const isVisible = frame >= nodeStart;
+            const nodeStart = 10 + i * staggerDelay;
             const nodeWidth = Math.min(360, Math.floor(1400 / NODES.length));
-            if (!isVisible) return null;
             return (
               <React.Fragment key={i}>
                 {i > 0 && (
-                  <E d={nodeStart} from="left" style={{flexShrink:0}}>
+                  <E d={nodeStart + 2} from="left" style={{flexShrink:0}}>
                     <div style={{display:'flex', alignItems:'center', gap:0}}>
                       <div style={{width:40, height:2, background:`linear-gradient(90deg, ${(C as any)[NODES[i-1].accent]}60, ${accentColor})`}}/>
                       <LucideIcons.ChevronRight size={20} color={accentColor} strokeWidth={2} style={{marginLeft:-4}}/>
@@ -125,8 +123,8 @@ const Section1:React.FC = () => {
                   </E>
                 )}
                 <GlowCard d={nodeStart + 5} from="pop" accent={accentColor}
-                  elevation={i === Math.min(Math.floor((frame - 20) / framesPerNode), NODES.length - 1) ? 4 : 2}
-                  active={i === Math.min(Math.floor((frame - 20) / framesPerNode), NODES.length - 1)}
+                  elevation={i === NODES.length - 1 ? 4 : 2}
+                  active={true}
                   width={nodeWidth}>
                   <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:12, textAlign:'center'}}>
                     <div style={{
@@ -136,7 +134,7 @@ const Section1:React.FC = () => {
                       <Icon name={node.icon} size={32} color={accentColor}/>
                     </div>
                     <div style={{fontSize:24, fontWeight:700, color:C.text}}>{node.title}</div>
-                    <div style={{fontSize:18, fontWeight:400, color:C.dim}}>{node.desc}</div>
+                    <div style={{fontSize:22, fontWeight:400, color:C.dim}}>{node.desc}</div>
                   </div>
                 </GlowCard>
               </React.Fragment>

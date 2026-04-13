@@ -1,6 +1,6 @@
 // ============================================================
-// TEMPLATE: STEPS
-// Description: One step at a time with progress dots
+// TEMPLATE: METRICS
+// Description: 2-4 KPI metrics dashboard with counters
 // ============================================================
 import "@fontsource/dm-sans/400.css";
 import "@fontsource/dm-sans/500.css";
@@ -82,108 +82,110 @@ const GlowCard:React.FC<{
   );
 };
 
-const ProgressDots:React.FC<{
-  total:number; current:number; d:number; accent?:string; position?:'bottom'|'right';
-}> = ({total, current, d, accent=C.accent, position='bottom'}) => {
+const OdometerDigit:React.FC<{value:number;d:number;fontSize?:number;color?:string}> = ({value,d,fontSize=96,color=C.accent}) => {
   const frame = useCurrentFrame();
-  const isHorizontal = position === 'bottom';
+  const progress = interpolate(frame - d, [0, 40], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  const current = Math.round(interpolate(progress, [0,1], [0, value]));
+  const digits = String(current).split('');
   return (
-    <E d={d} from="pop" style={{
-      position: 'absolute',
-      ...(isHorizontal
-        ? {bottom: 60, left: '50%', transform: 'translateX(-50%)'}
-        : {right: 80, top: '50%', transform: 'translateY(-50%)'}
-      ),
-    }}>
-      <div style={{
-        display: 'flex', flexDirection: isHorizontal ? 'row' : 'column',
-        gap: 12, alignItems: 'center',
-      }}>
-        {Array.from({length: total}).map((_, i) => {
-          const isActive = i === current;
-          const isPast = i < current;
-          return (
-            <div key={i} style={{
-              width: isActive ? (isHorizontal ? 36 : 12) : 12,
-              height: isActive ? (isHorizontal ? 12 : 36) : 12,
-              borderRadius: 6,
-              backgroundColor: isActive ? accent : isPast ? `${accent}60` : 'rgba(255,255,255,0.15)',
-            }}/>
-          );
-        })}
-      </div>
-    </E>
+    <div style={{display:'flex',overflow:'hidden',height:fontSize*1.2}}>
+      {digits.map((digit, i) => {
+        const dp = interpolate(frame - d - i*3, [0,30], [0,1], {
+          easing: Easing.bezier(0.16,1,0.3,1), extrapolateLeft:'clamp', extrapolateRight:'clamp',
+        });
+        return <div key={i} style={{fontSize,fontWeight:700,color,fontFamily:"'DM Sans',sans-serif",lineHeight:1.2,opacity:dp,
+          transform:`translateY(${interpolate(dp,[0,1],[fontSize*0.5,0])}px)`}}>{digit}</div>;
+      })}
+    </div>
+  );
+};
+
+const AnimatedMetric:React.FC<{value:number;suffix:string;label:string;d:number;accent?:string}> = ({value,suffix,label,d,accent=C.accent}) => (
+  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:12}}>
+    <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+      <OdometerDigit value={value} d={d} fontSize={96} color={accent}/>
+      <E d={d+15} from="pop"><span style={{fontSize:48,fontWeight:700,color:accent}}>{suffix}</span></E>
+    </div>
+    <E d={d+20} from="up"><span style={{fontSize:22,fontWeight:400,color:C.dim,textTransform:'uppercase',letterSpacing:3}}>{label}</span></E>
+  </div>
+);
+
+const AccentSeparator:React.FC<{
+  d:number; width?:number; color?:string; variant?:'line'|'dots'|'gradient';
+}> = ({d, width=80, color=C.accent, variant='line'}) => {
+  const frame = useCurrentFrame();
+  const progress = interpolate(frame - d, [0, 25], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  if (variant === 'gradient') {
+    return (
+      <div style={{ width: width * progress, height: 2, margin: '0 auto',
+        background: `linear-gradient(90deg, transparent, ${color}, transparent)`, borderRadius: 1,
+      }}/>
+    );
+  }
+  return (
+    <div style={{ width: width * progress, height: 2,
+      backgroundColor: color, borderRadius: 1, margin: '0 auto',
+    }}/>
   );
 };
 
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
-const STEPS_DATA = [
-  { icon: "Search", title: "Investigación", desc: "Analiza tu mercado objetivo y competencia", accent: "accent" },
-  { icon: "Target", title: "Segmentación", desc: "Define tu audiencia ideal con datos demográficos", accent: "orange" },
-  { icon: "Send", title: "Ejecución", desc: "Lanza tu campaña con métricas de seguimiento", accent: "purple" },
+const TITLE = "Resultados del Q4";
+const METRICS = [
+  { value: 73, suffix: "%", label: "Conversión", icon: "TrendingUp", accent: "accent" },
+  { value: 2400, suffix: "", label: "Usuarios activos", icon: "Users", accent: "orange" },
+  { value: 99, suffix: "%", label: "Satisfacción", icon: "Heart", accent: "purple" },
 ];
 
 // ============================================================
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
-const StepSection:React.FC<{stepIndex:number; step:typeof STEPS_DATA[0]}> = ({stepIndex, step}) => {
+const Section1:React.FC = () => {
   const {durationInFrames: dur} = useVideoConfig();
-  const accentColor = (C as any)[step.accent] || C.accent;
 
   return (
     <Fd dur={dur} fo={1}>
-      <Safe style={{justifyContent:'center', alignItems:'center'}}>
-        <E d={0} from="pop">
-          <div style={{
-            fontSize:20, fontWeight:700, color:C.bg,
-            backgroundColor:accentColor, borderRadius:20,
-            padding:'6px 20px', letterSpacing:2, textTransform:'uppercase', marginBottom:24,
-          }}>
-            Paso {stepIndex + 1} de {STEPS_DATA.length}
-          </div>
+      <Safe>
+        <E d={0} from="up" style={{marginBottom:50, textAlign:'center'}}>
+          <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
+          <AccentSeparator d={8} width={60} variant="line"/>
         </E>
-        <E d={5} from="pop">
-          <div style={{
-            width:160, height:160, borderRadius:80, background:C.card,
-            border:`2px solid ${accentColor}`,
-            boxShadow:`0 0 40px ${accentColor}15, 0 16px 48px rgba(0,0,0,0.4)`,
-            display:'flex', alignItems:'center', justifyContent:'center', marginBottom:28,
-          }}>
-            <Icon name={step.icon} size={72} color={accentColor}/>
-          </div>
-        </E>
-        <E d={12} from="up">
-          <div style={{fontSize:48, fontWeight:700, color:C.text, textAlign:'center', marginBottom:16}}>
-            {step.title}
-          </div>
-        </E>
-        <E d={20} from="up">
-          <div style={{fontSize:24, fontWeight:400, color:C.dim, textAlign:'center', maxWidth:600}}>
-            {step.desc}
-          </div>
-        </E>
-        <ProgressDots total={STEPS_DATA.length} current={stepIndex} d={5} accent={accentColor}/>
+        <div style={{display:'flex', gap:60, justifyContent:'center', alignItems:'flex-start', flexWrap:'wrap'}}>
+          {METRICS.map((m, i) => {
+            const accentColor = (C as any)[m.accent] || C.accent;
+            const delay = 20 + i * 15;
+            return (
+              <GlowCard key={i} d={delay} accent={accentColor} elevation={i === 0 ? 4 : 2}
+                width={Math.min(340, Math.floor(1500 / METRICS.length))} active={i === 0}>
+                <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:16}}>
+                  <Icon name={m.icon} size={36} color={accentColor}/>
+                  <AnimatedMetric value={m.value} suffix={m.suffix} label={m.label}
+                    d={delay + 10} accent={accentColor}/>
+                </div>
+              </GlowCard>
+            );
+          })}
+        </div>
       </Safe>
     </Fd>
   );
 };
 
-export const MyComposition:React.FC = () => {
+export const Tplmetrics:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
-  const framesPerStep = Math.floor(durationInFrames / STEPS_DATA.length);
-
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>
-      {STEPS_DATA.map((step, i) => (
-        <Sequence key={i} from={i * framesPerStep}
-          durationInFrames={i === STEPS_DATA.length - 1 ? durationInFrames - i * framesPerStep : framesPerStep}
-          premountFor={10}>
-          <StepSection stepIndex={i} step={step}/>
-        </Sequence>
-      ))}
+      <Sequence from={0} durationInFrames={durationInFrames} premountFor={10}>
+        <Section1/>
+      </Sequence>
     </AbsoluteFill>
   );
 };

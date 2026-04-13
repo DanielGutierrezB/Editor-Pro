@@ -73,13 +73,13 @@ const Section1:React.FC = () => {
   return (
     <Fd dur={dur} fo={1}>
       <Safe style={{justifyContent:'space-between', alignItems:'center'}}>
-        <div style={{textAlign:'center', marginBottom:40, width:'100%'}}>
+        <div style={{textAlign:'center', marginBottom:48, width:'100%'}}>
           <E d={0} from="up">
-            <div style={{fontSize:38, fontWeight:700, color:C.text}}>{TITLE}</div>
+            <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
           </E>
           {SUBTITLE && (
             <E d={8} from="up">
-              <div style={{fontSize:22, color:C.dim, marginTop:8}}>{SUBTITLE}</div>
+              <div style={{fontSize:24, color:C.dim, marginTop:8}}>{SUBTITLE}</div>
             </E>
           )}
         </div>
@@ -109,7 +109,7 @@ const Section1:React.FC = () => {
                   backgroundColor:barColor, boxShadow:`0 0 20px ${barColor}20`,
                 }}/>
                 <div style={{
-                  fontSize:18, fontWeight:700, color:C.dim, marginTop:4,
+                  fontSize:20, fontWeight:700, color:C.dim, marginTop:4,
                   opacity: interpolate(barProgress, [0, 0.3], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'}),
                 }}>
                   {d.label}

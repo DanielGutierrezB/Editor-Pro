@@ -81,6 +81,27 @@ const AnimatedText:React.FC<{
   );
 };
 
+const AccentSeparator:React.FC<{
+  d:number; width?:number; color?:string; variant?:'line'|'dots'|'gradient';
+}> = ({d, width=80, color=C.accent, variant='line'}) => {
+  const frame = useCurrentFrame();
+  const progress = interpolate(frame - d, [0, 25], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  if (variant === 'gradient') {
+    return (
+      <div style={{ width: width * progress, height: 2, margin: '0 auto',
+        background: `linear-gradient(90deg, transparent, ${color}, transparent)`, borderRadius: 1,
+      }}/>
+    );
+  }
+  return (
+    <div style={{ width: width * progress, height: 2,
+      backgroundColor: color, borderRadius: 1, margin: '0 auto',
+    }}/>
+  );
+};
+
 const MorphPosition:React.FC<{children:React.ReactNode;phase:number;fromY:number;toY:number;fromX?:number;toX?:number;fromScale?:number;toScale?:number;d:number;duration?:number}> =
   ({children,phase,fromY,toY,fromX=0,toX=0,fromScale=1,toScale=1,d,duration=25}) => {
   const frame = useCurrentFrame();
@@ -115,23 +136,22 @@ const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
   const accentColor = (C as any)[ACCENT_KEY] || C.accent;
-  const framesPerItem = Math.floor((dur - 90) / Math.max(REVEAL_ITEMS.length, 1));
-  const titlePhase = interpolate(frame, [60, 85], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
+  const staggerDelay = 8;
+  const titlePhase = interpolate(frame, [25, 40], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
 
   return (
     <Fd dur={dur} fo={1}>
       <Safe>
-        <MorphPosition phase={titlePhase} fromY={0} toY={-180} fromScale={1} toScale={0.75} d={0}>
+        <MorphPosition phase={titlePhase} fromY={0} toY={-160} fromScale={1} toScale={0.8} d={0}>
           <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:16}}>
             <E d={0} from="pop"><Icon name={ICON_NAME} size={60} color={accentColor}/></E>
-            <AnimatedText text={TITLE} d={5} fontSize={56} fontWeight={700} mode="word"/>
+            <AnimatedText text={TITLE} d={5} fontSize={48} fontWeight={700} mode="word"/>
+            <AccentSeparator d={15} width={80} color={accentColor} variant="gradient"/>
           </div>
         </MorphPosition>
-        <div style={{marginTop:120, display:'flex', flexDirection:'column', gap:24, alignItems:'center', width:'100%', maxWidth:800}}>
+        <div style={{marginTop:80, display:'flex', flexDirection:'column', gap:20, alignItems:'center', width:'100%', maxWidth:800}}>
           {REVEAL_ITEMS.map((item, i) => {
-            const itemStart = 90 + i * framesPerItem;
-            const isVisible = frame >= itemStart;
-            if (!isVisible) return null;
+            const itemStart = 30 + i * staggerDelay;
             return (
               <E key={i} d={itemStart} from="up" style={{width:'100%'}}>
                 <div style={{
@@ -143,7 +163,7 @@ const Section1:React.FC = () => {
                   <div style={{
                     width:36, height:36, borderRadius:18, background:`${accentColor}20`,
                     display:'flex', alignItems:'center', justifyContent:'center',
-                    fontSize:18, fontWeight:700, color:accentColor, flexShrink:0,
+                    fontSize:20, fontWeight:700, color:accentColor, flexShrink:0,
                   }}>{i + 1}</div>
                   <span style={{fontSize:26, fontWeight:400, color:C.text}}>{item.text}</span>
                 </div>

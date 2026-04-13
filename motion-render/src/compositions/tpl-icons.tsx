@@ -1,6 +1,6 @@
 // ============================================================
-// TEMPLATE: TIMELINE
-// Description: Horizontal timeline with progressive node reveal
+// TEMPLATE: ICONS
+// Description: 2-4 icon items in a horizontal row
 // ============================================================
 import "@fontsource/dm-sans/400.css";
 import "@fontsource/dm-sans/500.css";
@@ -46,15 +46,33 @@ const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}
   return <IconComp size={size} color={color} strokeWidth={strokeWidth}/>;
 };
 
+// --- Advanced Components ---
+const CascadeItem:React.FC<{d:number;index:number;children:React.ReactNode}> = ({d,index,children}) => {
+  const frame = useCurrentFrame();
+  const delay = d + index * 8;
+  const dist = 60 + index * 15;
+  const dur = 22 + index * 2;
+  const progress = interpolate(frame - delay, [0, dur], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  return (
+    <div style={{
+      opacity: progress,
+      transform: `translateY(${interpolate(progress,[0,1],[dist,0])}px)`,
+      filter: `blur(${interpolate(progress,[0,0.5,1],[4,1,0])}px)`,
+    }}>{children}</div>
+  );
+};
+
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
-const TITLE = "Evolución del Proyecto";
-const EVENTS = [
-  { icon: "Lightbulb", label: "Idea", time: "2022", accent: "accent" },
-  { icon: "Code", label: "Desarrollo", time: "2023", accent: "orange" },
-  { icon: "Rocket", label: "Lanzamiento", time: "2024", accent: "purple" },
-  { icon: "TrendingUp", label: "Crecimiento", time: "2025", accent: "green" },
+const TITLE = "Nuestros Pilares";
+const ITEMS = [
+  { icon: "Shield", label: "Seguridad", accent: "accent" },
+  { icon: "Zap", label: "Velocidad", accent: "orange" },
+  { icon: "Globe", label: "Alcance", accent: "purple" },
 ];
 
 // ============================================================
@@ -62,56 +80,33 @@ const EVENTS = [
 // ============================================================
 
 const Section1:React.FC = () => {
-  const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const staggerDelay = 8;
-
-  const lineProgress = interpolate(frame, [10, 50], [0, 1], {
-    extrapolateLeft:'clamp', extrapolateRight:'clamp',
-  });
-
-  const nodeSpacing = Math.floor(1400 / Math.max(EVENTS.length - 1, 1));
 
   return (
     <Fd dur={dur} fo={1}>
-      <Safe>
-        <E d={0} from="up" style={{marginBottom:48, textAlign:'center', width:'100%'}}>
+      <Safe style={{justifyContent:'center', alignItems:'center'}}>
+        <E d={0} from="up" style={{marginBottom:60, textAlign:'center'}}>
           <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
-        <div style={{position:'relative', width:'100%', height:300}}>
-          <div style={{
-            position:'absolute', top:80, left:40, right:40, height:3,
-            backgroundColor:C.border, borderRadius:2,
-          }}>
-            <div style={{
-              height:'100%', width:`${lineProgress * 100}%`,
-              background:`linear-gradient(90deg, ${C.accent}, ${(C as any)[EVENTS[EVENTS.length-1].accent] || C.accent})`,
-              borderRadius:2,
-            }}/>
-          </div>
-          {EVENTS.map((event, i) => {
-            const accentColor = (C as any)[event.accent] || C.accent;
-            const nodeStart = 10 + i * staggerDelay;
-            const xPos = 40 + i * nodeSpacing;
+        <div style={{display:'flex', gap:ITEMS.length <= 3 ? 140 : 100, justifyContent:'center', flexWrap:'wrap'}}>
+          {ITEMS.map((item, i) => {
+            const accentColor = (C as any)[item.accent] || C.accent;
             return (
-              <E key={i} d={nodeStart} from="pop" style={{
-                position:'absolute', left:xPos, top:48,
-                display:'flex', flexDirection:'column', alignItems:'center',
-                transform:'translateX(-50%)',
-              }}>
-                <div style={{
-                  width:64, height:64, borderRadius:32, background:C.card,
-                  border:`2px solid ${accentColor}`,
-                  boxShadow:`0 0 20px ${accentColor}15`,
-                  display:'flex', alignItems:'center', justifyContent:'center', zIndex:2,
-                }}>
-                  <Icon name={event.icon} size={28} color={accentColor}/>
+              <CascadeItem key={i} d={15} index={i}>
+                <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:20}}>
+                  <div style={{
+                    width:180, height:180, borderRadius:90, background:C.card,
+                    border:`1px solid ${accentColor}30`,
+                    boxShadow:`0 0 30px ${accentColor}10, 0 8px 32px rgba(0,0,0,0.3)`,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                  }}>
+                    <Icon name={item.icon} size={80} color={accentColor}/>
+                  </div>
+                  <div style={{fontSize:24, fontWeight:700, color:C.text, textAlign:'center'}}>
+                    {item.label}
+                  </div>
                 </div>
-                <div style={{marginTop:16, textAlign:'center'}}>
-                  <div style={{fontSize:22, fontWeight:700, color:C.text}}>{event.label}</div>
-                  <div style={{fontSize:20, fontWeight:400, color:C.dim, marginTop:4}}>{event.time}</div>
-                </div>
-              </E>
+              </CascadeItem>
             );
           })}
         </div>
@@ -120,7 +115,7 @@ const Section1:React.FC = () => {
   );
 };
 
-export const MyComposition:React.FC = () => {
+export const Tplicons:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>

@@ -64,26 +64,24 @@ const STAGES = [
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const framesPerStage = Math.floor((dur - 60) / STAGES.length);
+  const staggerDelay = 8;
 
   return (
     <Fd dur={dur} fo={1}>
       <Safe>
-        <E d={0} from="up" style={{marginBottom:40, textAlign:'center', width:'100%'}}>
-          <div style={{fontSize:38, fontWeight:700, color:C.text}}>{TITLE}</div>
+        <E d={0} from="up" style={{marginBottom:48, textAlign:'center', width:'100%'}}>
+          <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
         <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:12, width:'100%'}}>
           {STAGES.map((stage, i) => {
             const accentColor = (C as any)[stage.accent] || C.accent;
-            const stageStart = 20 + i * framesPerStage;
-            const isVisible = frame >= stageStart;
-            const isActive = i === Math.min(Math.floor((frame - 20) / framesPerStage), STAGES.length - 1);
+            const stageStart = 10 + i * staggerDelay;
+            const isActive = i === STAGES.length - 1 || (frame >= stageStart && frame < 10 + (i + 1) * staggerDelay + 30);
             const widthPercent = 100 - (i * (50 / Math.max(STAGES.length - 1, 1)));
-            if (!isVisible) return null;
             return (
               <React.Fragment key={i}>
                 {i > 0 && (
-                  <E d={stageStart - 5} from="up" style={{flexShrink:0}}>
+                  <E d={stageStart - 3} from="up" style={{flexShrink:0}}>
                     <LucideIcons.ChevronDown size={20} color={C.dim} strokeWidth={2}/>
                   </E>
                 )}
@@ -94,7 +92,6 @@ const Section1:React.FC = () => {
                     borderRadius:12,
                     border: isActive ? `1px solid ${accentColor}30` : `1px solid ${C.border}`,
                     boxShadow: isActive ? `0 8px 32px ${accentColor}15` : 'none',
-                    opacity: !isActive && i < Math.floor((frame - 20) / framesPerStage) ? 0.5 : 1,
                   }}>
                     <div style={{
                       width:48, height:48, borderRadius:24, background:`${accentColor}15`,

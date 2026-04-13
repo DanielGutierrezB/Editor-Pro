@@ -1,6 +1,6 @@
 // ============================================================
-// TEMPLATE: CALLOUT
-// Description: Key phrase / thesis statement, big centered text
+// TEMPLATE: GAUGE
+// Description: Single large metric vs target with progress bar
 // ============================================================
 import "@fontsource/dm-sans/400.css";
 import "@fontsource/dm-sans/500.css";
@@ -47,98 +47,91 @@ const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}
 };
 
 // --- Advanced Components ---
-const AnimatedText:React.FC<{
-  text:string; d:number; fontSize?:number; fontWeight?:number; color?:string;
-  align?:'left'|'center'|'right'; mode?:'word'|'line'|'fade'; framesPerWord?:number;
-}> = ({text, d, fontSize=36, fontWeight=700, color=C.text, align='center', mode='word', framesPerWord=4}) => {
+const OdometerDigit:React.FC<{value:number;d:number;fontSize?:number;color?:string}> = ({value,d,fontSize=96,color=C.accent}) => {
   const frame = useCurrentFrame();
-  const words = text.split(' ');
-  if (mode === 'fade') {
-    const progress = interpolate(frame - d, [0, 25], [0, 1], {
-      easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
-    });
-    return (
-      <div style={{fontSize, fontWeight, color, textAlign:align, opacity:progress,
-        transform:`translateY(${interpolate(progress,[0,1],[30,0])}px)`}}>{text}</div>
-    );
-  }
+  const progress = interpolate(frame - d, [0, 40], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  });
+  const current = Math.round(interpolate(progress, [0,1], [0, value]));
+  const digits = String(current).split('');
   return (
-    <div style={{fontSize, fontWeight, textAlign:align, display:'flex', flexWrap:'wrap',
-      justifyContent: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
-      gap: `0 ${fontSize * 0.3}px`}}>
-      {words.map((word, i) => {
-        const wordDelay = d + i * framesPerWord;
-        const progress = interpolate(frame - wordDelay, [0, 12], [0, 1], {
-          easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+    <div style={{display:'flex',overflow:'hidden',height:fontSize*1.2}}>
+      {digits.map((digit, i) => {
+        const dp = interpolate(frame - d - i*3, [0,30], [0,1], {
+          easing: Easing.bezier(0.16,1,0.3,1), extrapolateLeft:'clamp', extrapolateRight:'clamp',
         });
-        return (
-          <span key={i} style={{ color, opacity: progress,
-            transform: `translateY(${interpolate(progress, [0,1], [20, 0])}px)`, display: 'inline-block',
-          }}>{word}</span>
-        );
+        return <div key={i} style={{fontSize,fontWeight:700,color,fontFamily:"'DM Sans',sans-serif",lineHeight:1.2,opacity:dp,
+          transform:`translateY(${interpolate(dp,[0,1],[fontSize*0.5,0])}px)`}}>{digit}</div>;
       })}
     </div>
   );
 };
 
-const AccentSeparator:React.FC<{
-  d:number; width?:number; color?:string; variant?:'line'|'dots'|'gradient';
-}> = ({d, width=80, color=C.accent, variant='line'}) => {
-  const frame = useCurrentFrame();
-  const progress = interpolate(frame - d, [0, 25], [0, 1], {
-    easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
-  });
-  if (variant === 'gradient') {
-    return (
-      <div style={{ width: width * progress, height: 2, margin: '0 auto',
-        background: `linear-gradient(90deg, transparent, ${color}, transparent)`, borderRadius: 1,
-      }}/>
-    );
-  }
-  return (
-    <div style={{ width: width * progress, height: 2,
-      backgroundColor: color, borderRadius: 1, margin: '0 auto',
-    }}/>
-  );
-};
+const AnimatedMetric:React.FC<{value:number;suffix:string;label:string;d:number;accent?:string}> = ({value,suffix,label,d,accent=C.accent}) => (
+  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:12}}>
+    <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+      <OdometerDigit value={value} d={d} fontSize={96} color={accent}/>
+      <E d={d+15} from="pop"><span style={{fontSize:48,fontWeight:700,color:accent}}>{suffix}</span></E>
+    </div>
+    <E d={d+20} from="up"><span style={{fontSize:22,fontWeight:400,color:C.dim,textTransform:'uppercase',letterSpacing:3}}>{label}</span></E>
+  </div>
+);
 
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
-const PHRASE = "El contenido es el rey, pero la distribución es la reina";
-const ICON_NAME = "Quote";
-const ACCENT_KEY = "accent";
+const VALUE = 73;
+const TARGET = 80;
+const SUFFIX = "%";
+const LABEL = "Tasa de Conversión";
+const SUBLABEL = "Meta: 80%";
 
 // ============================================================
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
 const Section1:React.FC = () => {
-  const {durationInFrames: dur} = useVideoConfig();
-  const accentColor = (C as any)[ACCENT_KEY] || C.accent;
+  const frame = useCurrentFrame();
+  const {fps, durationInFrames: dur} = useVideoConfig();
+  const barColor = VALUE >= TARGET ? C.accent : VALUE >= TARGET * 0.7 ? C.orange : C.red;
+
+  const progress = spring({frame: frame - 10, fps, config: {damping: 20, mass: 0.5}});
+  const barWidth = interpolate(progress, [0, 1], [0, (VALUE / Math.max(TARGET * 1.2, VALUE * 1.1)) * 100], {
+    extrapolateLeft:'clamp', extrapolateRight:'clamp',
+  });
+  const targetPos = (TARGET / Math.max(TARGET * 1.2, VALUE * 1.1)) * 100;
 
   return (
     <Fd dur={dur} fo={1}>
-      <div style={{position:'absolute', inset:0, zIndex:-1,
-        background:`radial-gradient(circle at 50% 50%, ${accentColor}06, transparent 70%)`}}/>
       <Safe style={{justifyContent:'center', alignItems:'center'}}>
-        <E d={0} from="pop">
-          <Icon name={ICON_NAME} size={72} color={accentColor}/>
+        <AnimatedMetric value={VALUE} suffix={SUFFIX} label={LABEL} d={0} accent={barColor}/>
+        <div style={{height:48}}/>
+        <E d={25} from="up" style={{width:'100%', maxWidth:700}}>
+          <div style={{position:'relative'}}>
+            <div style={{height:16, backgroundColor:C.card, borderRadius:8, overflow:'hidden', width:'100%'}}>
+              <div style={{
+                height:'100%', width:`${barWidth}%`, backgroundColor:barColor,
+                borderRadius:8, boxShadow:`0 0 20px ${barColor}30`,
+              }}/>
+            </div>
+            <div style={{
+              position:'absolute', top:-8, left:`${targetPos}%`, width:2, height:32,
+              backgroundColor:C.dim, opacity:0.6,
+            }}/>
+            <E d={35} from="up" style={{position:'absolute', top:28, left:`${targetPos}%`, transform:'translateX(-50%)'}}>
+              <div style={{fontSize:18, fontWeight:400, color:C.dim}}>
+                {SUBLABEL}
+              </div>
+            </E>
+          </div>
         </E>
-        <div style={{height:32}}/>
-        <AccentSeparator d={8} width={80} color={accentColor} variant="gradient"/>
-        <div style={{height:28}}/>
-        <div style={{maxWidth:1200}}>
-          <AnimatedText text={PHRASE} d={15} fontSize={48} fontWeight={700} color={C.text} mode="word" framesPerWord={4}/>
-        </div>
-        <div style={{height:28}}/>
-        <AccentSeparator d={15 + PHRASE.split(' ').length * 4 + 10} width={80} color={accentColor} variant="gradient"/>
       </Safe>
     </Fd>
   );
 };
 
-export const MyComposition:React.FC = () => {
+export const Tplgauge:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>

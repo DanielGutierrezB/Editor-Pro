@@ -1,6 +1,6 @@
 // ============================================================
-// TEMPLATE: TIMELINE
-// Description: Horizontal timeline with progressive node reveal
+// TEMPLATE: FUNNEL
+// Description: Funnel/pipeline stages narrowing vertically
 // ============================================================
 import "@fontsource/dm-sans/400.css";
 import "@fontsource/dm-sans/500.css";
@@ -49,12 +49,12 @@ const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
-const TITLE = "Evolución del Proyecto";
-const EVENTS = [
-  { icon: "Lightbulb", label: "Idea", time: "2022", accent: "accent" },
-  { icon: "Code", label: "Desarrollo", time: "2023", accent: "orange" },
-  { icon: "Rocket", label: "Lanzamiento", time: "2024", accent: "purple" },
-  { icon: "TrendingUp", label: "Crecimiento", time: "2025", accent: "green" },
+const TITLE = "Embudo de Ventas";
+const STAGES = [
+  { icon: "Eye", title: "Awareness", pct: "10,000", accent: "accent" },
+  { icon: "MousePointerClick", title: "Interés", pct: "3,200", accent: "orange" },
+  { icon: "ShoppingCart", title: "Conversión", pct: "840", accent: "purple" },
+  { icon: "Heart", title: "Retención", pct: "520", accent: "green" },
 ];
 
 // ============================================================
@@ -64,54 +64,51 @@ const EVENTS = [
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const staggerDelay = 8;
-
-  const lineProgress = interpolate(frame, [10, 50], [0, 1], {
-    extrapolateLeft:'clamp', extrapolateRight:'clamp',
-  });
-
-  const nodeSpacing = Math.floor(1400 / Math.max(EVENTS.length - 1, 1));
+  const framesPerStage = Math.floor((dur - 60) / STAGES.length);
 
   return (
     <Fd dur={dur} fo={1}>
       <Safe>
-        <E d={0} from="up" style={{marginBottom:48, textAlign:'center', width:'100%'}}>
-          <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
+        <E d={0} from="up" style={{marginBottom:40, textAlign:'center', width:'100%'}}>
+          <div style={{fontSize:38, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
-        <div style={{position:'relative', width:'100%', height:300}}>
-          <div style={{
-            position:'absolute', top:80, left:40, right:40, height:3,
-            backgroundColor:C.border, borderRadius:2,
-          }}>
-            <div style={{
-              height:'100%', width:`${lineProgress * 100}%`,
-              background:`linear-gradient(90deg, ${C.accent}, ${(C as any)[EVENTS[EVENTS.length-1].accent] || C.accent})`,
-              borderRadius:2,
-            }}/>
-          </div>
-          {EVENTS.map((event, i) => {
-            const accentColor = (C as any)[event.accent] || C.accent;
-            const nodeStart = 10 + i * staggerDelay;
-            const xPos = 40 + i * nodeSpacing;
+        <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:12, width:'100%'}}>
+          {STAGES.map((stage, i) => {
+            const accentColor = (C as any)[stage.accent] || C.accent;
+            const stageStart = 20 + i * framesPerStage;
+            const isVisible = frame >= stageStart;
+            const isActive = i === Math.min(Math.floor((frame - 20) / framesPerStage), STAGES.length - 1);
+            const widthPercent = 100 - (i * (50 / Math.max(STAGES.length - 1, 1)));
+            if (!isVisible) return null;
             return (
-              <E key={i} d={nodeStart} from="pop" style={{
-                position:'absolute', left:xPos, top:48,
-                display:'flex', flexDirection:'column', alignItems:'center',
-                transform:'translateX(-50%)',
-              }}>
-                <div style={{
-                  width:64, height:64, borderRadius:32, background:C.card,
-                  border:`2px solid ${accentColor}`,
-                  boxShadow:`0 0 20px ${accentColor}15`,
-                  display:'flex', alignItems:'center', justifyContent:'center', zIndex:2,
-                }}>
-                  <Icon name={event.icon} size={28} color={accentColor}/>
-                </div>
-                <div style={{marginTop:16, textAlign:'center'}}>
-                  <div style={{fontSize:22, fontWeight:700, color:C.text}}>{event.label}</div>
-                  <div style={{fontSize:20, fontWeight:400, color:C.dim, marginTop:4}}>{event.time}</div>
-                </div>
-              </E>
+              <React.Fragment key={i}>
+                {i > 0 && (
+                  <E d={stageStart - 5} from="up" style={{flexShrink:0}}>
+                    <LucideIcons.ChevronDown size={20} color={C.dim} strokeWidth={2}/>
+                  </E>
+                )}
+                <E d={stageStart} from="up" style={{width:`${widthPercent}%`}}>
+                  <div style={{
+                    display:'flex', alignItems:'center', gap:16, padding:'16px 24px',
+                    backgroundColor: isActive ? C.card : 'transparent',
+                    borderRadius:12,
+                    border: isActive ? `1px solid ${accentColor}30` : `1px solid ${C.border}`,
+                    boxShadow: isActive ? `0 8px 32px ${accentColor}15` : 'none',
+                    opacity: !isActive && i < Math.floor((frame - 20) / framesPerStage) ? 0.5 : 1,
+                  }}>
+                    <div style={{
+                      width:48, height:48, borderRadius:24, background:`${accentColor}15`,
+                      display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+                    }}>
+                      <Icon name={stage.icon} size={24} color={accentColor}/>
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:22, fontWeight:700, color:C.text}}>{stage.title}</div>
+                    </div>
+                    <div style={{fontSize:24, fontWeight:700, color:accentColor}}>{stage.pct}</div>
+                  </div>
+                </E>
+              </React.Fragment>
             );
           })}
         </div>
@@ -120,7 +117,7 @@ const Section1:React.FC = () => {
   );
 };
 
-export const MyComposition:React.FC = () => {
+export const Tplfunnel:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>

@@ -1,6 +1,6 @@
 // ============================================================
-// TEMPLATE: STEPS
-// Description: One step at a time with progress dots
+// TEMPLATE: UI
+// Description: UI mockup with form fields and typing animation
 // ============================================================
 import "@fontsource/dm-sans/400.css";
 import "@fontsource/dm-sans/500.css";
@@ -82,108 +82,92 @@ const GlowCard:React.FC<{
   );
 };
 
-const ProgressDots:React.FC<{
-  total:number; current:number; d:number; accent?:string; position?:'bottom'|'right';
-}> = ({total, current, d, accent=C.accent, position='bottom'}) => {
-  const frame = useCurrentFrame();
-  const isHorizontal = position === 'bottom';
-  return (
-    <E d={d} from="pop" style={{
-      position: 'absolute',
-      ...(isHorizontal
-        ? {bottom: 60, left: '50%', transform: 'translateX(-50%)'}
-        : {right: 80, top: '50%', transform: 'translateY(-50%)'}
-      ),
-    }}>
-      <div style={{
-        display: 'flex', flexDirection: isHorizontal ? 'row' : 'column',
-        gap: 12, alignItems: 'center',
-      }}>
-        {Array.from({length: total}).map((_, i) => {
-          const isActive = i === current;
-          const isPast = i < current;
-          return (
-            <div key={i} style={{
-              width: isActive ? (isHorizontal ? 36 : 12) : 12,
-              height: isActive ? (isHorizontal ? 12 : 36) : 12,
-              borderRadius: 6,
-              backgroundColor: isActive ? accent : isPast ? `${accent}60` : 'rgba(255,255,255,0.15)',
-            }}/>
-          );
-        })}
-      </div>
-    </E>
-  );
-};
-
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
-const STEPS_DATA = [
-  { icon: "Search", title: "Investigación", desc: "Analiza tu mercado objetivo y competencia", accent: "accent" },
-  { icon: "Target", title: "Segmentación", desc: "Define tu audiencia ideal con datos demográficos", accent: "orange" },
-  { icon: "Send", title: "Ejecución", desc: "Lanza tu campaña con métricas de seguimiento", accent: "purple" },
+const TITLE = "Formulario de Registro";
+const FIELDS = [
+  { label: "Nombre completo", value: "John Doe" },
+  { label: "Correo electrónico", value: "john@email.com" },
+  { label: "Contraseña", value: "••••••••••" },
 ];
+const ACCENT_KEY = "accent";
 
 // ============================================================
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
-const StepSection:React.FC<{stepIndex:number; step:typeof STEPS_DATA[0]}> = ({stepIndex, step}) => {
+const Section1:React.FC = () => {
+  const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const accentColor = (C as any)[step.accent] || C.accent;
+  const accentColor = (C as any)[ACCENT_KEY] || C.accent;
+  const framesPerField = Math.floor((dur - 90) / FIELDS.length);
 
   return (
     <Fd dur={dur} fo={1}>
       <Safe style={{justifyContent:'center', alignItems:'center'}}>
-        <E d={0} from="pop">
-          <div style={{
-            fontSize:20, fontWeight:700, color:C.bg,
-            backgroundColor:accentColor, borderRadius:20,
-            padding:'6px 20px', letterSpacing:2, textTransform:'uppercase', marginBottom:24,
-          }}>
-            Paso {stepIndex + 1} de {STEPS_DATA.length}
+        <GlowCard d={0} accent={accentColor} elevation={3} width={560} active={true}>
+          <E d={5} from="up">
+            <div style={{fontSize:32, fontWeight:700, color:C.text, textAlign:'center', marginBottom:32}}>
+              {TITLE}
+            </div>
+          </E>
+          <div style={{display:'flex', flexDirection:'column', gap:20}}>
+            {FIELDS.map((field, i) => {
+              const fieldStart = 15 + i * framesPerField;
+              const isActive = frame >= fieldStart && frame < fieldStart + framesPerField;
+              const typingProgress = interpolate(
+                frame - fieldStart - 10, [0, 35], [0, 1],
+                {extrapolateLeft:'clamp', extrapolateRight:'clamp'}
+              );
+              const displayedText = field.value.substring(0, Math.floor(field.value.length * typingProgress));
+              return (
+                <E key={i} d={fieldStart} from="up">
+                  <div style={{fontSize:16, fontWeight:700, color:C.dim, marginBottom:8, textTransform:'uppercase', letterSpacing:1}}>
+                    {field.label}
+                  </div>
+                  <div style={{
+                    height:56, borderRadius:10, padding:'0 20px',
+                    backgroundColor:'rgba(255,255,255,0.04)',
+                    border: isActive ? `2px solid ${accentColor}` : `1px solid ${C.border}`,
+                    boxShadow: isActive ? `0 0 20px ${accentColor}15` : 'none',
+                    display:'flex', alignItems:'center',
+                  }}>
+                    <span style={{fontSize:20, fontWeight:400, color: frame >= fieldStart + 10 ? C.text : C.dim}}>
+                      {frame >= fieldStart + 10 ? displayedText : ''}
+                      {isActive && frame >= fieldStart + 10 && (
+                        <span style={{
+                          opacity: Math.floor(frame / 8) % 2 === 0 ? 1 : 0,
+                          color: accentColor,
+                        }}>|</span>
+                      )}
+                    </span>
+                  </div>
+                </E>
+              );
+            })}
           </div>
-        </E>
-        <E d={5} from="pop">
-          <div style={{
-            width:160, height:160, borderRadius:80, background:C.card,
-            border:`2px solid ${accentColor}`,
-            boxShadow:`0 0 40px ${accentColor}15, 0 16px 48px rgba(0,0,0,0.4)`,
-            display:'flex', alignItems:'center', justifyContent:'center', marginBottom:28,
-          }}>
-            <Icon name={step.icon} size={72} color={accentColor}/>
-          </div>
-        </E>
-        <E d={12} from="up">
-          <div style={{fontSize:48, fontWeight:700, color:C.text, textAlign:'center', marginBottom:16}}>
-            {step.title}
-          </div>
-        </E>
-        <E d={20} from="up">
-          <div style={{fontSize:24, fontWeight:400, color:C.dim, textAlign:'center', maxWidth:600}}>
-            {step.desc}
-          </div>
-        </E>
-        <ProgressDots total={STEPS_DATA.length} current={stepIndex} d={5} accent={accentColor}/>
+          <E d={15 + FIELDS.length * framesPerField} from="up" style={{marginTop:28}}>
+            <div style={{
+              height:56, borderRadius:10,
+              backgroundColor:accentColor, display:'flex', alignItems:'center', justifyContent:'center',
+            }}>
+              <span style={{fontSize:20, fontWeight:700, color:C.bg}}>Crear cuenta</span>
+            </div>
+          </E>
+        </GlowCard>
       </Safe>
     </Fd>
   );
 };
 
-export const MyComposition:React.FC = () => {
+export const Tplui:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
-  const framesPerStep = Math.floor(durationInFrames / STEPS_DATA.length);
-
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>
-      {STEPS_DATA.map((step, i) => (
-        <Sequence key={i} from={i * framesPerStep}
-          durationInFrames={i === STEPS_DATA.length - 1 ? durationInFrames - i * framesPerStep : framesPerStep}
-          premountFor={10}>
-          <StepSection stepIndex={i} step={step}/>
-        </Sequence>
-      ))}
+      <Sequence from={0} durationInFrames={durationInFrames} premountFor={10}>
+        <Section1/>
+      </Sequence>
     </AbsoluteFill>
   );
 };

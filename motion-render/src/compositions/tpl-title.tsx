@@ -1,6 +1,6 @@
 // ============================================================
-// TEMPLATE: CALLOUT
-// Description: Key phrase / thesis statement, big centered text
+// TEMPLATE: TITLE
+// Description: Opening/intro screen with icon, title, subtitle
 // ============================================================
 import "@fontsource/dm-sans/400.css";
 import "@fontsource/dm-sans/500.css";
@@ -88,6 +88,19 @@ const AccentSeparator:React.FC<{
   const progress = interpolate(frame - d, [0, 25], [0, 1], {
     easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
+  if (variant === 'dots') {
+    return (
+      <div style={{display:'flex', gap:8, justifyContent:'center', opacity: progress}}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{ width: 6, height: 6, borderRadius: 3,
+            backgroundColor: i === 1 ? color : `${color}40`,
+            transform: `scale(${interpolate(frame - d - i * 5, [0, 15], [0, 1],
+              {easing: Easing.bezier(0.34, 1.56, 0.64, 1), extrapolateLeft:'clamp', extrapolateRight:'clamp'})})`,
+          }}/>
+        ))}
+      </div>
+    );
+  }
   if (variant === 'gradient') {
     return (
       <div style={{ width: width * progress, height: 2, margin: '0 auto',
@@ -105,8 +118,9 @@ const AccentSeparator:React.FC<{
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
-const PHRASE = "El contenido es el rey, pero la distribución es la reina";
-const ICON_NAME = "Quote";
+const TITLE = "El Futuro del Marketing Digital";
+const SUBTITLE = "Estrategias que transforman resultados";
+const ICON_NAME = "Zap";
 const ACCENT_KEY = "accent";
 
 // ============================================================
@@ -120,25 +134,29 @@ const Section1:React.FC = () => {
   return (
     <Fd dur={dur} fo={1}>
       <div style={{position:'absolute', inset:0, zIndex:-1,
-        background:`radial-gradient(circle at 50% 50%, ${accentColor}06, transparent 70%)`}}/>
-      <Safe style={{justifyContent:'center', alignItems:'center'}}>
+        background:`radial-gradient(ellipse at 50% 45%, ${accentColor}08, transparent 65%)`}}/>
+      <Safe style={{justifyContent:'center', alignItems:'center', gap:0}}>
         <E d={0} from="pop">
-          <Icon name={ICON_NAME} size={72} color={accentColor}/>
+          <div style={{
+            width:140, height:140, borderRadius:70, background:C.card,
+            border:`1px solid ${accentColor}30`,
+            boxShadow:`0 0 40px ${accentColor}10, 0 8px 32px rgba(0,0,0,0.3)`,
+            display:'flex', alignItems:'center', justifyContent:'center', marginBottom:40,
+          }}>
+            <Icon name={ICON_NAME} size={64} color={accentColor}/>
+          </div>
         </E>
-        <div style={{height:32}}/>
-        <AccentSeparator d={8} width={80} color={accentColor} variant="gradient"/>
-        <div style={{height:28}}/>
-        <div style={{maxWidth:1200}}>
-          <AnimatedText text={PHRASE} d={15} fontSize={48} fontWeight={700} color={C.text} mode="word" framesPerWord={4}/>
-        </div>
-        <div style={{height:28}}/>
-        <AccentSeparator d={15 + PHRASE.split(' ').length * 4 + 10} width={80} color={accentColor} variant="gradient"/>
+        <AnimatedText text={TITLE} d={10} fontSize={60} fontWeight={700} color={C.text} mode="word" framesPerWord={4}/>
+        <div style={{height:24}}/>
+        <AccentSeparator d={10 + TITLE.split(' ').length * 4 + 10} width={80} color={accentColor} variant="gradient"/>
+        <div style={{height:24}}/>
+        <AnimatedText text={SUBTITLE} d={10 + TITLE.split(' ').length * 4 + 25} fontSize={26} fontWeight={400} color={C.dim} mode="fade"/>
       </Safe>
     </Fd>
   );
 };
 
-export const MyComposition:React.FC = () => {
+export const Tpltitle:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>

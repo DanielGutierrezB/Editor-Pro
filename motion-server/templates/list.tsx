@@ -112,14 +112,14 @@ const Section1:React.FC = () => {
           </E>
           {SUBTITLE && (
             <E d={8} from="left">
-              <div style={{fontSize:22, color:C.dim, marginTop:16}}>{SUBTITLE}</div>
+              <div style={{fontSize:24, color:C.dim, marginTop:16}}>{SUBTITLE}</div>
             </E>
           )}
           <E d={12} from="left">
             <AccentSeparator d={16} width={60} color={accentColor} variant="line"/>
           </E>
         </div>
-        <div style={{flex:1, display:'flex', flexDirection:'column', gap:16, justifyContent:'center'}}>
+        <div style={{flex:1, display:'flex', flexDirection:'column', gap:20, justifyContent:'center'}}>
           {LIST_ITEMS.map((item, i) => {
             const isActive = i === activeItem;
             const isPast = i < activeItem;

@@ -1,6 +1,6 @@
 // ============================================================
-// TEMPLATE: TIMELINE
-// Description: Horizontal timeline with progressive node reveal
+// TEMPLATE: CHART
+// Description: Animated bar chart with values
 // ============================================================
 import "@fontsource/dm-sans/400.css";
 import "@fontsource/dm-sans/500.css";
@@ -49,13 +49,15 @@ const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
-const TITLE = "Evolución del Proyecto";
-const EVENTS = [
-  { icon: "Lightbulb", label: "Idea", time: "2022", accent: "accent" },
-  { icon: "Code", label: "Desarrollo", time: "2023", accent: "orange" },
-  { icon: "Rocket", label: "Lanzamiento", time: "2024", accent: "purple" },
-  { icon: "TrendingUp", label: "Crecimiento", time: "2025", accent: "green" },
+const TITLE = "Inversión por Plataforma";
+const SUBTITLE = "Distribución del presupuesto Q4 2024";
+const BARS = [
+  { label: "Meta", value: 45, color: "accent" },
+  { label: "Google", value: 32, color: "orange" },
+  { label: "TikTok", value: 18, color: "purple" },
+  { label: "LinkedIn", value: 12, color: "red" },
 ];
+const VALUE_SUFFIX = "%";
 
 // ============================================================
 // FIXED IMPLEMENTATION — DO NOT MODIFY
@@ -63,64 +65,66 @@ const EVENTS = [
 
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
-  const {durationInFrames: dur} = useVideoConfig();
-  const staggerDelay = 8;
-
-  const lineProgress = interpolate(frame, [10, 50], [0, 1], {
-    extrapolateLeft:'clamp', extrapolateRight:'clamp',
-  });
-
-  const nodeSpacing = Math.floor(1400 / Math.max(EVENTS.length - 1, 1));
+  const {fps, durationInFrames: dur} = useVideoConfig();
+  const maxValue = Math.max(...BARS.map(d => d.value));
+  const maxBarH = 380;
+  const barW = Math.min(120, Math.floor(1200 / BARS.length));
 
   return (
     <Fd dur={dur} fo={1}>
-      <Safe>
-        <E d={0} from="up" style={{marginBottom:48, textAlign:'center', width:'100%'}}>
-          <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
-        </E>
-        <div style={{position:'relative', width:'100%', height:300}}>
-          <div style={{
-            position:'absolute', top:80, left:40, right:40, height:3,
-            backgroundColor:C.border, borderRadius:2,
-          }}>
-            <div style={{
-              height:'100%', width:`${lineProgress * 100}%`,
-              background:`linear-gradient(90deg, ${C.accent}, ${(C as any)[EVENTS[EVENTS.length-1].accent] || C.accent})`,
-              borderRadius:2,
-            }}/>
-          </div>
-          {EVENTS.map((event, i) => {
-            const accentColor = (C as any)[event.accent] || C.accent;
-            const nodeStart = 10 + i * staggerDelay;
-            const xPos = 40 + i * nodeSpacing;
+      <Safe style={{justifyContent:'space-between', alignItems:'center'}}>
+        <div style={{textAlign:'center', marginBottom:40, width:'100%'}}>
+          <E d={0} from="up">
+            <div style={{fontSize:38, fontWeight:700, color:C.text}}>{TITLE}</div>
+          </E>
+          {SUBTITLE && (
+            <E d={8} from="up">
+              <div style={{fontSize:22, color:C.dim, marginTop:8}}>{SUBTITLE}</div>
+            </E>
+          )}
+        </div>
+        <div style={{display:'flex', gap:Math.min(40, Math.floor(800 / BARS.length)), alignItems:'flex-end', justifyContent:'center'}}>
+          {BARS.map((d, i) => {
+            const barColor = (C as any)[d.color] || C.accent;
+            const barProgress = spring({
+              frame: frame - 25 - i * 8, fps,
+              config: {damping: 18, mass: 0.5, stiffness: 80},
+            });
+            const barH = interpolate(barProgress, [0, 1], [0, (d.value / maxValue) * maxBarH], {
+              extrapolateLeft:'clamp', extrapolateRight:'clamp',
+            });
+            const countValue = Math.round(interpolate(barProgress, [0, 1], [0, d.value], {
+              extrapolateLeft:'clamp', extrapolateRight:'clamp',
+            }));
             return (
-              <E key={i} d={nodeStart} from="pop" style={{
-                position:'absolute', left:xPos, top:48,
-                display:'flex', flexDirection:'column', alignItems:'center',
-                transform:'translateX(-50%)',
-              }}>
+              <div key={i} style={{display:'flex', flexDirection:'column', alignItems:'center', gap:8}}>
                 <div style={{
-                  width:64, height:64, borderRadius:32, background:C.card,
-                  border:`2px solid ${accentColor}`,
-                  boxShadow:`0 0 20px ${accentColor}15`,
-                  display:'flex', alignItems:'center', justifyContent:'center', zIndex:2,
+                  fontSize:24, fontWeight:700, color:barColor,
+                  opacity: interpolate(barProgress, [0.3, 0.6], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'}),
                 }}>
-                  <Icon name={event.icon} size={28} color={accentColor}/>
+                  {countValue}{VALUE_SUFFIX}
                 </div>
-                <div style={{marginTop:16, textAlign:'center'}}>
-                  <div style={{fontSize:22, fontWeight:700, color:C.text}}>{event.label}</div>
-                  <div style={{fontSize:20, fontWeight:400, color:C.dim, marginTop:4}}>{event.time}</div>
+                <div style={{
+                  width:barW, height:barH, borderRadius:'8px 8px 4px 4px',
+                  backgroundColor:barColor, boxShadow:`0 0 20px ${barColor}20`,
+                }}/>
+                <div style={{
+                  fontSize:18, fontWeight:700, color:C.dim, marginTop:4,
+                  opacity: interpolate(barProgress, [0, 0.3], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'}),
+                }}>
+                  {d.label}
                 </div>
-              </E>
+              </div>
             );
           })}
         </div>
+        <div style={{width:BARS.length * (barW + 40), maxWidth:'100%', height:2, backgroundColor:C.border}}/>
       </Safe>
     </Fd>
   );
 };
 
-export const MyComposition:React.FC = () => {
+export const Tplchart:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>

@@ -85,7 +85,7 @@ const Section1:React.FC = () => {
   return (
     <Fd dur={dur} fo={1}>
       <Safe style={{justifyContent:'center', alignItems:'center'}}>
-        <E d={0} from="up" style={{marginBottom:60, textAlign:'center'}}>
+        <E d={0} from="up" style={{marginBottom:48, textAlign:'center'}}>
           <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
         <div style={{display:'flex', gap:ITEMS.length <= 3 ? 140 : 100, justifyContent:'center', flexWrap:'wrap'}}>

@@ -120,7 +120,7 @@ const Section1:React.FC = () => {
               backgroundColor:C.dim, opacity:0.6,
             }}/>
             <E d={35} from="up" style={{position:'absolute', top:28, left:`${targetPos}%`, transform:'translateX(-50%)'}}>
-              <div style={{fontSize:18, fontWeight:400, color:C.dim}}>
+              <div style={{fontSize:20, fontWeight:400, color:C.dim}}>
                 {SUBLABEL}
               </div>
             </E>

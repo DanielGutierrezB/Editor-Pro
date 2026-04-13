@@ -128,9 +128,7 @@ const Section1:React.FC = () => {
         <div style={{height:32}}/>
         <AccentSeparator d={8} width={80} color={accentColor} variant="gradient"/>
         <div style={{height:28}}/>
-        <div style={{maxWidth:1200}}>
-          <AnimatedText text={PHRASE} d={15} fontSize={48} fontWeight={700} color={C.text} mode="word" framesPerWord={4}/>
-        </div>
+        <AnimatedText text={PHRASE} d={15} fontSize={52} fontWeight={700} color={C.text} mode="word" framesPerWord={4}/>
         <div style={{height:28}}/>
         <AccentSeparator d={15 + PHRASE.split(' ').length * 4 + 10} width={80} color={accentColor} variant="gradient"/>
       </Safe>
@@ -138,7 +136,7 @@ const Section1:React.FC = () => {
   );
 };
 
-export const MyComposition:React.FC = () => {
+export const Tplcallout:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>

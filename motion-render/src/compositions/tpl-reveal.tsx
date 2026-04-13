@@ -1,6 +1,6 @@
 // ============================================================
-// TEMPLATE: CALLOUT
-// Description: Key phrase / thesis statement, big centered text
+// TEMPLATE: REVEAL
+// Description: Progressive reveal of a concept with morphing layout
 // ============================================================
 import "@fontsource/dm-sans/400.css";
 import "@fontsource/dm-sans/500.css";
@@ -81,32 +81,30 @@ const AnimatedText:React.FC<{
   );
 };
 
-const AccentSeparator:React.FC<{
-  d:number; width?:number; color?:string; variant?:'line'|'dots'|'gradient';
-}> = ({d, width=80, color=C.accent, variant='line'}) => {
+const MorphPosition:React.FC<{children:React.ReactNode;phase:number;fromY:number;toY:number;fromX?:number;toX?:number;fromScale?:number;toScale?:number;d:number;duration?:number}> =
+  ({children,phase,fromY,toY,fromX=0,toX=0,fromScale=1,toScale=1,d,duration=25}) => {
   const frame = useCurrentFrame();
-  const progress = interpolate(frame - d, [0, 25], [0, 1], {
-    easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+  const mp = interpolate(frame - d, [0, duration], [0, phase], {
+    easing: Easing.bezier(0.45, 0, 0.55, 1),
+    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
-  if (variant === 'gradient') {
-    return (
-      <div style={{ width: width * progress, height: 2, margin: '0 auto',
-        background: `linear-gradient(90deg, transparent, ${color}, transparent)`, borderRadius: 1,
-      }}/>
-    );
-  }
   return (
-    <div style={{ width: width * progress, height: 2,
-      backgroundColor: color, borderRadius: 1, margin: '0 auto',
-    }}/>
+    <div style={{transform:`translate(${interpolate(mp,[0,1],[fromX,toX])}px,${interpolate(mp,[0,1],[fromY,toY])}px) scale(${interpolate(mp,[0,1],[fromScale,toScale])})`,transformOrigin:'center center'}}>
+      {children}
+    </div>
   );
 };
 
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
-const PHRASE = "El contenido es el rey, pero la distribución es la reina";
-const ICON_NAME = "Quote";
+const TITLE = "Machine Learning";
+const REVEAL_ITEMS = [
+  { text: "Los datos entrenan el modelo" },
+  { text: "El modelo encuentra patrones" },
+  { text: "Los patrones generan predicciones" },
+];
+const ICON_NAME = "Brain";
 const ACCENT_KEY = "accent";
 
 // ============================================================
@@ -114,31 +112,51 @@ const ACCENT_KEY = "accent";
 // ============================================================
 
 const Section1:React.FC = () => {
+  const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
   const accentColor = (C as any)[ACCENT_KEY] || C.accent;
+  const framesPerItem = Math.floor((dur - 90) / Math.max(REVEAL_ITEMS.length, 1));
+  const titlePhase = interpolate(frame, [60, 85], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
 
   return (
     <Fd dur={dur} fo={1}>
-      <div style={{position:'absolute', inset:0, zIndex:-1,
-        background:`radial-gradient(circle at 50% 50%, ${accentColor}06, transparent 70%)`}}/>
-      <Safe style={{justifyContent:'center', alignItems:'center'}}>
-        <E d={0} from="pop">
-          <Icon name={ICON_NAME} size={72} color={accentColor}/>
-        </E>
-        <div style={{height:32}}/>
-        <AccentSeparator d={8} width={80} color={accentColor} variant="gradient"/>
-        <div style={{height:28}}/>
-        <div style={{maxWidth:1200}}>
-          <AnimatedText text={PHRASE} d={15} fontSize={48} fontWeight={700} color={C.text} mode="word" framesPerWord={4}/>
+      <Safe>
+        <MorphPosition phase={titlePhase} fromY={0} toY={-180} fromScale={1} toScale={0.75} d={0}>
+          <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:16}}>
+            <E d={0} from="pop"><Icon name={ICON_NAME} size={60} color={accentColor}/></E>
+            <AnimatedText text={TITLE} d={5} fontSize={56} fontWeight={700} mode="word"/>
+          </div>
+        </MorphPosition>
+        <div style={{marginTop:120, display:'flex', flexDirection:'column', gap:24, alignItems:'center', width:'100%', maxWidth:800}}>
+          {REVEAL_ITEMS.map((item, i) => {
+            const itemStart = 90 + i * framesPerItem;
+            const isVisible = frame >= itemStart;
+            if (!isVisible) return null;
+            return (
+              <E key={i} d={itemStart} from="up" style={{width:'100%'}}>
+                <div style={{
+                  display:'flex', alignItems:'center', gap:20, padding:'20px 28px',
+                  backgroundColor: C.card, borderRadius:12,
+                  borderLeft:`3px solid ${accentColor}`,
+                  boxShadow:'0 8px 32px rgba(0,0,0,0.4)',
+                }}>
+                  <div style={{
+                    width:36, height:36, borderRadius:18, background:`${accentColor}20`,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize:18, fontWeight:700, color:accentColor, flexShrink:0,
+                  }}>{i + 1}</div>
+                  <span style={{fontSize:26, fontWeight:400, color:C.text}}>{item.text}</span>
+                </div>
+              </E>
+            );
+          })}
         </div>
-        <div style={{height:28}}/>
-        <AccentSeparator d={15 + PHRASE.split(' ').length * 4 + 10} width={80} color={accentColor} variant="gradient"/>
       </Safe>
     </Fd>
   );
 };
 
-export const MyComposition:React.FC = () => {
+export const Tplreveal:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>

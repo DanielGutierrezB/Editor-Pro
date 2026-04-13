@@ -1,6 +1,6 @@
 // ============================================================
-// TEMPLATE: STEPS
-// Description: One step at a time with progress dots
+// TEMPLATE: DIAGRAM
+// Description: Flow diagram with progressive node reveal
 // ============================================================
 import "@fontsource/dm-sans/400.css";
 import "@fontsource/dm-sans/500.css";
@@ -82,108 +82,79 @@ const GlowCard:React.FC<{
   );
 };
 
-const ProgressDots:React.FC<{
-  total:number; current:number; d:number; accent?:string; position?:'bottom'|'right';
-}> = ({total, current, d, accent=C.accent, position='bottom'}) => {
-  const frame = useCurrentFrame();
-  const isHorizontal = position === 'bottom';
-  return (
-    <E d={d} from="pop" style={{
-      position: 'absolute',
-      ...(isHorizontal
-        ? {bottom: 60, left: '50%', transform: 'translateX(-50%)'}
-        : {right: 80, top: '50%', transform: 'translateY(-50%)'}
-      ),
-    }}>
-      <div style={{
-        display: 'flex', flexDirection: isHorizontal ? 'row' : 'column',
-        gap: 12, alignItems: 'center',
-      }}>
-        {Array.from({length: total}).map((_, i) => {
-          const isActive = i === current;
-          const isPast = i < current;
-          return (
-            <div key={i} style={{
-              width: isActive ? (isHorizontal ? 36 : 12) : 12,
-              height: isActive ? (isHorizontal ? 12 : 36) : 12,
-              borderRadius: 6,
-              backgroundColor: isActive ? accent : isPast ? `${accent}60` : 'rgba(255,255,255,0.15)',
-            }}/>
-          );
-        })}
-      </div>
-    </E>
-  );
-};
-
 // ============================================================
 // CONTENT BLOCK — AI fills ONLY this section
 // ============================================================
-const STEPS_DATA = [
-  { icon: "Search", title: "Investigación", desc: "Analiza tu mercado objetivo y competencia", accent: "accent" },
-  { icon: "Target", title: "Segmentación", desc: "Define tu audiencia ideal con datos demográficos", accent: "orange" },
-  { icon: "Send", title: "Ejecución", desc: "Lanza tu campaña con métricas de seguimiento", accent: "purple" },
+const TITLE = "Arquitectura del Sistema";
+const NODES = [
+  { icon: "Globe", title: "Frontend", desc: "React + Next.js", accent: "accent" },
+  { icon: "Server", title: "API Gateway", desc: "Node.js + Express", accent: "orange" },
+  { icon: "Database", title: "Base de Datos", desc: "PostgreSQL + Redis", accent: "purple" },
 ];
 
 // ============================================================
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
-const StepSection:React.FC<{stepIndex:number; step:typeof STEPS_DATA[0]}> = ({stepIndex, step}) => {
+const Section1:React.FC = () => {
+  const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const accentColor = (C as any)[step.accent] || C.accent;
+  const framesPerNode = Math.floor((dur - 60) / NODES.length);
 
   return (
     <Fd dur={dur} fo={1}>
-      <Safe style={{justifyContent:'center', alignItems:'center'}}>
-        <E d={0} from="pop">
-          <div style={{
-            fontSize:20, fontWeight:700, color:C.bg,
-            backgroundColor:accentColor, borderRadius:20,
-            padding:'6px 20px', letterSpacing:2, textTransform:'uppercase', marginBottom:24,
-          }}>
-            Paso {stepIndex + 1} de {STEPS_DATA.length}
-          </div>
+      <Safe>
+        <E d={0} from="up" style={{marginBottom:50, textAlign:'center', width:'100%'}}>
+          <div style={{fontSize:38, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
-        <E d={5} from="pop">
-          <div style={{
-            width:160, height:160, borderRadius:80, background:C.card,
-            border:`2px solid ${accentColor}`,
-            boxShadow:`0 0 40px ${accentColor}15, 0 16px 48px rgba(0,0,0,0.4)`,
-            display:'flex', alignItems:'center', justifyContent:'center', marginBottom:28,
-          }}>
-            <Icon name={step.icon} size={72} color={accentColor}/>
-          </div>
-        </E>
-        <E d={12} from="up">
-          <div style={{fontSize:48, fontWeight:700, color:C.text, textAlign:'center', marginBottom:16}}>
-            {step.title}
-          </div>
-        </E>
-        <E d={20} from="up">
-          <div style={{fontSize:24, fontWeight:400, color:C.dim, textAlign:'center', maxWidth:600}}>
-            {step.desc}
-          </div>
-        </E>
-        <ProgressDots total={STEPS_DATA.length} current={stepIndex} d={5} accent={accentColor}/>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:16, width:'100%'}}>
+          {NODES.map((node, i) => {
+            const accentColor = (C as any)[node.accent] || C.accent;
+            const nodeStart = 20 + i * framesPerNode;
+            const isVisible = frame >= nodeStart;
+            const nodeWidth = Math.min(360, Math.floor(1400 / NODES.length));
+            if (!isVisible) return null;
+            return (
+              <React.Fragment key={i}>
+                {i > 0 && (
+                  <E d={nodeStart} from="left" style={{flexShrink:0}}>
+                    <div style={{display:'flex', alignItems:'center', gap:0}}>
+                      <div style={{width:40, height:2, background:`linear-gradient(90deg, ${(C as any)[NODES[i-1].accent]}60, ${accentColor})`}}/>
+                      <LucideIcons.ChevronRight size={20} color={accentColor} strokeWidth={2} style={{marginLeft:-4}}/>
+                    </div>
+                  </E>
+                )}
+                <GlowCard d={nodeStart + 5} from="pop" accent={accentColor}
+                  elevation={i === Math.min(Math.floor((frame - 20) / framesPerNode), NODES.length - 1) ? 4 : 2}
+                  active={i === Math.min(Math.floor((frame - 20) / framesPerNode), NODES.length - 1)}
+                  width={nodeWidth}>
+                  <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:12, textAlign:'center'}}>
+                    <div style={{
+                      width:64, height:64, borderRadius:32, background:`${accentColor}15`,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                    }}>
+                      <Icon name={node.icon} size={32} color={accentColor}/>
+                    </div>
+                    <div style={{fontSize:24, fontWeight:700, color:C.text}}>{node.title}</div>
+                    <div style={{fontSize:18, fontWeight:400, color:C.dim}}>{node.desc}</div>
+                  </div>
+                </GlowCard>
+              </React.Fragment>
+            );
+          })}
+        </div>
       </Safe>
     </Fd>
   );
 };
 
-export const MyComposition:React.FC = () => {
+export const Tpldiagram:React.FC = () => {
   const {durationInFrames} = useVideoConfig();
-  const framesPerStep = Math.floor(durationInFrames / STEPS_DATA.length);
-
   return (
     <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>
-      {STEPS_DATA.map((step, i) => (
-        <Sequence key={i} from={i * framesPerStep}
-          durationInFrames={i === STEPS_DATA.length - 1 ? durationInFrames - i * framesPerStep : framesPerStep}
-          premountFor={10}>
-          <StepSection stepIndex={i} step={step}/>
-        </Sequence>
-      ))}
+      <Sequence from={0} durationInFrames={durationInFrames} premountFor={10}>
+        <Section1/>
+      </Sequence>
     </AbsoluteFill>
   );
 };
