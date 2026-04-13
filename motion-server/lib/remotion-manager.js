@@ -596,8 +596,8 @@ class RemotionManager {
     if (!fs.existsSync(rendersDir)) {
       fs.mkdirSync(rendersDir, { recursive: true });
     }
-    // H.264 + yuv420p: Premiere suele fallar al leer fotogramas en ProRes .mov generado por Remotion (sustituye frames / franjas rayadas).
-    const outputPath = path.join(rendersDir, `${compositionId}.mp4`);
+    // H.264 + yuv420p: ProRes intra-frame: cada frame es independiente, elimina frame corruption de H.264 inter-frame.
+    const outputPath = path.join(rendersDir, `${compositionId}.mov`);
 
     const npxPath = execSync('which npx', { encoding: 'utf8' }).trim();
     const args = [
@@ -605,9 +605,9 @@ class RemotionManager {
       path.join(this.projectPath, 'src', 'index.ts'),
       compositionId,
       outputPath,
-      '--codec=h264',
-      '--pixel-format=yuv420p',
-      '--crf=18',
+      '--codec=prores',
+      
+      
       '--muted',
       '--image-format=jpeg',
       '--jpeg-quality=100',
@@ -629,7 +629,7 @@ class RemotionManager {
     proc.stderr.on('data', (data) => { stderr += data.toString(); });
 
     proc.on('close', (code) => {
-      const altPath = outputPath + '.mp4';
+      const altPath = outputPath + '.mov';
       const finalPath = fs.existsSync(outputPath)
         ? outputPath
         : fs.existsSync(altPath)
@@ -646,7 +646,7 @@ class RemotionManager {
                 '======================================',
                 '',
                 'Estructura:',
-                '  renders/   → Videos renderizados (.mp4 H.264, importados a Premiere)',
+                '  renders/   → Videos renderizados (.mov ProRes, importados a Premiere)',
                 '  src/       → Código fuente editable (.tsx Remotion/React)',
                 '  feedback/  → Imágenes de referencia capturadas',
                 '  FEEDBACK.md → Log de feedback enviado',

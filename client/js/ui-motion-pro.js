@@ -1171,6 +1171,11 @@
     }
 
     function _runGenerationPipeline(selected, outputDir) {
+        // Ensure custom palette is synced to motionPro before generation
+        if (state.customPalette && motionPro) {
+            motionPro.customPalette = state.customPalette;
+        }
+
         var aiConfig = {
             provider: state.settings.aiProvider,
             model: state.settings.aiModel,

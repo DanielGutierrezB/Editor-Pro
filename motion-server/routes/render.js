@@ -82,7 +82,7 @@ router.post('/', (req, res) => {
       return res.status(500).json({ error: 'Render error: ' + err.message });
     }
     try {
-      faststartMp4InPlace(result.mp4Path);
+      if (result.mp4Path && result.mp4Path.endsWith(".mp4")) faststartMp4InPlace(result.mp4Path);
     } catch (_e) {}
     const mediaDurationSec = probeVideoDurationSec(result.mp4Path);
     res.json({
