@@ -58,9 +58,8 @@ class RemotionManager {
     const filePath = path.join(this.compositionsDir, `${compositionId}.tsx`);
     fs.writeFileSync(filePath, tsxCode, 'utf8');
 
-    // Calculate actual duration from TSX content (more reliable than proposal duration)
-    const actualDuration = this._calculateDuration(tsxCode, durationFrames);
-    this._registerInRoot(compositionId, actualDuration);
+    // Use proposal duration directly (templates use durationInFrames from useVideoConfig)
+    this._registerInRoot(compositionId, durationFrames);
     return filePath;
   }
 
