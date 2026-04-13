@@ -553,12 +553,22 @@
                     });
                 }
 
-                // Fix 4: Anti-overlap — trim overlapping proposals by time
+                // Fix 4: Anti-overlap + zero-gap — each clip extends to the start of the next
                 proposals.sort(function(a, b) { return a.startTime - b.startTime; });
-                for (var ov = 1; ov < proposals.length; ov++) {
-                    if (proposals[ov].startTime < proposals[ov - 1].endTime) {
-                        proposals[ov - 1].endTime = proposals[ov].startTime;
+                for (var ov = 0; ov < proposals.length - 1; ov++) {
+                    // Extend each clip to fill gap until next clip starts
+                    proposals[ov].endTime = proposals[ov + 1].startTime;
+                }
+                // Last clip: extend to at least its original end or transcript end
+                if (proposals.length > 0) {
+                    var lastP = proposals[proposals.length - 1];
+                    // Estimate video duration from last segment
+                    var estimatedEnd = lastP.endTime + 5; // add 5s buffer
+                    if (state.segments && state.segments.length > 0) {
+                        var lastSeg = state.segments[state.segments.length - 1];
+                        estimatedEnd = Math.max(estimatedEnd, parseFloat(lastSeg.endTime || lastSeg.end || 0) + 2);
                     }
+                    lastP.endTime = Math.max(lastP.endTime, estimatedEnd);
                 }
             } catch(e) {
                 showToast("Error al parsear respuesta IA: " + e.message, "error");
@@ -974,7 +984,7 @@
             if (hint3) hint3.textContent = "Total: " + totalTime + "s (gen: " + genTime + "s)";
 
             var hint = document.getElementById("mp-step-hint-2");
-            if (hint) hint.textContent = (total - errors.length) + "/" + total + " generados";
+            if (hint) hint.textContent = (total - errors.length) + "/" + total + " generados en " + totalTime + "s";
 
             if (errors.length > 0) {
                 if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", done + "/" + total + " done, " + errors.length + " errors");
@@ -1013,7 +1023,7 @@
 
             var elapsed = ((Date.now() - _mpTimers.generateStart) / 1000).toFixed(0);
             mpSetProgress("mp-generate", Math.round((done / total) * 100),
-                "Generando " + (done + 1) + "-" + Math.min(nextIndex, total) + "/" + total + " (" + elapsed + "s)");
+                "Generando " + done + " de " + total + " completados (" + elapsed + "s)");
 
             var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
 
