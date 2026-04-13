@@ -154,7 +154,7 @@ const Section1:React.FC = () => {
   return (
     <Fd dur={dur} fo={1}>
       <Safe>
-        <E d={0} from="up" style={{marginBottom:50, textAlign:'center'}}>
+        <E d={0} from="up" style={{marginBottom:48, textAlign:'center'}}>
           <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
           <AccentSeparator d={8} width={60} variant="line"/>
         </E>

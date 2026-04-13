@@ -74,7 +74,7 @@ const AnimatedMetric:React.FC<{value:number;suffix:string;label:string;d:number;
       <OdometerDigit value={value} d={d} fontSize={96} color={accent}/>
       <E d={d+15} from="pop"><span style={{fontSize:48,fontWeight:700,color:accent}}>{suffix}</span></E>
     </div>
-    <E d={d+20} from="up"><span style={{fontSize:22,fontWeight:400,color:C.dim,textTransform:'uppercase',letterSpacing:3}}>{label}</span></E>
+    <E d={d+20} from="up"><span style={{fontSize:22,fontWeight:400,color:C.dim,textTransform:'uppercase',letterSpacing:2}}>{label}</span></E>
   </div>
 );
 
@@ -94,7 +94,7 @@ const SUBLABEL = "Meta: 80%";
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {fps, durationInFrames: dur} = useVideoConfig();
-  const barColor = VALUE >= TARGET ? C.accent : VALUE >= TARGET * 0.7 ? C.orange : C.red;
+  const barColor = VALUE >= TARGET ? C.accent : VALUE >= TARGET * 0.85 ? C.orange : C.red;
 
   const progress = spring({frame: frame - 10, fps, config: {damping: 20, mass: 0.5}});
   const barWidth = interpolate(progress, [0, 1], [0, (VALUE / Math.max(TARGET * 1.2, VALUE * 1.1)) * 100], {
@@ -120,7 +120,7 @@ const Section1:React.FC = () => {
               backgroundColor:C.dim, opacity:0.6,
             }}/>
             <E d={35} from="up" style={{position:'absolute', top:28, left:`${targetPos}%`, transform:'translateX(-50%)'}}>
-              <div style={{fontSize:20, fontWeight:400, color:C.dim}}>
+              <div style={{fontSize:22, fontWeight:400, color:C.dim, letterSpacing:2}}>
                 {SUBLABEL}
               </div>
             </E>

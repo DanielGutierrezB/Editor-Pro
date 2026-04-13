@@ -105,16 +105,16 @@ const Section1:React.FC = () => {
   return (
     <Fd dur={dur} fo={1}>
       <Safe>
-        <E d={0} from="up" style={{marginBottom:40, textAlign:'center', width:'100%'}}>
-          <div style={{fontSize:40, fontWeight:700, color:C.text}}>{TITLE}</div>
+        <E d={0} from="up" style={{marginBottom:48, textAlign:'center', width:'100%'}}>
+          <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
         <div style={{display:'flex', gap:0, justifyContent:'center', alignItems:'stretch', width:'100%'}}>
           <GlowCard d={10} from="left" accent={C.red} elevation={2} active={false} width={'45%'}>
-            <div style={{textAlign:'center', marginBottom:20}}>
-              <div style={{fontSize:36, marginBottom:8}}>❌</div>
+            <div style={{textAlign:'center', marginBottom:20, display:'flex', flexDirection:'column', alignItems:'center'}}>
+              <div style={{marginBottom:8}}><Icon name="XCircle" size={36} color={C.red}/></div>
               <div style={{fontSize:28, fontWeight:700, color:C.red}}>{BEFORE.label}</div>
             </div>
-            <div style={{display:'flex', flexDirection:'column', gap:16}}>
+            <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {BEFORE.items.map((item, i) => (
                 <E key={i} d={20 + i * 8} from="left">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>
@@ -129,11 +129,11 @@ const Section1:React.FC = () => {
             <div style={{width:2, height:'100%', backgroundColor:C.dim, opacity:0.3}}/>
           </E>
           <GlowCard d={25} from="right" accent={C.accent} elevation={4} active={true} width={'45%'}>
-            <div style={{textAlign:'center', marginBottom:20}}>
-              <div style={{fontSize:36, marginBottom:8}}>✅</div>
+            <div style={{textAlign:'center', marginBottom:20, display:'flex', flexDirection:'column', alignItems:'center'}}>
+              <div style={{marginBottom:8}}><Icon name="CheckCircle" size={36} color={C.accent}/></div>
               <div style={{fontSize:28, fontWeight:700, color:C.accent}}>{AFTER.label}</div>
             </div>
-            <div style={{display:'flex', flexDirection:'column', gap:16}}>
+            <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {AFTER.items.map((item, i) => (
                 <E key={i} d={35 + i * 8} from="right">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>

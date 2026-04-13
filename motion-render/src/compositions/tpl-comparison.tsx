@@ -112,8 +112,8 @@ const Section1:React.FC = () => {
   return (
     <Fd dur={dur} fo={1}>
       <Safe>
-        <E d={0} from="up" style={{marginBottom:40, textAlign:'center', width:'100%'}}>
-          <div style={{fontSize:40, fontWeight:700, color:C.text}}>{TITLE}</div>
+        <E d={0} from="up" style={{marginBottom:48, textAlign:'center', width:'100%'}}>
+          <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
         <div style={{display:'flex', gap:40, justifyContent:'center', alignItems:'stretch', width:'100%'}}>
           <GlowCard d={10} from="left" accent={leftColor} elevation={2} active={false} width={600} style={{flex:1}}>
@@ -121,7 +121,7 @@ const Section1:React.FC = () => {
               <Icon name={LEFT.icon} size={28} color={leftColor}/>
               <div style={{fontSize:28, fontWeight:700, color:leftColor}}>{LEFT.title}</div>
             </div>
-            <div style={{display:'flex', flexDirection:'column', gap:16}}>
+            <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {LEFT.points.map((item, i) => (
                 <E key={i} d={20 + i * 8} from="left">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>
@@ -146,7 +146,7 @@ const Section1:React.FC = () => {
               <Icon name={RIGHT.icon} size={28} color={rightColor}/>
               <div style={{fontSize:28, fontWeight:700, color:rightColor}}>{RIGHT.title}</div>
             </div>
-            <div style={{display:'flex', flexDirection:'column', gap:16}}>
+            <div style={{display:'flex', flexDirection:'column', gap:20}}>
               {RIGHT.points.map((item, i) => (
                 <E key={i} d={40 + i * 8} from="right">
                   <div style={{display:'flex', alignItems:'center', gap:12}}>

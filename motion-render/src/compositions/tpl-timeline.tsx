@@ -64,9 +64,9 @@ const EVENTS = [
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const framesPerEvent = Math.floor((dur - 60) / EVENTS.length);
+  const staggerDelay = 8;
 
-  const lineProgress = interpolate(frame, [20, dur - 60], [0, 1], {
+  const lineProgress = interpolate(frame, [10, 50], [0, 1], {
     extrapolateLeft:'clamp', extrapolateRight:'clamp',
   });
 
@@ -75,8 +75,8 @@ const Section1:React.FC = () => {
   return (
     <Fd dur={dur} fo={1}>
       <Safe>
-        <E d={0} from="up" style={{marginBottom:60, textAlign:'center', width:'100%'}}>
-          <div style={{fontSize:38, fontWeight:700, color:C.text}}>{TITLE}</div>
+        <E d={0} from="up" style={{marginBottom:48, textAlign:'center', width:'100%'}}>
+          <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
         <div style={{position:'relative', width:'100%', height:300}}>
           <div style={{
@@ -91,10 +91,8 @@ const Section1:React.FC = () => {
           </div>
           {EVENTS.map((event, i) => {
             const accentColor = (C as any)[event.accent] || C.accent;
-            const nodeStart = 30 + i * framesPerEvent;
-            const isVisible = frame >= nodeStart;
+            const nodeStart = 10 + i * staggerDelay;
             const xPos = 40 + i * nodeSpacing;
-            if (!isVisible) return null;
             return (
               <E key={i} d={nodeStart} from="pop" style={{
                 position:'absolute', left:xPos, top:48,
@@ -110,8 +108,8 @@ const Section1:React.FC = () => {
                   <Icon name={event.icon} size={28} color={accentColor}/>
                 </div>
                 <div style={{marginTop:16, textAlign:'center'}}>
-                  <div style={{fontSize:20, fontWeight:700, color:C.text}}>{event.label}</div>
-                  <div style={{fontSize:18, fontWeight:400, color:C.dim, marginTop:4}}>{event.time}</div>
+                  <div style={{fontSize:22, fontWeight:700, color:C.text}}>{event.label}</div>
+                  <div style={{fontSize:20, fontWeight:400, color:C.dim, marginTop:4}}>{event.time}</div>
                 </div>
               </E>
             );

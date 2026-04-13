@@ -137,7 +137,7 @@ const Section1:React.FC = () => {
               width:52, height:52, borderRadius:26, background:C.card,
               border:`1px solid ${C.border}`,
               display:'flex', alignItems:'center', justifyContent:'center',
-              fontSize:16, fontWeight:700, color:C.dim,
+              fontSize:20, fontWeight:700, color:C.dim,
               boxShadow:'0 8px 24px rgba(0,0,0,0.4)',
             }}>VS</div>
           </E>

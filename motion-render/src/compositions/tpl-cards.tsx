@@ -99,31 +99,29 @@ const CARDS_DATA = [
 const Section1:React.FC = () => {
   const frame = useCurrentFrame();
   const {durationInFrames: dur} = useVideoConfig();
-  const framesPerCard = Math.floor((dur - 60) / CARDS_DATA.length);
+  const staggerDelay = 10;
 
   return (
     <Fd dur={dur} fo={1}>
       <Safe>
-        <E d={0} from="up" style={{marginBottom:50, textAlign:'center', width:'100%'}}>
-          <div style={{fontSize:38, fontWeight:700, color:C.text}}>{TITLE}</div>
+        <E d={0} from="up" style={{marginBottom:48, textAlign:'center', width:'100%'}}>
+          <div style={{fontSize:42, fontWeight:700, color:C.text}}>{TITLE}</div>
         </E>
         <div style={{display:'flex', gap:40, justifyContent:'center', alignItems:'stretch', width:'100%'}}>
           {CARDS_DATA.map((card, i) => {
             const accentColor = (C as any)[card.accent] || C.accent;
-            const cardStart = 20 + i * framesPerCard;
-            const isActive = frame >= cardStart;
+            const cardStart = 10 + i * staggerDelay;
             const cardWidth = Math.min(520, Math.floor(1500 / CARDS_DATA.length));
-            if (!isActive) return <div key={i} style={{width:cardWidth}}/>;
             return (
               <React.Fragment key={i}>
                 {i > 0 && (
-                  <E d={cardStart} from="pop" style={{alignSelf:'center', flexShrink:0}}>
+                  <E d={cardStart + 2} from="pop" style={{alignSelf:'center', flexShrink:0}}>
                     <LucideIcons.ChevronRight size={28} color={accentColor} strokeWidth={2}/>
                   </E>
                 )}
                 <GlowCard d={cardStart + 5} from="up" accent={accentColor}
                   elevation={i === CARDS_DATA.length - 1 ? 4 : 2}
-                  active={i === CARDS_DATA.length - 1 || frame - cardStart < framesPerCard}
+                  active={true}
                   width={cardWidth}>
                   <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:16, textAlign:'center'}}>
                     <div style={{
@@ -133,7 +131,7 @@ const Section1:React.FC = () => {
                       <Icon name={card.icon} size={36} color={accentColor}/>
                     </div>
                     <div style={{fontSize:26, fontWeight:700, color:C.text}}>{card.title}</div>
-                    <div style={{fontSize:20, fontWeight:400, color:C.dim}}>{card.desc}</div>
+                    <div style={{fontSize:22, fontWeight:400, color:C.dim}}>{card.desc}</div>
                   </div>
                 </GlowCard>
               </React.Fragment>

@@ -104,9 +104,9 @@ const ProgressDots:React.FC<{
           const isPast = i < current;
           return (
             <div key={i} style={{
-              width: isActive ? (isHorizontal ? 32 : 8) : 8,
-              height: isActive ? (isHorizontal ? 8 : 32) : 8,
-              borderRadius: 4,
+              width: isActive ? (isHorizontal ? 36 : 12) : 12,
+              height: isActive ? (isHorizontal ? 12 : 36) : 12,
+              borderRadius: 6,
               backgroundColor: isActive ? accent : isPast ? `${accent}60` : 'rgba(255,255,255,0.15)',
             }}/>
           );
@@ -138,7 +138,7 @@ const StepSection:React.FC<{stepIndex:number; step:typeof STEPS_DATA[0]}> = ({st
       <Safe style={{justifyContent:'center', alignItems:'center'}}>
         <E d={0} from="pop">
           <div style={{
-            fontSize:16, fontWeight:700, color:C.bg,
+            fontSize:20, fontWeight:700, color:C.bg,
             backgroundColor:accentColor, borderRadius:20,
             padding:'6px 20px', letterSpacing:2, textTransform:'uppercase', marginBottom:24,
           }}>

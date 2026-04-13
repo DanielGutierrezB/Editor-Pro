@@ -149,14 +149,14 @@ const Section1:React.FC = () => {
             <AccentSeparator d={15} width={80} color={accentColor} variant="gradient"/>
           </div>
         </MorphPosition>
-        <div style={{marginTop:80, display:'flex', flexDirection:'column', gap:20, alignItems:'center', width:'100%', maxWidth:800}}>
+        <div style={{marginTop:48, display:'flex', flexDirection:'column', gap:20, alignItems:'center', width:'100%', maxWidth:800}}>
           {REVEAL_ITEMS.map((item, i) => {
             const itemStart = 30 + i * staggerDelay;
             return (
               <E key={i} d={itemStart} from="up" style={{width:'100%'}}>
                 <div style={{
                   display:'flex', alignItems:'center', gap:20, padding:'20px 28px',
-                  backgroundColor: C.card, borderRadius:12,
+                  backgroundColor: '#323640', borderRadius:12,
                   borderLeft:`3px solid ${accentColor}`,
                   boxShadow:'0 8px 32px rgba(0,0,0,0.4)',
                 }}>

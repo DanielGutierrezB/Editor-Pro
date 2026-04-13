@@ -111,7 +111,7 @@ const Section1:React.FC = () => {
         <div style={{display:'flex', gap:0, justifyContent:'center', alignItems:'stretch', width:'100%'}}>
           <GlowCard d={10} from="left" accent={C.red} elevation={2} active={false} width={'45%'}>
             <div style={{textAlign:'center', marginBottom:20, display:'flex', flexDirection:'column', alignItems:'center'}}>
-              <div style={{marginBottom:8}}><Icon name="XCircle" size={36} color={C.red}/></div>
+              <div style={{marginBottom:8}}><Icon name="XCircle" size={44} color={C.red}/></div>
               <div style={{fontSize:28, fontWeight:700, color:C.red}}>{BEFORE.label}</div>
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:20}}>
@@ -130,7 +130,7 @@ const Section1:React.FC = () => {
           </E>
           <GlowCard d={25} from="right" accent={C.accent} elevation={4} active={true} width={'45%'}>
             <div style={{textAlign:'center', marginBottom:20, display:'flex', flexDirection:'column', alignItems:'center'}}>
-              <div style={{marginBottom:8}}><Icon name="CheckCircle" size={36} color={C.accent}/></div>
+              <div style={{marginBottom:8}}><Icon name="CheckCircle" size={44} color={C.accent}/></div>
               <div style={{fontSize:28, fontWeight:700, color:C.accent}}>{AFTER.label}</div>
             </div>
             <div style={{display:'flex', flexDirection:'column', gap:20}}>
