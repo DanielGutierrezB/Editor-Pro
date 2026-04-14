@@ -420,19 +420,6 @@
                             var analyzeBtn = document.getElementById("btn-mp-analyze-palette");
                             if (analyzeBtn) analyzeBtn.style.display = "";
                             showToast(_referenceImages.length + " referencia(s) cargada(s) — click 🎨 Analizar Paleta", "success");
-                                    if (err) {
-                                        console.warn("AI multi-palette failed, falling back to first image:", err.message);
-                                        _extractPaletteAI(_referenceImages[0].base64, function(err2, palette2, reasoning2) {
-                                            if (err2) { showToast("Error al extraer colores: " + err2.message, "error"); return; }
-                                            _applyPalette(palette2);
-                                        });
-                                        return;
-                                    }
-                                    _applyPalette(palette);
-                                    if (reasoning) showToast("🎨 " + reasoning.substring(0, 80), "info");
-                                    if (window.EPLogger) EPLogger.log("motion-pro", "style-import-ai-multi", "count=" + _referenceImages.length + " bg=" + palette.bg);
-                                });
-                            }
                         }
                     };
                     reader.readAsDataURL(file);
