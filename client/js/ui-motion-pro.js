@@ -916,7 +916,20 @@
         // Check "Solo en marcadores" toggle — filter motions to marker ranges
         var markersOnly = document.getElementById("mp-markers-only");
         if (markersOnly && markersOnly.checked) {
+            var _markersDone = false;
+            var _markersTimeout = setTimeout(function() {
+                if (_markersDone) return;
+                _markersDone = true;
+                console.warn("[Motion-Pro] getSequenceMarkers timed out after 15s, proceeding without markers");
+                if (window.EPLogger) EPLogger.log("motion-pro", "markers-timeout", "15s exceeded");
+                showToast("Timeout leyendo marcadores — continuando sin filtro", "warning");
+                _mpProceedWithRhythmAndAnalysis(timedTranscript);
+            }, 15000);
+
             csInterface.evalScript('getSequenceMarkers()', function(res) {
+                if (_markersDone) return;
+                _markersDone = true;
+                clearTimeout(_markersTimeout);
                 try {
                     var data = JSON.parse(res);
                     if (data.markers && data.markers.length > 0) {
@@ -949,10 +962,22 @@
         }
 
         function _mpProceedWithRhythmAndAnalysis(timedTranscript) {
-        // Enhance transcript with rhythm analysis
+        // Enhance transcript with rhythm analysis (10s timeout — local server call)
         if (state.transcriptJson && motionPro.serverRunning) {
             try {
+                var _rhythmDone = false;
+                var _rhythmTimeout = setTimeout(function() {
+                    if (_rhythmDone) return;
+                    _rhythmDone = true;
+                    console.warn("[Motion-Pro] Rhythm analysis timed out after 10s, proceeding without it");
+                    if (window.EPLogger) EPLogger.log("motion-pro", "rhythm-timeout", "10s exceeded");
+                    _mpRunAnalysis(timedTranscript);
+                }, 10000);
+
                 motionPro._post("/api/rhythm", { transcriptJson: state.transcriptJson }, function(err, rhythmResult) {
+                    if (_rhythmDone) return;
+                    _rhythmDone = true;
+                    clearTimeout(_rhythmTimeout);
                     if (!err && rhythmResult && rhythmResult.promptText) {
                         timedTranscript += rhythmResult.promptText;
                         if (window.EPLogger) EPLogger.log("motion-pro", "rhythm-analysis",
@@ -973,7 +998,12 @@
 
         function _mpRunAnalysis(transcript) {
 
+        // Use Sonnet 4 for analysis (faster, cheaper) — Opus 4 stays for template filling
+        var _origModel = aiAnalyzer.model;
+        aiAnalyzer.setModel('anthropic/claude-sonnet-4');
+
         aiAnalyzer.analyzeMotionProposals(transcript, getPromptContext("mp"), function(result) {
+            aiAnalyzer.setModel(_origModel); // restore user's model
             mpClearMotionAnalysisHeartbeat();
             if (_mpAnalysisCancelled) return;
             state.mpAnalyzing = false;
@@ -1486,7 +1516,7 @@
         mpShowStep(3);
 
         // Parallel generation with concurrency limit
-        var CONCURRENCY = 1; // Serialize to avoid Root.tsx race conditions (was 2)
+        var CONCURRENCY = 2; // Root.tsx race condition handled server-side with file lock
         var nextIndex = 0;
         var activeWorkers = 0;
 

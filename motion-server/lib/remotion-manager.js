@@ -427,27 +427,41 @@ class RemotionManager {
       return;
     }
 
-    let root = fs.readFileSync(this.rootTsxPath, 'utf8');
-
-    const componentName = this._componentName(compositionId);
-    const importLine = `import { ${componentName} } from './compositions/${compositionId}';`;
-    const compBlock = `      <Composition id="${compositionId}" component={${componentName}} durationInFrames={${durationFrames}} fps={30} width={1920} height={1080} />`;
-
-    if (!root.includes(importLine)) {
-      root = root.replace(
-        '// === DYNAMIC IMPORTS END ===',
-        `${importLine}\n// === DYNAMIC IMPORTS END ===`
-      );
+    // Acquire file lock to prevent Root.tsx race conditions with concurrent writes
+    const lockPath = this.rootTsxPath + '.lock';
+    let attempts = 0;
+    while (fs.existsSync(lockPath) && attempts < 50) {
+      const start = Date.now();
+      while (Date.now() - start < 100) {} // busy-wait 100ms
+      attempts++;
     }
+    fs.writeFileSync(lockPath, String(Date.now()), 'utf8');
 
-    if (!root.includes(`id="${compositionId}"`)) {
-      root = root.replace(
-        '{/* === DYNAMIC COMPOSITIONS END === */}',
-        `${compBlock}\n      {/* === DYNAMIC COMPOSITIONS END === */}`
-      );
+    try {
+      let root = fs.readFileSync(this.rootTsxPath, 'utf8');
+
+      const componentName = this._componentName(compositionId);
+      const importLine = `import { ${componentName} } from './compositions/${compositionId}';`;
+      const compBlock = `      <Composition id="${compositionId}" component={${componentName}} durationInFrames={${durationFrames}} fps={30} width={1920} height={1080} />`;
+
+      if (!root.includes(importLine)) {
+        root = root.replace(
+          '// === DYNAMIC IMPORTS END ===',
+          `${importLine}\n// === DYNAMIC IMPORTS END ===`
+        );
+      }
+
+      if (!root.includes(`id="${compositionId}"`)) {
+        root = root.replace(
+          '{/* === DYNAMIC COMPOSITIONS END === */}',
+          `${compBlock}\n      {/* === DYNAMIC COMPOSITIONS END === */}`
+        );
+      }
+
+      fs.writeFileSync(this.rootTsxPath, root, 'utf8');
+    } finally {
+      try { fs.unlinkSync(lockPath); } catch (_e) {}
     }
-
-    fs.writeFileSync(this.rootTsxPath, root, 'utf8');
   }
 
   /**
