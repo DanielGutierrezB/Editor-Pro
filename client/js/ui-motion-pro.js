@@ -1383,7 +1383,22 @@
         _mpTimers.generateStart = Date.now();
         state.mpGenerating = true;
         state.mpGenerateCancelRequested = false;
-        // showElement("mp-generate-progress"); // removed — using inline bar in Step 2 only
+
+        // Transform Generate button → Stop button
+        var genBtn = document.getElementById("btn-mp-generate");
+        if (genBtn) {
+            genBtn._originalHTML = genBtn.innerHTML;
+            genBtn._originalClass = genBtn.className;
+            genBtn.innerHTML = "🛑 Detener";
+            genBtn.className = "btn btn-sm btn-danger";
+            genBtn.onclick = function() {
+                if (confirm("¿Estás seguro que deseas detener la generación?")) {
+                    state.mpGenerateCancelRequested = true;
+                    genBtn.innerHTML = "⏳ Deteniendo...";
+                    genBtn.disabled = true;
+                }
+            };
+        }
         
         mpSetProgress("mp-generate", 5, "Preparando carpeta del proyecto...");
 
@@ -1441,7 +1456,15 @@
         function _onAllComplete() {
             state.mpGenerateCancelRequested = false;
             state.mpGenerating = false;
-            // hideElement("mp-generate-progress"); // removed — using inline bar in Step 2 only
+            
+            // Restore Generate button
+            var genBtn = document.getElementById("btn-mp-generate");
+            if (genBtn) {
+                genBtn.innerHTML = genBtn._originalHTML || "🎬 Generar Seleccionados";
+                genBtn.className = genBtn._originalClass || "btn btn-sm btn-success";
+                genBtn.disabled = false;
+                genBtn.onclick = null; // remove stop handler
+            }
             
             // Hide Step 2 header progress bar
             var step2Wrap = document.getElementById("mp-step2-progress");
@@ -1472,7 +1495,15 @@
                 if (activeWorkers === 0) {
                     state.mpGenerateCancelRequested = false;
                     state.mpGenerating = false;
-                    // hideElement("mp-generate-progress"); // removed — using inline bar in Step 2 only
+                    
+                    // Restore Generate button on cancel
+                    var genBtnCancel = document.getElementById("btn-mp-generate");
+                    if (genBtnCancel) {
+                        genBtnCancel.innerHTML = genBtnCancel._originalHTML || "🎬 Generar Seleccionados";
+                        genBtnCancel.className = genBtnCancel._originalClass || "btn btn-sm btn-success";
+                        genBtnCancel.disabled = false;
+                        genBtnCancel.onclick = null;
+                    }
                     
                     // Hide Step 2 header progress bar on cancel
                     var step2WrapCancel = document.getElementById("mp-step2-progress");
