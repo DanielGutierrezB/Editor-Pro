@@ -1044,10 +1044,12 @@
                         <span class="rec-step-num">2</span>
                         <span class="rec-step-title">Selección y Generación</span>
                         <span id="mp-step-hint-2" class="rec-step-hint"></span>
-                        <span id="mp-step2-progress" class="mp-step2-progress hidden" style="flex:1; max-width:120px; margin-left:8px;">
-                            <div style="height:3px; background:var(--bg-active); border-radius:2px; overflow:hidden;">
-                                <div id="mp-step2-progress-fill" style="height:100%; width:0%; background:var(--accent); border-radius:2px; transition:none;"></div>
-                            </div>
+                        <span id="mp-step2-progress" class="hidden" style="display:inline-flex; align-items:center; gap:6px; margin-left:8px; flex:1;">
+                            <span id="mp-step2-progress-text" style="font-size:9px; color:var(--accent); white-space:nowrap;"></span>
+                            <span style="flex:1; max-width:80px; height:3px; background:var(--bg-active); border-radius:2px; overflow:hidden;">
+                                <span id="mp-step2-progress-fill" style="display:block; height:100%; width:0%; background:var(--accent); border-radius:2px;"></span>
+                            </span>
+                            <button id="btn-mp-stop-header" style="font-size:9px; color:var(--text-muted); background:none; border:none; cursor:pointer; padding:0;" onclick="if(window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.cancelGeneration();">✕</button>
                         </span>
                         <span class="rec-step-check">✓</span>
                         <span class="rec-step-arrow">▸</span>
@@ -1069,16 +1071,6 @@
                             <button id="btn-mp-select-all" class="btn btn-sm btn-ghost">Seleccionar todos</button>
                             <button id="btn-mp-generate" class="btn btn-sm btn-success btn-disabled" title="Genera motion graphics para las propuestas seleccionadas">🎬 Generar Seleccionados</button>
                         </div>
-                        <div id="mp-generate-progress-inline" class="progress-bar mp-generate-progress-wrap hidden" style="margin-top:8px">
-                            <div class="mp-generate-progress-row">
-                                <div class="mp-generate-progress-main">
-                                    <div class="progress-track"><div id="mp-generate-progress-fill-inline" class="progress-fill" style="width:0%"></div></div>
-                                    <span id="mp-generate-progress-text-inline" class="progress-text">Generando motions...</span>
-                                </div>
-                                <button type="button" id="btn-mp-generate-cancel-inline" class="btn btn-sm btn-ghost mp-generate-cancel-btn" title="Detiene el lote" onclick="if(window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.cancelGeneration();">Detener</button>
-                            </div>
-                        </div>
-                        <div id="mp-proposal-list" class="mp-proposal-list"></div>
                     </div>
                 </div>
 

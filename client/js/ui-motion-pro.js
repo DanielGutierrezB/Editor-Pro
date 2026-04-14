@@ -905,22 +905,12 @@
                     });
                 }
 
-                // Fix 4: Anti-overlap + zero-gap — each clip extends to the start of the next
+                // Sort by time and fix overlaps (but DON'T force zero-gap)
                 proposals.sort(function(a, b) { return a.startTime - b.startTime; });
-                for (var ov = 0; ov < proposals.length - 1; ov++) {
-                    // Extend each clip to fill gap until next clip starts
-                    proposals[ov].endTime = proposals[ov + 1].startTime;
-                }
-                // Last clip: extend to at least its original end or transcript end
-                if (proposals.length > 0) {
-                    var lastP = proposals[proposals.length - 1];
-                    // Estimate video duration from last segment
-                    var estimatedEnd = lastP.endTime + 5; // add 5s buffer
-                    if (state.segments && state.segments.length > 0) {
-                        var lastSeg = state.segments[state.segments.length - 1];
-                        estimatedEnd = Math.max(estimatedEnd, parseFloat(lastSeg.endTime || lastSeg.end || 0) + 2);
+                for (var ov = 1; ov < proposals.length; ov++) {
+                    if (proposals[ov].startTime < proposals[ov - 1].endTime) {
+                        proposals[ov - 1].endTime = proposals[ov].startTime;
                     }
-                    lastP.endTime = Math.max(lastP.endTime, estimatedEnd);
                 }
             } catch(e) {
                 showToast("Error al parsear respuesta IA: " + e.message, "error");
@@ -1292,7 +1282,7 @@
         state.mpGenerating = true;
         state.mpGenerateCancelRequested = false;
         // showElement("mp-generate-progress"); // removed — using inline bar in Step 2 only
-        showElement("mp-generate-progress-inline");
+        
         mpSetProgress("mp-generate", 5, "Preparando carpeta del proyecto...");
 
         // Get sequence FPS for Remotion
@@ -1350,7 +1340,7 @@
             state.mpGenerateCancelRequested = false;
             state.mpGenerating = false;
             // hideElement("mp-generate-progress"); // removed — using inline bar in Step 2 only
-            hideElement("mp-generate-progress-inline");
+            
             // Hide Step 2 header progress bar
             var step2Wrap = document.getElementById("mp-step2-progress");
             if (step2Wrap) step2Wrap.classList.add("hidden");
@@ -1381,7 +1371,7 @@
                     state.mpGenerateCancelRequested = false;
                     state.mpGenerating = false;
                     // hideElement("mp-generate-progress"); // removed — using inline bar in Step 2 only
-                    hideElement("mp-generate-progress-inline");
+                    
                     // Hide Step 2 header progress bar on cancel
                     var step2WrapCancel = document.getElementById("mp-step2-progress");
                     if (step2WrapCancel) step2WrapCancel.classList.add("hidden");
@@ -1965,11 +1955,13 @@
         var textInline = document.getElementById("mp-generate-progress-text-inline");
         if (fillInline) fillInline.style.width = pct + "%";
         if (textInline) textInline.textContent = text || "";
-        // Update Step 2 header mini progress bar (visible when collapsed)
+        // Update Step 2 header progress (text + bar + stop button)
         var step2Fill = document.getElementById("mp-step2-progress-fill");
         var step2Wrap = document.getElementById("mp-step2-progress");
+        var step2Text = document.getElementById("mp-step2-progress-text");
         if (step2Fill) step2Fill.style.width = pct + "%";
-        if (step2Wrap && pct > 0) step2Wrap.classList.remove("hidden");
+        if (step2Text) step2Text.textContent = text || "";
+        if (step2Wrap && pct > 0) { step2Wrap.classList.remove("hidden"); step2Wrap.style.display = "inline-flex"; }
         refreshMPHeaderProgressVisibility();
     }
 
