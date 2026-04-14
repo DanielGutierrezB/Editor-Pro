@@ -1005,7 +1005,7 @@
             }
 
             // Post-process validation of proposals
-            proposals.forEach(function(p, i) {
+            try { proposals.forEach(function(p, i) {
                 // Fix 1: reveal with 1 item → callout
                 if (p.type === 'reveal' && p.description && p.description.split(',').length <= 1) {
                     var wordCount = (p.transcriptSegment || '').split(' ').length;
@@ -1027,9 +1027,12 @@
                     var clipNum3 = String(i + 1).length < 2 ? "0" + (i + 1) : String(i + 1);
                     p.id = clipNum3 + "-cards-" + seqPrefix;
                 }
-            });
+            }); } catch(valErr) {
+                console.error("[Motion-Pro] Validation error:", valErr.message);
+                if (window.EPLogger) EPLogger.error("motion-pro", "validation-error", valErr.message);
+            }
 
-                console.log("[Motion-Pro] Proposals parsed:", proposals.length, "after negotiation+validation");
+            console.log("[Motion-Pro] Proposals parsed:", proposals.length, "after negotiation+validation");
             motionPro.proposals = proposals;
             motionPro.saveState();
             mpShowStep(2);
