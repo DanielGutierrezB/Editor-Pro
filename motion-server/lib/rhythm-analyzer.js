@@ -197,36 +197,8 @@ function preSegment(transcriptJson) {
  * Format rhythm data as text to append to the analysis prompt
  */
 function formatRhythmForPrompt(rhythmData, preSegments) {
-  if (!rhythmData || !rhythmData.markers || rhythmData.markers.length === 0) {
-    return '';
-  }
-  
-  let text = '\n\nANÁLISIS RÍTMICO DEL NARRADOR:\n';
-  text += `- Duración total: ${rhythmData.summary.totalDuration}s\n`;
-  text += `- Velocidad promedio: ${rhythmData.summary.averageWordsPerSecond} palabras/segundo\n`;
-  text += `- ${rhythmData.summary.sentenceCount} oraciones\n`;
-  text += `- ${rhythmData.summary.pauseCount} pausas detectadas\n`;
-  text += `- ${rhythmData.summary.topicChangeCount} cambios de tema\n\n`;
-  
-  text += 'MARCADORES DE RITMO (usa estos para sincronizar las animaciones):\n';
-  
-  rhythmData.markers.forEach(m => {
-    if (m.type === 'pause' && m.subtype === 'topic_change') {
-      text += `  [${m.time.toFixed(1)}s] 🔄 CAMBIO DE TEMA (pausa ${m.duration}s) — buen punto para corte entre clips\n`;
-    } else if (m.type === 'pause' && m.subtype === 'dramatic_pause') {
-      text += `  [${m.time.toFixed(1)}s] ⏸️ PAUSA DRAMÁTICA (${m.duration}s) — momento de impacto visual\n`;
-    } else if (m.type === 'emphasis') {
-      text += `  [${m.time.toFixed(1)}s] ⚡ ÉNFASIS: "${m.word}" (${m.ratio}x más lento que promedio)\n`;
-    } else if (m.type === 'tempo_change') {
-      text += `  [${m.time.toFixed(1)}s] ${m.subtype === 'accelerating' ? '🏃 ACELERA' : '🐢 DESACELERA'} (${m.fromWps} → ${m.toWps} palabras/s)\n`;
-    }
-  });
-  
-  text += '\nUSA ESTOS MARCADORES PARA:\n';
-  text += '- Iniciar clips nuevos en CAMBIOS DE TEMA\n';
-  text += '- Mostrar elementos destacados en PAUSAS DRAMÁTICAS\n';
-  text += '- Usar callouts/reveals en momentos de ÉNFASIS\n';
-  text += '- Ajustar la cantidad de contenido según el TEMPO (rápido = menos items, lento = más items)\n';
+  let text = '\n\nRITMO DEL NARRADOR:\n';
+  text += `Duración: ${(rhythmData.summary || {}).totalDuration || '?'}s, ${(rhythmData.summary || {}).averageWordsPerSecond || '?'} palabras/s\n`;
   
   if (preSegments && preSegments.length > 0) {
     text += '\n\nSEGMENTOS NATURALES DEL NARRADOR (usa estos como guía para los cortes de clips):\n';
