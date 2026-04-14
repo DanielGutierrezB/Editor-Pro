@@ -352,48 +352,23 @@
                                 } catch(copyErr) { console.warn("Could not copy reference frame:", copyErr.message); }
                             }
 
-                            // Try AI vision palette first, fallback to canvas extraction
+                            // Just save as reference — don't analyze yet
                             try {
                                 var imgData = fs.readFileSync(result.path);
                                 var base64 = imgData.toString('base64');
-
-                                captureBtn.textContent = "🎨 Analizando...";
-
-                                _extractPaletteAI(base64, function(err, palette, reasoning) {
-                                    captureBtn.textContent = "📷 Capturar Frame";
-                                    captureBtn.disabled = false;
-
-                                    if (err) {
-                                        console.warn("AI palette failed, using canvas fallback:", err.message);
-                                        // Fallback to canvas-based extraction
-                                        _extractPaletteFromImage("file://" + result.path, function(err2, fallbackPalette) {
-                                            if (err2) {
-                                                showToast("Error al extraer colores: " + err2.message, "error");
-                                                return;
-                                            }
-                                            _applyPalette(fallbackPalette);
-                                            showToast("Paleta extraída (canvas fallback)", "info");
-                                        });
-                                        return;
-                                    }
-
-                                    _applyPalette(palette);
-                                    if (reasoning) {
-                                        showToast("🎨 " + reasoning.substring(0, 80), "info");
-                                    }
-                                    if (window.EPLogger) EPLogger.log("motion-pro", "style-capture-ai", "bg=" + palette.bg + " accent=" + palette.accent);
-                                });
+                                _referenceImages.push({ base64: base64, name: "Frame capturado" });
+                                // Show thumbnail
+                                var refsContainer = document.getElementById("mp-style-refs");
+                                if (refsContainer) {
+                                    var thumb = document.createElement('img');
+                                    thumb.src = "data:image/png;base64," + base64;
+                                    thumb.style.cssText = 'width:30px; height:30px; border-radius:3px; object-fit:cover; border:1px solid rgba(255,255,255,0.15);';
+                                    thumb.title = "Frame capturado";
+                                    refsContainer.appendChild(thumb);
+                                }
+                                showToast("Frame capturado — click 🎨 Analizar para generar paleta", "success");
                             } catch(readErr) {
-                                captureBtn.textContent = "📷 Capturar Frame";
-                                captureBtn.disabled = false;
-                                console.warn("Could not read frame for AI, using canvas fallback:", readErr.message);
-                                _extractPaletteFromImage("file://" + result.path, function(err2, fallbackPalette) {
-                                    if (err2) {
-                                        showToast("Error al extraer colores: " + err2.message, "error");
-                                        return;
-                                    }
-                                    _applyPalette(fallbackPalette);
-                                });
+                                showToast("Error al leer frame: " + readErr.message, "error");
                             }
                         }
                     } catch(e) {
@@ -439,29 +414,12 @@
                         }
 
                         loaded++;
-                        // When all files are loaded, trigger AI analysis
+                        // When all files loaded, show analyze button
                         if (loaded === totalFiles) {
-                            if (_referenceImages.length === 1) {
-                                // Single image — use original endpoint
-                                _extractPaletteAI(_referenceImages[0].base64, function(err, palette, reasoning) {
-                                    if (importBtn) importBtn.textContent = "📁 Importar";
-                                    if (err) {
-                                        console.warn("AI palette failed, using canvas fallback:", err.message);
-                                        _extractPaletteFromImage(dataUrl, function(err2, fallbackPalette) {
-                                            if (err2) { showToast("Error al extraer colores: " + err2.message, "error"); return; }
-                                            _applyPalette(fallbackPalette);
-                                            showToast("Paleta extraída (canvas fallback)", "info");
-                                        });
-                                        return;
-                                    }
-                                    _applyPalette(palette);
-                                    if (reasoning) showToast("🎨 " + reasoning.substring(0, 80), "info");
-                                    if (window.EPLogger) EPLogger.log("motion-pro", "style-import-ai", "bg=" + palette.bg + " accent=" + palette.accent);
-                                });
-                            } else {
-                                // Multiple images — send all to AI
-                                _extractPaletteAIMultiple(_referenceImages, function(err, palette, reasoning) {
-                                    if (importBtn) importBtn.textContent = "📁 Importar";
+                            if (importBtn) importBtn.textContent = "📁 Importar";
+                            var analyzeBtn = document.getElementById("btn-mp-analyze-palette");
+                            if (analyzeBtn) analyzeBtn.style.display = "";
+                            showToast(_referenceImages.length + " referencia(s) cargada(s) — click 🎨 Analizar Paleta", "success");
                                     if (err) {
                                         console.warn("AI multi-palette failed, falling back to first image:", err.message);
                                         _extractPaletteAI(_referenceImages[0].base64, function(err2, palette2, reasoning2) {
@@ -523,6 +481,40 @@
             var label = document.getElementById("mp-style-label");
             if (label) label.textContent = "Personalizado";
         });
+
+        // Analyze Palette button — sends all references to AI
+        var analyzeBtn = document.getElementById("btn-mp-analyze-palette");
+        if (analyzeBtn) {
+            analyzeBtn.addEventListener("click", function() {
+                if (_referenceImages.length === 0) {
+                    showToast("Primero captura un frame o importa imágenes de referencia", "error");
+                    return;
+                }
+                analyzeBtn.textContent = "🎨 Analizando...";
+                analyzeBtn.disabled = true;
+
+                var callback = function(err, palette, reasoning) {
+                    analyzeBtn.textContent = "🎨 Analizar Paleta";
+                    analyzeBtn.disabled = false;
+                    if (err) {
+                        showToast("Error al analizar: " + err.message, "error");
+                        return;
+                    }
+                    _applyPalette(palette);
+                    if (reasoning) showToast("🎨 " + reasoning.substring(0, 100), "info");
+                    if (window.EPLogger) EPLogger.log("motion-pro", "palette-analyzed", "bg=" + palette.bg + " accent=" + palette.accent);
+                };
+
+                if (_referenceImages.length === 1) {
+                    _extractPaletteAI(_referenceImages[0].base64, callback);
+                } else {
+                    _extractPaletteAIMultiple(_referenceImages, callback);
+                }
+            });
+
+            // Show analyze button if references already loaded
+            if (_referenceImages.length > 0) analyzeBtn.style.display = "";
+        }
 
         // Load saved palette on init
         var savedPalette = localStorage.getItem("mp_custom_palette");
