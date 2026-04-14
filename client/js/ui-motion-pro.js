@@ -944,6 +944,7 @@
             }
 
             if (window.EPLogger) EPLogger.log("motion-pro", "analysis-complete", "parsing proposals");
+            console.log("[Motion-Pro] Raw result type:", typeof result, "length:", (result||"").length);
             var analysisTime = ((Date.now() - _mpTimers.analysisStart) / 1000).toFixed(1);
             var proposals = [];
             try {
@@ -988,7 +989,9 @@
                     }
                 }
             } catch(e) {
-                showToast("Error al parsear respuesta IA: " + e.message, "error");
+                showToast("ERROR PARSING: " + e.message, "error");
+                if (window.EPLogger) EPLogger.error("motion-pro", "parse-error", e.message + " | " + e.stack);
+                console.error("[Motion-Pro] PARSE ERROR:", e.message, e.stack);
                 return;
             }
 
