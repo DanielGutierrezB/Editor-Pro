@@ -18,18 +18,20 @@
     var SERVER_URL = "http://localhost:" + SERVER_PORT;
 
     var MP_TYPES = {
-        comparison: { label: "Comparación", color: "#00d4ff" },
-        steps:      { label: "Pasos",       color: "#34d399" },
-        icons:      { label: "Iconos",      color: "#a78bfa" },
-        chart:      { label: "Gráfico",     color: "#fb923c" },
-        title:      { label: "Título",      color: "#818cf8" },
-        cards:      { label: "Cards",       color: "#2dd4bf" },
-        diagram:    { label: "Diagrama",    color: "#f87171" },
-        ui:         { label: "UI Mockup",   color: "#fbbf24" },
-        timeline:   { label: "Timeline",    color: "#38bdf8" },
-        reveal:     { label: "Reveal",      color: "#e879f9" },
-        list:       { label: "Lista",       color: "#4ade80" },
-        metrics:    { label: "Métricas",    color: "#f59e0b" }
+        title:       { label: "Título",      color: "#818cf8" },
+        callout:     { label: "Callout",     color: "#e879f9" },
+        reveal:      { label: "Reveal",      color: "#c084fc" },
+        icons:       { label: "Iconos",      color: "#a78bfa" },
+        cards:       { label: "Cards",       color: "#2dd4bf" },
+        diagram:     { label: "Diagrama",    color: "#f87171" },
+        steps:       { label: "Pasos",       color: "#34d399" },
+        chart:       { label: "Gráfico",     color: "#fb923c" },
+        metrics:     { label: "Métricas",    color: "#f59e0b" },
+        list:        { label: "Lista",       color: "#4ade80" },
+        comparison:  { label: "Comparación", color: "#00d4ff" },
+        beforeafter: { label: "Antes/Después", color: "#f472b6" },
+        funnel:      { label: "Funnel",      color: "#a3e635" },
+        timeline:    { label: "Timeline",    color: "#38bdf8" },
     };
 
     function MotionPro() {

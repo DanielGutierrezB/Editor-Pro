@@ -1066,7 +1066,7 @@
             var typeKeys = Object.keys(MotionPro.TYPES);
             typeKeys.forEach(function(typeKey) {
                 if (!typeCounts[typeKey]) return;
-                var info = MotionPro.TYPES[typeKey];
+                var info = MotionPro.TYPES[typeKey] || { label: typeKey, color: "#888" };
                 var tag = document.createElement("span");
                 tag.className = "st2-filter-tag" + (_mpTypeFilter === typeKey ? " st2-filter-active" : "");
                 tag.style.color = info.color;
