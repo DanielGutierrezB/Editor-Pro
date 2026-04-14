@@ -2727,8 +2727,8 @@
                         var btn = document.getElementById("btn-reload");
                         if (btn) {
                             _originalReloadHTML = btn.innerHTML;
-                            btn.style.cssText = "background:var(--accent);color:var(--bg-base);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;animation:pulse-update 1.5s infinite;";
-                            btn.innerHTML = "⬇ Update";
+                            btn.style.cssText = "background:var(--accent);color:var(--bg-base);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;animation:pulse-update 1.5s infinite;white-space:nowrap;";
+                            btn.innerHTML = "⬇";
                             btn.title = "Hay una actualización disponible — click para actualizar";
                         }
                     }
