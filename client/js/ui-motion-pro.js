@@ -1760,16 +1760,30 @@
             groups[grp].push(m);
         });
 
+        // Expand All / Collapse All toolbar
+        var toolbar = document.createElement('div');
+        toolbar.style.cssText = 'display:flex; gap:8px; margin-bottom:8px;';
+        toolbar.innerHTML = '<button class="btn btn-sm btn-ghost" id="btn-mp-expand-all">Desplegar todos</button>' +
+                            '<button class="btn btn-sm btn-ghost" id="btn-mp-collapse-all">Replegar todos</button>';
+        list.appendChild(toolbar);
+
         groupOrder.forEach(function(grpName) {
             var grpItems = groups[grpName];
 
-            // Group header
+            // Group header (collapsible)
             var header = document.createElement('div');
             header.className = 'mp-group-header';
-            header.innerHTML =
-                '<span class="mp-group-icon">📦</span>' +
-                '<span class="mp-group-name">' + esc(grpName) + '</span>' +
-                '<span class="mp-group-count">(' + grpItems.length + ')</span>';
+            header.innerHTML = '<span class="mp-group-arrow">▾</span> 📦 ' + esc(grpName) + ' (' + grpItems.length + ')';
+            header.style.cursor = 'pointer';
+            header.addEventListener('click', function() {
+                var cards = header.parentElement.querySelectorAll('.mp-motion-card[data-group="' + grpName + '"]');
+                var isHidden = cards.length > 0 && cards[0].style.display === 'none';
+                cards.forEach(function(c) {
+                    c.style.display = isHidden ? '' : 'none';
+                });
+                var arrow = header.querySelector('.mp-group-arrow');
+                if (arrow) arrow.textContent = isHidden ? '▾' : '▸';
+            });
             list.appendChild(header);
 
         for (var i = 0; i < grpItems.length; i++) {
@@ -1780,6 +1794,7 @@
             var card = document.createElement("div");
             card.className = "mp-motion-card";
             card.setAttribute("data-motion-id", m.id);
+            card.setAttribute("data-group", grpName);
 
             var statusBadge = activeV ? (
                 activeV.status === "placed" || m.placedInTimeline ?
@@ -2043,6 +2058,21 @@
             })(m.id, m.startTime);
         }
         }); // end groupOrder.forEach
+
+        // Bind Expand All / Collapse All buttons
+        setTimeout(function() {
+            var expandBtn = document.getElementById('btn-mp-expand-all');
+            var collapseBtn = document.getElementById('btn-mp-collapse-all');
+            if (expandBtn) expandBtn.addEventListener('click', function() {
+                document.querySelectorAll('.mp-motion-card').forEach(function(c) { c.style.display = ''; });
+                document.querySelectorAll('.mp-group-arrow').forEach(function(a) { a.textContent = '▾'; });
+            });
+            if (collapseBtn) collapseBtn.addEventListener('click', function() {
+                document.querySelectorAll('.mp-motion-card').forEach(function(c) { c.style.display = 'none'; });
+                document.querySelectorAll('.mp-group-arrow').forEach(function(a) { a.textContent = '▸'; });
+            });
+        }, 0);
+
         mpUpdateMotionProEmptyState();
     }
 
