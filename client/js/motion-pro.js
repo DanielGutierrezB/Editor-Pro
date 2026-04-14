@@ -141,7 +141,7 @@
                         }
                     });
                 }
-            }, 5000);
+            }, 15000); // 15 seconds — first start can be slow
         });
     };
 

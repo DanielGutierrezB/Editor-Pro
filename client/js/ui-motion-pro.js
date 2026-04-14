@@ -271,9 +271,13 @@
             mpUpdateServerUI();
             var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
             motionPro.startServer(extensionPath, function(err) {
-                if (!err) {
-                    mpUpdateServerUI();
+                if (err) {
+                    if (window.EPLogger) EPLogger.error("motion-pro", "auto-start-failed", err.message);
+                    showToast("Servidor no arrancó automáticamente — click Iniciar", "error");
+                } else {
+                    if (window.EPLogger) EPLogger.log("motion-pro", "auto-start-ok", "server running");
                 }
+                mpUpdateServerUI();
             });
         }
 
