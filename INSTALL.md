@@ -21,6 +21,26 @@ También necesitas:
 
 ---
 
+## ⚠️ Si tienes una versión anterior (ZXP)
+
+Si ya tenías Editor-Pro instalado como ZXP, **desinstálalo primero** para evitar conflictos:
+
+### En Mac:
+```bash
+rm -rf ~/Library/Application\ Support/Adobe/CEP/extensions/com.codigo.editorpro
+```
+
+### En Windows:
+```bash
+rmdir /s /q "%APPDATA%\Adobe\CEP\extensions\com.codigo.editorpro"
+```
+
+También puedes desinstalarlo desde **Adobe Creative Cloud → Marketplace → Mis extensiones → Editor-Pro → Desinstalar**.
+
+Reinicia Premiere después de desinstalar.
+
+---
+
 ## 🖥️ Paso 1: Instalar Node.js
 
 ### En Mac:
