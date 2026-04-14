@@ -2768,9 +2768,9 @@
                         var btn = document.getElementById("btn-reload");
                         if (btn) {
                             _originalReloadHTML = btn.innerHTML;
-                            btn.innerHTML = "⬇️";
-                            btn.title = "Update disponible — click para actualizar";
-                            btn.style.animation = "pulse-update 1.5s infinite";
+                            btn.style.cssText = "background:var(--accent);color:var(--bg-base);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;animation:pulse-update 1.5s infinite;";
+                            btn.innerHTML = "⬇ Update";
+                            btn.title = "Hay una actualización disponible — click para actualizar";
                         }
                     }
                 }

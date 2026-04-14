@@ -90,6 +90,9 @@
         MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0;
     }
 
+    // Store multiple reference images for AI palette analysis
+    var _referenceImages = [];
+
     // ─── Color Extraction (canvas fallback + AI vision) ─────────────────
 
     function _extractPaletteFromImage(imageSrc, callback) {
@@ -166,6 +169,24 @@
         }
         motionPro._post("/api/palette", {
             imageBase64: base64,
+            provider: state.settings.aiProvider,
+            model: state.settings.aiModel,
+            apiKey: aiAnalyzer.getActiveKey()
+        }, function(err, result) {
+            if (err || !result || !result.palette) {
+                return callback(new Error(err ? err.message : (result && result.error) || 'Sin respuesta de paleta'));
+            }
+            callback(null, result.palette, result.reasoning || '');
+        });
+    }
+
+    /** AI Vision palette with multiple reference images */
+    function _extractPaletteAIMultiple(images, callback) {
+        if (!motionPro || !aiAnalyzer || !aiAnalyzer.isConfigured()) {
+            return callback(new Error('AI not configured'));
+        }
+        motionPro._post("/api/palette", {
+            images: images,
             provider: state.settings.aiProvider,
             model: state.settings.aiModel,
             apiKey: aiAnalyzer.getActiveKey()
@@ -390,51 +411,74 @@
             });
 
             fileInput.addEventListener("change", function(evt) {
-                var file = evt.target.files[0];
-                if (!file) return;
+                var files = Array.from(evt.target.files || []);
+                if (files.length === 0) return;
 
-                // Read file as ArrayBuffer to get base64 for AI, and also as DataURL for canvas fallback
-                var reader = new FileReader();
-                reader.onload = function(e) {
-                    var arrayBuffer = e.target.result;
-                    var bytes = new Uint8Array(arrayBuffer);
-                    var binary = '';
-                    for (var i = 0; i < bytes.byteLength; i++) {
-                        binary += String.fromCharCode(bytes[i]);
-                    }
-                    var base64 = window.btoa(binary);
+                var refsContainer = document.getElementById("mp-style-refs");
+                _referenceImages = []; // reset for new selection
+                if (refsContainer) refsContainer.innerHTML = "";
+                var totalFiles = files.length;
+                var loaded = 0;
 
-                    if (importBtn) importBtn.textContent = "🎨 Analizando...";
+                if (importBtn) importBtn.textContent = "🎨 Analizando...";
 
-                    _extractPaletteAI(base64, function(err, palette, reasoning) {
-                        if (importBtn) importBtn.textContent = "📁 Importar";
+                files.forEach(function(file) {
+                    var reader = new FileReader();
+                    reader.onload = function(e) {
+                        var dataUrl = e.target.result;
+                        var base64 = dataUrl.split(',')[1];
+                        _referenceImages.push({ base64: base64, name: file.name });
 
-                        if (err) {
-                            console.warn("AI palette failed for import, using canvas fallback:", err.message);
-                            // Fallback: re-read as DataURL for canvas extraction
-                            var reader2 = new FileReader();
-                            reader2.onload = function(e2) {
-                                _extractPaletteFromImage(e2.target.result, function(err2, fallbackPalette) {
-                                    if (err2) {
-                                        showToast("Error al extraer colores: " + err2.message, "error");
+                        // Show thumbnail
+                        if (refsContainer) {
+                            var thumb = document.createElement('img');
+                            thumb.src = dataUrl;
+                            thumb.style.cssText = 'width:30px; height:30px; border-radius:3px; object-fit:cover; border:1px solid rgba(255,255,255,0.15);';
+                            thumb.title = file.name;
+                            refsContainer.appendChild(thumb);
+                        }
+
+                        loaded++;
+                        // When all files are loaded, trigger AI analysis
+                        if (loaded === totalFiles) {
+                            if (_referenceImages.length === 1) {
+                                // Single image — use original endpoint
+                                _extractPaletteAI(_referenceImages[0].base64, function(err, palette, reasoning) {
+                                    if (importBtn) importBtn.textContent = "📁 Importar";
+                                    if (err) {
+                                        console.warn("AI palette failed, using canvas fallback:", err.message);
+                                        _extractPaletteFromImage(dataUrl, function(err2, fallbackPalette) {
+                                            if (err2) { showToast("Error al extraer colores: " + err2.message, "error"); return; }
+                                            _applyPalette(fallbackPalette);
+                                            showToast("Paleta extraída (canvas fallback)", "info");
+                                        });
                                         return;
                                     }
-                                    _applyPalette(fallbackPalette);
-                                    showToast("Paleta extraída (canvas fallback)", "info");
+                                    _applyPalette(palette);
+                                    if (reasoning) showToast("🎨 " + reasoning.substring(0, 80), "info");
+                                    if (window.EPLogger) EPLogger.log("motion-pro", "style-import-ai", "bg=" + palette.bg + " accent=" + palette.accent);
                                 });
-                            };
-                            reader2.readAsDataURL(file);
-                            return;
+                            } else {
+                                // Multiple images — send all to AI
+                                _extractPaletteAIMultiple(_referenceImages, function(err, palette, reasoning) {
+                                    if (importBtn) importBtn.textContent = "📁 Importar";
+                                    if (err) {
+                                        console.warn("AI multi-palette failed, falling back to first image:", err.message);
+                                        _extractPaletteAI(_referenceImages[0].base64, function(err2, palette2, reasoning2) {
+                                            if (err2) { showToast("Error al extraer colores: " + err2.message, "error"); return; }
+                                            _applyPalette(palette2);
+                                        });
+                                        return;
+                                    }
+                                    _applyPalette(palette);
+                                    if (reasoning) showToast("🎨 " + reasoning.substring(0, 80), "info");
+                                    if (window.EPLogger) EPLogger.log("motion-pro", "style-import-ai-multi", "count=" + _referenceImages.length + " bg=" + palette.bg);
+                                });
+                            }
                         }
-
-                        _applyPalette(palette);
-                        if (reasoning) {
-                            showToast("🎨 " + reasoning.substring(0, 80), "info");
-                        }
-                        if (window.EPLogger) EPLogger.log("motion-pro", "style-import-ai", "bg=" + palette.bg + " accent=" + palette.accent);
-                    });
-                };
-                reader.readAsArrayBuffer(file);
+                    };
+                    reader.readAsDataURL(file);
+                });
                 // Reset input so re-selecting same file triggers change
                 fileInput.value = "";
             });
@@ -912,6 +956,40 @@
                         proposals[ov - 1].endTime = proposals[ov].startTime;
                     }
                 }
+
+                // Smart gap negotiation — distribute gap time to neighboring clips
+                // based on which clip benefits most from extra time (content density)
+                (function negotiateGaps() {
+                    for (var g = 0; g < proposals.length - 1; g++) {
+                        var gap = proposals[g + 1].startTime - proposals[g].endTime;
+                        if (gap <= 0.5) continue; // no significant gap
+
+                        var prevClip = proposals[g];
+                        var nextClip = proposals[g + 1];
+
+                        // Count items in each clip description to estimate complexity
+                        var prevItems = (prevClip.description || '').split(',').length;
+                        var nextItems = (nextClip.description || '').split(',').length;
+                        var prevDur = prevClip.endTime - prevClip.startTime;
+                        var nextDur = nextClip.endTime - nextClip.startTime;
+
+                        // Score: clips with more items per second benefit more from extra time
+                        var prevDensity = prevItems / Math.max(prevDur, 1);
+                        var nextDensity = nextItems / Math.max(nextDur, 1);
+
+                        // Distribute gap proportionally to density
+                        var totalDensity = prevDensity + nextDensity;
+                        if (totalDensity === 0) totalDensity = 1;
+
+                        var prevShare = gap * (prevDensity / totalDensity);
+                        var nextShare = gap * (nextDensity / totalDensity);
+
+                        // Extend previous clip's end
+                        prevClip.endTime = parseFloat((prevClip.endTime + prevShare).toFixed(1));
+                        // Move next clip's start earlier
+                        nextClip.startTime = parseFloat((nextClip.startTime - nextShare).toFixed(1));
+                    }
+                })();
             } catch(e) {
                 showToast("Error al parsear respuesta IA: " + e.message, "error");
                 return;
