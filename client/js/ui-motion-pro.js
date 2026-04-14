@@ -1039,7 +1039,13 @@
                 if (window.EPLogger) EPLogger.error("motion-pro", "render-proposals-crash", renderErr.message + " | " + renderErr.stack);
                 showToast("ERROR rendering proposals: " + renderErr.message, "error");
             }
-            mpToggleStep("2");
+            // Force-open Step 2 (don't toggle — toggle can close it if already open)
+            var step2Body = document.getElementById("mp-step-body-2");
+            if (step2Body) {
+                step2Body.classList.remove("hidden");
+                var step2Arrow = step2Body.previousElementSibling ? step2Body.previousElementSibling.querySelector(".rec-step-arrow") : null;
+                if (step2Arrow) step2Arrow.textContent = "▾";
+            }
 
             var hint = document.getElementById("mp-step-hint-1");
             if (hint) hint.textContent = proposals.length + " momentos (" + analysisTime + "s)";
