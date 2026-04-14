@@ -619,8 +619,6 @@ class RemotionManager {
       '--concurrency=1',
       '--timeout=60000',
       '--delay-render-timeout=30000',
-      '--gl=angle',
-      '--disable-web-security',
     ];
 
     const proc = spawn(npxPath, args, {
