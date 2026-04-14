@@ -1698,13 +1698,14 @@
     /** Duración del clip en timeline: no mayor que el vídeo real (evita franja rayada). Resta ~2 frames por redondeo contenedor/Premiere. */
     var MP_TIMELINE_FPS = 30;
     function mpComputeClipDurationSecs(motion, v) {
-        var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
-        var proposalDur = Math.max(0.1, motion.endTime - mpStart);
+        // ALWAYS use the actual video duration — never exceed it
+        // This prevents "Error retrieving frame" in Premiere
         if (v && typeof v.mediaDurationSec === "number" && v.mediaDurationSec > 0.05) {
-            var safeMedia = Math.max(0.05, v.mediaDurationSec - 2 / MP_TIMELINE_FPS);
-            return Math.min(proposalDur, safeMedia);
+            return Math.max(0.05, v.mediaDurationSec - 2 / MP_TIMELINE_FPS);
         }
-        return proposalDur;
+        // Fallback if no media duration available
+        var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
+        return Math.max(0.1, motion.endTime - mpStart);
     }
 
     function mpPlaceSingleInTimeline(motionId, callback) {
