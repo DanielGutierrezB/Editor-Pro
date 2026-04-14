@@ -83,7 +83,7 @@ function _sendOllama(cfg, model, systemMsg, userMsg, callback) {
     });
   });
   req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
+  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -118,7 +118,7 @@ function _sendGoogle(model, apiKey, systemMsg, userMsg, callback) {
     });
   });
   req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
+  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -158,7 +158,7 @@ function _sendAnthropic(cfg, model, apiKey, systemMsg, userMsg, callback) {
     });
   });
   req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
+  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -199,7 +199,7 @@ function _sendOpenAI(cfg, model, apiKey, systemMsg, userMsg, callback) {
     });
   });
   req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
+  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -268,7 +268,7 @@ function _sendAnthropicVision(cfg, model, apiKey, systemMsg, userMsg, imageBase6
     });
   });
   req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
+  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -308,7 +308,7 @@ function _sendGoogleVision(model, apiKey, systemMsg, userMsg, imageBase64, callb
     });
   });
   req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
+  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -346,7 +346,7 @@ function _sendOllamaVision(cfg, model, systemMsg, userMsg, imageBase64, callback
     });
   });
   req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
+  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -390,7 +390,7 @@ function _sendOpenAIVision(cfg, model, apiKey, systemMsg, userMsg, dataUri, call
     });
   });
   req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
+  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
