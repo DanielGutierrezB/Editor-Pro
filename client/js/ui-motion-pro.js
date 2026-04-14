@@ -976,48 +976,14 @@
                     }
                 }
 
-                // Smart gap negotiation — distribute gap time to neighboring clips
-                // based on which clip benefits most from extra time (content density)
-                (function negotiateGaps() {
-                    for (var g = 0; g < proposals.length - 1; g++) {
-                        var gap = proposals[g + 1].startTime - proposals[g].endTime;
-                        if (gap <= 0.5) continue; // no significant gap
-
-                        var prevClip = proposals[g];
-                        var nextClip = proposals[g + 1];
-
-                        // Count items in each clip description to estimate complexity
-                        var prevItems = (prevClip.description || '').split(',').length;
-                        var nextItems = (nextClip.description || '').split(',').length;
-                        var prevDur = prevClip.endTime - prevClip.startTime;
-                        var nextDur = nextClip.endTime - nextClip.startTime;
-
-                        // Score: clips with more items per second benefit more from extra time
-                        var prevDensity = prevItems / Math.max(prevDur, 1);
-                        var nextDensity = nextItems / Math.max(nextDur, 1);
-
-                        // Distribute gap proportionally to density
-                        var totalDensity = prevDensity + nextDensity;
-                        if (totalDensity === 0) totalDensity = 1;
-
-                        var prevShare = gap * (prevDensity / totalDensity);
-                        var nextShare = gap * (nextDensity / totalDensity);
-
-                        // Extend previous clip's end (but don't exceed next clip's original start)
-                        var newPrevEnd = parseFloat((prevClip.endTime + prevShare).toFixed(1));
-                        var newNextStart = parseFloat((nextClip.startTime - nextShare).toFixed(1));
-                        // Safety: ensure no overlap
-                        if (newNextStart > newPrevEnd && newNextStart > prevClip.endTime) {
-                            prevClip.endTime = newPrevEnd;
-                            nextClip.startTime = newNextStart;
-                        } else {
-                            // Just split the gap in half
-                            var mid = parseFloat(((prevClip.endTime + proposals[g + 1].startTime) / 2).toFixed(1));
-                            prevClip.endTime = mid;
-                            nextClip.startTime = mid;
-                        }
+                // Simple gap fill: extend each clip's endTime to next clip's startTime
+                for (var g = 0; g < proposals.length - 1; g++) {
+                    var gapSize = proposals[g + 1].startTime - proposals[g].endTime;
+                    if (gapSize > 0.2) {
+                        // Extend previous clip to fill the gap
+                        proposals[g].endTime = proposals[g + 1].startTime;
                     }
-                })();
+                }
             } catch(e) {
                 showToast("Error al parsear respuesta IA: " + e.message, "error");
                 return;
