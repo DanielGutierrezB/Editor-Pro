@@ -44,9 +44,18 @@ function faststartMp4InPlace(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return;
   const tmp = filePath + '.__fst.mp4';
   try {
+    // Re-encode with all-intra keyframes (-g 1), no B-frames (-bf 0), 
+    // high profile, and faststart. This prevents Premiere's hardware decoder
+    // from choking on long GOP decode chains.
     execFileSync(
       'ffmpeg',
-      ['-y', '-i', filePath, '-c', 'copy', '-movflags', '+faststart', tmp],
+      ['-y', '-i', filePath, 
+       '-c:v', 'libx264', '-crf', '15', '-preset', 'fast',
+       '-g', '1', '-bf', '0',
+       '-profile:v', 'high', '-level', '4.2',
+       '-pix_fmt', 'yuv420p',
+       '-movflags', '+faststart',
+       '-an', tmp],
       { encoding: 'utf8', timeout: 600000, maxBuffer: 10 * 1024 * 1024 }
     );
     if (fs.existsSync(tmp)) {
@@ -54,9 +63,19 @@ function faststartMp4InPlace(filePath) {
       fs.renameSync(tmp, filePath);
     }
   } catch (_e) {
+    // Fallback: try copy-only faststart if re-encode fails
     try {
-      if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+      execFileSync(
+        'ffmpeg',
+        ['-y', '-i', filePath, '-c', 'copy', '-movflags', '+faststart', tmp],
+        { encoding: 'utf8', timeout: 600000, maxBuffer: 10 * 1024 * 1024 }
+      );
+      if (fs.existsSync(tmp)) {
+        fs.unlinkSync(filePath);
+        fs.renameSync(tmp, filePath);
+      }
     } catch (_e2) {}
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_e3) {}
   }
 }
 
