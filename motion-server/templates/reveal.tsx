@@ -24,8 +24,7 @@ const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({c
 const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CSSProperties}> = ({d,children,from='up',style}) => {
   const frame = useCurrentFrame();
   const progress = interpolate(frame-d, [0, 30], [0, 1], {
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
-    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+    easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft:'clamp', extrapolateRight:'clamp',
   });
   const y = from==='up'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='down'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
   const x = from==='left'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='right'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
@@ -107,7 +106,6 @@ const MorphPosition:React.FC<{children:React.ReactNode;phase:number;fromY:number
   const frame = useCurrentFrame();
   const mp = interpolate(frame - d, [0, duration], [0, phase], {
     easing: Easing.bezier(0.45, 0, 0.55, 1),
-    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
   return (
     <div style={{transform:`translate(${interpolate(mp,[0,1],[fromX,toX],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px,${interpolate(mp,[0,1],[fromY,toY],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px) scale(${interpolate(mp,[0,1],[fromScale,toScale],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})})`,transformOrigin:'center center'}}>

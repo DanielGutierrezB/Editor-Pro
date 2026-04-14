@@ -24,8 +24,7 @@ const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({c
 const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CSSProperties}> = ({d,children,from='up',style}) => {
   const frame = useCurrentFrame();
   const progress = interpolate(frame-d, [0, 30], [0, 1], {
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
-    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+    easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft:'clamp', extrapolateRight:'clamp',
   });
   const y = from==='up'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='down'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
   const x = from==='left'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='right'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
@@ -85,8 +84,7 @@ const GlowCard:React.FC<{
 const OdometerDigit:React.FC<{value:number;d:number;fontSize?:number;color?:string}> = ({value,d,fontSize=96,color=C.accent}) => {
   const frame = useCurrentFrame();
   const progress = interpolate(frame - d, [0, 40], [0, 1], {
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
-    extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
+    easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft:'clamp', extrapolateRight:'clamp',
   });
   const current = Math.round(interpolate(progress, [0,1], [0, value], {extrapolateLeft:'clamp',extrapolateRight:'clamp'}));
   const digits = String(current).split('');
