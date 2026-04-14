@@ -73,7 +73,7 @@ CALIDAD DE LA DESCRIPCIÓN (CRÍTICO):
 - NO escribas "Mostrar texto con las 3 ventajas" — eso es literal y aburrido
 - SÍ escribe "3 cards con accent border lateral que revelan progresivamente con stagger, cada una con número grande (CountUp) y descripción corta"
 - La descripción debe ser un BRIEF VISUAL específico, no un resumen del contenido
-- Incluye detalles de: layout (horizontal/vertical/centrado/split), elementos (cards/icons/gauge/funnel), animación (reveal/stagger/counter/draw-on)
+- Incluye detalles de: layout (horizontal/vertical/centrado/split), elementos (cards/icons/funnel), animación (reveal/stagger/counter/draw-on)
 - Piensa en qué haría al visual MEMORABLE, no solo funcional
 
 Campos adicionales POR PROPUESTA:
