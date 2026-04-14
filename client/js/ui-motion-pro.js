@@ -591,6 +591,8 @@
             showToast("Servidor Motion-Pro detenido", "info");
         } else {
             if (window.EPLogger) EPLogger.log("motion-pro", "server-start", "");
+            // Kill any stale server process first
+            motionPro.stopServer();
             var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
             var btn = document.getElementById("btn-mp-server-toggle");
             if (btn) { btn.textContent = "Iniciando..."; btn.disabled = true; }
