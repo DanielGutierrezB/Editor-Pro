@@ -1361,6 +1361,7 @@
     }
 
     function mpStartGeneration() {
+        if (window.EPLogger) EPLogger.log("motion-pro", "generate-attempt", "generating=" + state.mpGenerating + " server=" + motionPro.serverRunning + " proposals=" + motionPro.proposals.length);
         if (state.mpGenerating) return;
         if (!motionPro.serverRunning) {
             showToast("Inicia el servidor Motion-Pro primero", "error");
