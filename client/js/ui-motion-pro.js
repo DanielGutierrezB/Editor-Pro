@@ -1520,7 +1520,7 @@
         mpShowStep(3);
 
         // Parallel generation with concurrency limit
-        var CONCURRENCY = 2; // Root.tsx race condition handled server-side with file lock
+        var CONCURRENCY = 1; // Root.tsx race condition handled server-side with file lock
         var nextIndex = 0;
         var activeWorkers = 0;
 
