@@ -466,9 +466,7 @@
                     hexInput.select();
                 }
                 
-                // Also open native color picker
-                _colorInput.value = currentHex;
-                _colorInput.click();
+                // Don't open native color picker — use HEX input only
             });
         });
         
