@@ -948,8 +948,8 @@
                 return;
             }
 
-            if (window.EPLogger) EPLogger.log("motion-pro", "analysis-complete", "parsing proposals");
-            console.log("[Motion-Pro] Raw result type:", typeof result, "length:", (result||"").length);
+            if (window.EPLogger) EPLogger.log("motion-pro", "analysis-complete", "parsing proposals — result type: " + typeof result + " length: " + (typeof result === "string" ? result.length : JSON.stringify(result).length));
+            if (window.EPLogger) EPLogger.log("motion-pro", "raw-result-preview", (typeof result === "string" ? result.substring(0, 200) : JSON.stringify(result).substring(0, 200)));
             var analysisTime = ((Date.now() - _mpTimers.analysisStart) / 1000).toFixed(1);
             var proposals = [];
             try {
