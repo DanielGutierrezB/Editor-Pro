@@ -1032,7 +1032,13 @@
             motionPro.proposals = proposals;
             motionPro.saveState();
             mpShowStep(2);
-            mpRenderProposals();
+            if (window.EPLogger) EPLogger.log("motion-pro", "pre-render", "about to render " + proposals.length + " proposals");
+            try {
+                mpRenderProposals();
+            } catch(renderErr) {
+                if (window.EPLogger) EPLogger.error("motion-pro", "render-proposals-crash", renderErr.message + " | " + renderErr.stack);
+                showToast("ERROR rendering proposals: " + renderErr.message, "error");
+            }
             mpToggleStep("2");
 
             var hint = document.getElementById("mp-step-hint-1");
