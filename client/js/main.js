@@ -1387,8 +1387,8 @@
         if (segListIdx !== -1) {
             var searchStart = Math.max(0, segListIdx - 500);
             var searchEnd = Math.min(xml.length, segListIdx + 100000);
-            var window = xml.substring(searchStart, searchEnd);
-            var jsonMatch = window.match(/\{[^{}]*"segmentList"\s*:\s*\[[\s\S]*?\]\s*\}/);
+            var xmlWindow = xml.substring(searchStart, searchEnd);
+            var jsonMatch = xmlWindow.match(/\{[^{}]*"segmentList"\s*:\s*\[[\s\S]*?\]\s*\}/);
             if (jsonMatch) {
                 try {
                     var data = JSON.parse(jsonMatch[0]);
@@ -1556,8 +1556,8 @@
                 while (true) {
                     tIdx = xml.indexOf(tagMarkers[m], tIdx);
                     if (tIdx === -1) break;
-                    var window = xml.substring(Math.max(0, tIdx - 500), Math.min(xml.length, tIdx + 5000));
-                    var b64Match = window.match(/[A-Za-z0-9+\/=]{100,}/g);
+                    var xmlChunk = xml.substring(Math.max(0, tIdx - 500), Math.min(xml.length, tIdx + 5000));
+                    var b64Match = xmlChunk.match(/[A-Za-z0-9+\/=]{100,}/g);
                     if (b64Match) {
                         for (var bm = 0; bm < b64Match.length; bm++) {
                             captionDataList.push({ b64: b64Match[bm], pos: tIdx });
@@ -2410,52 +2410,11 @@
         return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
     }
 
-    function refreshAllHeaderProgress() {
-        refreshSttHeaderProgressVisibility();
-        refreshST2HeaderProgressVisibility();
-        refreshES2HeaderProgressVisibility();
-        refreshRPHeaderProgressVisibility();
-        refreshMPHeaderProgressVisibility();
-    }
+    // [REMOVED] First refreshAllHeaderProgress() — duplicate of the delegating version below (v1.0.72)
 
     // [EXTRACTED] ST2 Progress helpers → see ui-*.js
 
-    function bindCollapsibles() {
-        var allHeaders = document.querySelectorAll(".tool-card-header");
-        allHeaders.forEach(function(hdr) {
-            hdr.addEventListener("click", function() {
-                var body = hdr.nextElementSibling;
-                var icon = hdr.querySelector(".toggle-icon");
-                if (!body) return;
-                var wasHidden = body.classList.contains("hidden");
-
-                if (wasHidden) {
-                    allHeaders.forEach(function(otherHdr) {
-                        var otherBody = otherHdr.nextElementSibling;
-                        var otherIcon = otherHdr.querySelector(".toggle-icon");
-                        if (otherBody && otherHdr !== hdr && !otherBody.classList.contains("hidden")) {
-                            otherBody.classList.add("hidden");
-                            if (otherIcon) otherIcon.textContent = "▸";
-                        }
-                    });
-                    body.classList.remove("hidden");
-                    if (icon) icon.textContent = "▾";
-                } else {
-                    body.classList.add("hidden");
-                    if (icon) icon.textContent = "▸";
-                }
-
-                refreshAllHeaderProgress();
-            });
-        });
-
-        document.querySelectorAll(".rec-step-header").forEach(function(hdr) {
-            hdr.addEventListener("click", function() {
-                var stepNum = hdr.getAttribute("data-rec-step");
-                toggleRecStep(stepNum);
-            });
-        });
-    }
+    // [REMOVED] First bindCollapsibles() definition — duplicate of the complete version below (v1.0.72)
 
     // [EXTRACTED] Recording Notes UI → see ui-*.js
 

@@ -80,8 +80,8 @@ class RemotionManager {
     tsxCode = tsxCode.replace(/<Img\s+[^>]*(?:src=\{?["'][^"']*brandfetch[^"']*["']\}?)[^>]*\/?>/gi,
       '<Globe size={60} color={C.accent} />');
 
-    // Replace any remaining lines containing brandfetch
-    tsxCode = tsxCode.replace(/.*brandfetch.*$/gm, '// [REMOVED: brandfetch URL not available]');
+    // Replace any remaining lines containing brandfetch URLs
+    tsxCode = tsxCode.replace(/.*https?:\/\/[^\s]*brandfetch[^\s]*.*$/gm, '// [REMOVED: brandfetch URL not available]');
 
     // Ensure Globe is imported from lucide-react
     if (tsxCode.includes('<Globe') && !/import\s*\{[^}]*Globe[^}]*\}\s*from\s*['"]lucide-react['"]/.test(tsxCode)) {
@@ -194,10 +194,11 @@ class RemotionManager {
       brandMap[brand].icons.forEach(icon => {
         // Match <IconName size={...} color={...} .../> patterns
         const iconRegex = new RegExp('<' + icon + '\\s+[^>]*\\/>', 'g');
-        if (iconRegex.test(tsxCode)) {
+        const before = tsxCode;
+        tsxCode = tsxCode.replace(iconRegex, 
+          `<Img src={staticFile('logos/${svgFile}')} style={{width:60,height:60,objectFit:'contain'}} />`);
+        if (tsxCode !== before) {
           console.log(`[RemotionManager] Replacing <${icon}/> with ${svgFile} for brand "${brand}"`);
-          tsxCode = tsxCode.replace(iconRegex, 
-            `<Img src={staticFile('logos/${svgFile}')} style={{width:60,height:60,objectFit:'contain'}} />`);
           changed = true;
         }
       });
@@ -327,8 +328,8 @@ class RemotionManager {
     // STEP 4: Bracket balance
     inString = false;
     stringChar = '';
-    const brackets = { '(': 0, '{': 0 };
-    const closers = { ')': '(', '}': '{' };
+    const brackets = { '(': 0, '{': 0, '[': 0 };
+    const closers = { ')': '(', '}': '{', ']': '[' };
 
     for (let i = 0; i < tsxCode.length; i++) {
       const ch = tsxCode[i];
@@ -353,6 +354,7 @@ class RemotionManager {
 
     if (brackets['('] !== 0) errors.push(`Unbalanced parentheses: ${brackets['(']} unclosed`);
     if (brackets['{'] !== 0) errors.push(`Unbalanced braces: ${brackets['{']} unclosed`);
+    if (brackets['['] !== 0) errors.push(`Unbalanced brackets: ${brackets['[']} unclosed`);
 
     return { valid: errors.length === 0, errors };
   }
@@ -599,7 +601,8 @@ class RemotionManager {
     // H.264 + yuv420p: ProRes intra-frame: cada frame es independiente, elimina frame corruption de H.264 inter-frame.
     const outputPath = path.join(rendersDir, `${compositionId}.mp4`);
 
-    const npxPath = execSync('which npx', { encoding: 'utf8' }).trim();
+    let npxPath;
+    try { npxPath = execSync('which npx', { encoding: 'utf8' }).trim(); } catch(_e) { npxPath = 'npx'; }
     const args = [
       'remotion', 'render',
       path.join(this.projectPath, 'src', 'index.ts'),

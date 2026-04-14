@@ -60,12 +60,15 @@ function _sendOllama(cfg, model, systemMsg, userMsg, callback) {
     stream: false,
   });
 
+  let callbackFired = false;
+  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
+
   const req = http.request({
     hostname: cfg.host,
     port: cfg.port,
     path: cfg.path,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
   }, (res) => {
     let data = '';
     res.on('data', (chunk) => { data += chunk; });
@@ -73,13 +76,14 @@ function _sendOllama(cfg, model, systemMsg, userMsg, callback) {
       try {
         const parsed = JSON.parse(data);
         const text = parsed.message?.content || '';
-        callback(null, text);
+        safeCb(null, text);
       } catch (e) {
-        callback(new Error('Parse error: ' + e.message));
+        safeCb(new Error('Parse error: ' + e.message));
       }
     });
   });
-  req.on('error', callback);
+  req.on('error', safeCb);
+  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -92,11 +96,14 @@ function _sendGoogle(model, apiKey, systemMsg, userMsg, callback) {
     generationConfig: { temperature: 0.7 },
   });
 
+  let callbackFired = false;
+  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
+
   const req = https.request({
     hostname: 'generativelanguage.googleapis.com',
     path: `/v1beta/models/${m}:generateContent?key=${apiKey}`,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
   }, (res) => {
     let data = '';
     res.on('data', (chunk) => { data += chunk; });
@@ -104,13 +111,14 @@ function _sendGoogle(model, apiKey, systemMsg, userMsg, callback) {
       try {
         const parsed = JSON.parse(data);
         const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        callback(null, text);
+        safeCb(null, text);
       } catch (e) {
-        callback(new Error('Parse error: ' + e.message));
+        safeCb(new Error('Parse error: ' + e.message));
       }
     });
   });
-  req.on('error', callback);
+  req.on('error', safeCb);
+  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -123,12 +131,16 @@ function _sendAnthropic(cfg, model, apiKey, systemMsg, userMsg, callback) {
     messages: [{ role: 'user', content: userMsg }],
   });
 
+  let callbackFired = false;
+  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
+
   const req = https.request({
     hostname: cfg.host,
     path: cfg.path,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
     },
@@ -139,13 +151,14 @@ function _sendAnthropic(cfg, model, apiKey, systemMsg, userMsg, callback) {
       try {
         const parsed = JSON.parse(data);
         const text = parsed.content?.[0]?.text || '';
-        callback(null, text);
+        safeCb(null, text);
       } catch (e) {
-        callback(new Error('Parse error: ' + e.message));
+        safeCb(new Error('Parse error: ' + e.message));
       }
     });
   });
-  req.on('error', callback);
+  req.on('error', safeCb);
+  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -160,12 +173,16 @@ function _sendOpenAI(cfg, model, apiKey, systemMsg, userMsg, callback) {
     temperature: 0.7,
   });
 
+  let callbackFired = false;
+  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
+
   const req = https.request({
     hostname: cfg.host,
     path: cfg.path,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
       'Authorization': `Bearer ${apiKey}`,
     },
   }, (res) => {
@@ -175,13 +192,14 @@ function _sendOpenAI(cfg, model, apiKey, systemMsg, userMsg, callback) {
       try {
         const parsed = JSON.parse(data);
         const text = parsed.choices?.[0]?.message?.content || '';
-        callback(null, text);
+        safeCb(null, text);
       } catch (e) {
-        callback(new Error('Parse error: ' + e.message));
+        safeCb(new Error('Parse error: ' + e.message));
       }
     });
   });
-  req.on('error', callback);
+  req.on('error', safeCb);
+  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -223,12 +241,16 @@ function _sendAnthropicVision(cfg, model, apiKey, systemMsg, userMsg, imageBase6
     }],
   });
 
+  let callbackFired = false;
+  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
+
   const req = https.request({
     hostname: cfg.host,
     path: cfg.path,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
     },
@@ -239,13 +261,14 @@ function _sendAnthropicVision(cfg, model, apiKey, systemMsg, userMsg, imageBase6
       try {
         const parsed = JSON.parse(data);
         const text = parsed.content?.[0]?.text || '';
-        callback(null, text);
+        safeCb(null, text);
       } catch (e) {
-        callback(new Error('Parse error: ' + e.message));
+        safeCb(new Error('Parse error: ' + e.message));
       }
     });
   });
-  req.on('error', callback);
+  req.on('error', safeCb);
+  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -263,11 +286,14 @@ function _sendGoogleVision(model, apiKey, systemMsg, userMsg, imageBase64, callb
     generationConfig: { temperature: 0.7 },
   });
 
+  let callbackFired = false;
+  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
+
   const req = https.request({
     hostname: 'generativelanguage.googleapis.com',
     path: `/v1beta/models/${m}:generateContent?key=${apiKey}`,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
   }, (res) => {
     let data = '';
     res.on('data', (chunk) => { data += chunk; });
@@ -275,13 +301,14 @@ function _sendGoogleVision(model, apiKey, systemMsg, userMsg, imageBase64, callb
       try {
         const parsed = JSON.parse(data);
         const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        callback(null, text);
+        safeCb(null, text);
       } catch (e) {
-        callback(new Error('Parse error: ' + e.message));
+        safeCb(new Error('Parse error: ' + e.message));
       }
     });
   });
-  req.on('error', callback);
+  req.on('error', safeCb);
+  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -296,12 +323,15 @@ function _sendOllamaVision(cfg, model, systemMsg, userMsg, imageBase64, callback
     stream: false,
   });
 
+  let callbackFired = false;
+  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
+
   const req = http.request({
     hostname: cfg.host,
     port: cfg.port,
     path: cfg.path,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
   }, (res) => {
     let data = '';
     res.on('data', (chunk) => { data += chunk; });
@@ -309,13 +339,14 @@ function _sendOllamaVision(cfg, model, systemMsg, userMsg, imageBase64, callback
       try {
         const parsed = JSON.parse(data);
         const text = parsed.message?.content || '';
-        callback(null, text);
+        safeCb(null, text);
       } catch (e) {
-        callback(new Error('Parse error: ' + e.message));
+        safeCb(new Error('Parse error: ' + e.message));
       }
     });
   });
-  req.on('error', callback);
+  req.on('error', safeCb);
+  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }
@@ -333,12 +364,16 @@ function _sendOpenAIVision(cfg, model, apiKey, systemMsg, userMsg, dataUri, call
     temperature: 0.7,
   });
 
+  let callbackFired = false;
+  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
+
   const req = https.request({
     hostname: cfg.host,
     path: cfg.path,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
       'Authorization': `Bearer ${apiKey}`,
     },
   }, (res) => {
@@ -348,13 +383,14 @@ function _sendOpenAIVision(cfg, model, apiKey, systemMsg, userMsg, dataUri, call
       try {
         const parsed = JSON.parse(data);
         const text = parsed.choices?.[0]?.message?.content || '';
-        callback(null, text);
+        safeCb(null, text);
       } catch (e) {
-        callback(new Error('Parse error: ' + e.message));
+        safeCb(new Error('Parse error: ' + e.message));
       }
     });
   });
-  req.on('error', callback);
+  req.on('error', safeCb);
+  req.setTimeout(120000, function() { req.destroy(new Error('LLM request timeout after 120s')); });
   req.write(body);
   req.end();
 }

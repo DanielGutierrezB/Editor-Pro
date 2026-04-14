@@ -369,8 +369,12 @@
                                 // Enable analyze button
                                 var anBtn = document.getElementById("btn-mp-analyze-palette");
                                 if (anBtn) { anBtn.style.opacity = '1'; anBtn.style.pointerEvents = 'auto'; }
+                                captureBtn.textContent = "📷 Capturar Frame";
+                                captureBtn.disabled = false;
                                 showToast("Frame capturado — click 🎨 Analizar para generar paleta", "success");
                             } catch(readErr) {
+                                captureBtn.textContent = "📷 Capturar Frame";
+                                captureBtn.disabled = false;
                                 showToast("Error al leer frame: " + readErr.message, "error");
                             }
                         }
@@ -448,10 +452,11 @@
         }
 
         // Click swatch → native color picker (no prompt())
-        var _colorInput = document.createElement('input');
+        var _colorInput = document.getElementById('mp-hidden-color-picker') || document.createElement('input');
+        _colorInput.id = 'mp-hidden-color-picker';
         _colorInput.type = 'color';
         _colorInput.style.cssText = 'position:absolute;opacity:0;width:0;height:0;pointer-events:none;';
-        document.body.appendChild(_colorInput);
+        if (!_colorInput.parentNode) document.body.appendChild(_colorInput);
         var _activeSwatchKey = null;
 
         var hexInput = document.getElementById('mp-hex-input');
@@ -1414,7 +1419,7 @@
         mpShowStep(3);
 
         // Parallel generation with concurrency limit
-        var CONCURRENCY = 2; // Generate 2 items at a time (reduced to avoid ECONNRESET)
+        var CONCURRENCY = 1; // Serialize to avoid Root.tsx race conditions (was 2)
         var nextIndex = 0;
         var activeWorkers = 0;
 
@@ -1612,8 +1617,8 @@
         if (!tmpPath) { if (callback) callback(); return; }
 
         csInterface.evalScript('importAndPlaceMotions("' + mpEscapePathForEvalScript(tmpPath) + '")', function(res) {
-            if (res === undefined || res === null || (typeof res === "string" && res.trim() === "")) {
-                console.warn("[Motion-Pro] Place: evalScript returned empty");
+            if (res === undefined || res === null || res === "undefined" || res === "null" || res === "EvalScript error." || (typeof res === "string" && res.trim() === "")) {
+                console.warn("[Motion-Pro] Place: evalScript returned empty or error:", res);
                 showToast("Motion-Pro: Premiere no respondió al colocar el clip. Activa la secuencia correcta y recarga el panel (Cmd+R en el panel).", "error");
                 if (callback) callback();
                 return;

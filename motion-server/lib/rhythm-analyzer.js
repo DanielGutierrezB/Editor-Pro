@@ -15,8 +15,8 @@ function analyzeRhythm(transcriptJson) {
         allWords.push({
           text: w.text,
           start: w.start,
-          duration: w.duration,
-          end: w.start + w.duration,
+          duration: w.duration || 0,
+          end: w.start + (w.duration || 0),
           confidence: w.confidence || 1,
           eos: w.eos || false,
         });

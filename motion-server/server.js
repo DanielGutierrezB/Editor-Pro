@@ -213,11 +213,11 @@ process.on('SIGINT', () => {
 
 // Prevent server from crashing on uncaught errors
 process.on('uncaughtException', (err) => {
-  console.error('[motion-server] Uncaught exception (server stays alive):', err.message);
+  console.error('[motion-server] Uncaught exception (server stays alive):', err.stack || err.message);
   // Don't exit — keep serving
 });
 
 process.on('unhandledRejection', (reason) => {
-  console.error('[motion-server] Unhandled rejection (server stays alive):', String(reason));
+  console.error('[motion-server] Unhandled rejection (server stays alive):', reason && reason.stack ? reason.stack : String(reason));
   // Don't exit — keep serving
 });
