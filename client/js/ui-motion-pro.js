@@ -390,8 +390,7 @@
                 if (files.length === 0) return;
 
                 var refsContainer = document.getElementById("mp-style-refs");
-                _referenceImages = []; // reset for new selection
-                if (refsContainer) refsContainer.innerHTML = "";
+                // Don't clear — append to existing references
                 var totalFiles = files.length;
                 var loaded = 0;
 
@@ -418,7 +417,7 @@
                         if (loaded === totalFiles) {
                             if (importBtn) importBtn.textContent = "📁 Importar";
                             var analyzeBtn = document.getElementById("btn-mp-analyze-palette");
-                            if (analyzeBtn) analyzeBtn.style.display = "";
+                            if (analyzeBtn) { analyzeBtn.style.opacity = '1'; analyzeBtn.style.pointerEvents = 'auto'; }
                             showToast(_referenceImages.length + " referencia(s) cargada(s) — click 🎨 Analizar Paleta", "success");
                         }
                     };
@@ -435,6 +434,11 @@
                 if (motionPro) motionPro.customPalette = null;
                 localStorage.removeItem("mp_custom_palette");
                 _mpResetStyleSwatches();
+                _referenceImages = [];
+                var refsC = document.getElementById("mp-style-refs");
+                if (refsC) refsC.innerHTML = "";
+                var analyzeB = document.getElementById("btn-mp-analyze-palette");
+                if (analyzeB) { analyzeB.style.opacity = '0.4'; analyzeB.style.pointerEvents = 'none'; }
                 showToast("Paleta restaurada a default", "info");
                 if (window.EPLogger) EPLogger.log("motion-pro", "style-reset", "default palette");
             });
