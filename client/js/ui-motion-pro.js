@@ -1058,14 +1058,8 @@
                     }
                 }
 
-                // Simple gap fill: extend each clip's endTime to next clip's startTime
-                for (var g = 0; g < proposals.length - 1; g++) {
-                    var gapSize = proposals[g + 1].startTime - proposals[g].endTime;
-                    if (gapSize > 0.2) {
-                        // Extend previous clip to fill the gap
-                        proposals[g].endTime = proposals[g + 1].startTime;
-                    }
-                }
+                // No gap fill — clips use natural duration from analysis
+                // Gaps between clips are intentional (professor speaks without motion)
             } catch(e) {
                 showToast("ERROR PARSING: " + e.message, "error");
                 if (window.EPLogger) EPLogger.error("motion-pro", "parse-error", e.message + " | " + e.stack);
