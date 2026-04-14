@@ -597,7 +597,7 @@ class RemotionManager {
       fs.mkdirSync(rendersDir, { recursive: true });
     }
     // H.264 + yuv420p: ProRes intra-frame: cada frame es independiente, elimina frame corruption de H.264 inter-frame.
-    const outputPath = path.join(rendersDir, `${compositionId}.mov`);
+    const outputPath = path.join(rendersDir, `${compositionId}.mp4`);
 
     const npxPath = execSync('which npx', { encoding: 'utf8' }).trim();
     const args = [
@@ -605,12 +605,14 @@ class RemotionManager {
       path.join(this.projectPath, 'src', 'index.ts'),
       compositionId,
       outputPath,
-      '--codec=prores',
-      '--prores-profile=4444',
+      '--codec=h264',
+      '--pixel-format=yuv420p',
+      '--crf=15',
       
       
       '--muted',
-      '--image-format=png',
+      '--image-format=jpeg',
+      '--jpeg-quality=100',
       '--concurrency=1',
       '--timeout=60000',
       '--delay-render-timeout=30000',
@@ -629,7 +631,7 @@ class RemotionManager {
     proc.stderr.on('data', (data) => { stderr += data.toString(); });
 
     proc.on('close', (code) => {
-      const altPath = outputPath + '.mov';
+      const altPath = outputPath + '.mp4';
       const finalPath = fs.existsSync(outputPath)
         ? outputPath
         : fs.existsSync(altPath)
