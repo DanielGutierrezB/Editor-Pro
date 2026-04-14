@@ -132,7 +132,17 @@ git clone https://github.com/DanielGutierrezB/Editor-Pro.git
 ```
 Espera a que termine de descargar (~30 segundos).
 
-> 💡 Si te pide usuario/contraseña de GitHub, usa tu username de GitHub y un **Personal Access Token** como contraseña (no tu contraseña de GitHub). Pídele a Daniel que te ayude con esto.
+> 💡 Si te pide usuario/contraseña de GitHub, usa tu username de GitHub y un **Personal Access Token** como contraseña (no tu contraseña de GitHub).
+>
+> **Cómo crear tu Personal Access Token:**
+> 1. Ve a **https://github.com/settings/tokens**
+> 2. Click en **"Generate new token"** → **"Generate new token (classic)"**
+> 3. En **Note**: escribe "Editor-Pro" (o lo que quieras)
+> 4. En **Expiration**: selecciona "No expiration" (o 90 días)
+> 5. En **Select scopes**: marca solo ☑️ **repo** (acceso completo a repositorios)
+> 6. Click **"Generate token"**
+> 7. **COPIA el token** — empieza con `ghp_...` — solo se muestra una vez
+> 8. Cuando git te pida contraseña, pega este token en vez de tu contraseña de GitHub
 
 ---
 
