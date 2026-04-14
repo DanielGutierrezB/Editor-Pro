@@ -913,6 +913,42 @@
 
         var timedTranscript = buildTimedTranscript();
 
+        // Check "Solo en marcadores" toggle — filter motions to marker ranges
+        var markersOnly = document.getElementById("mp-markers-only");
+        if (markersOnly && markersOnly.checked) {
+            csInterface.evalScript('getSequenceMarkers()', function(res) {
+                try {
+                    var data = JSON.parse(res);
+                    if (data.markers && data.markers.length > 0) {
+                        var markerText = '\n\nGENERAR MOTIONS SOLO EN ESTOS RANGOS DE TIEMPO (marcadores del editor):\n';
+                        data.markers.forEach(function(m, i) {
+                            var mStart = parseFloat(m.startSeconds);
+                            var mEnd = parseFloat(m.endSeconds);
+                            // Point markers (zero duration): use ±5 seconds range
+                            if (Math.abs(mEnd - mStart) < 0.1) {
+                                mStart = Math.max(0, mStart - 5);
+                                mEnd = mEnd + 5;
+                            }
+                            markerText += '  Marcador ' + (i+1) + ': [' + mStart.toFixed(1) + 's - ' + mEnd.toFixed(1) + 's] ' + (m.name || '') + '\n';
+                        });
+                        markerText += '\nSOLO propón motions dentro de estos rangos. NO propongas motions fuera de los marcadores.\n';
+                        timedTranscript += markerText;
+
+                        if (window.EPLogger) EPLogger.log("motion-pro", "markers-filter", data.markers.length + " markers loaded");
+                        showToast(data.markers.length + " marcadores detectados", "info");
+                    } else {
+                        showToast("No hay marcadores en la secuencia", "error");
+                    }
+                } catch(e) {
+                    console.warn("[Motion-Pro] Marker parsing error:", e.message);
+                }
+                _mpProceedWithRhythmAndAnalysis(timedTranscript);
+            });
+        } else {
+            _mpProceedWithRhythmAndAnalysis(timedTranscript);
+        }
+
+        function _mpProceedWithRhythmAndAnalysis(timedTranscript) {
         // Enhance transcript with rhythm analysis
         if (state.transcriptJson && motionPro.serverRunning) {
             try {
@@ -932,6 +968,7 @@
             }
         } else {
             _mpRunAnalysis(timedTranscript);
+        }
         }
 
         function _mpRunAnalysis(transcript) {
