@@ -984,10 +984,19 @@
                         var prevShare = gap * (prevDensity / totalDensity);
                         var nextShare = gap * (nextDensity / totalDensity);
 
-                        // Extend previous clip's end
-                        prevClip.endTime = parseFloat((prevClip.endTime + prevShare).toFixed(1));
-                        // Move next clip's start earlier
-                        nextClip.startTime = parseFloat((nextClip.startTime - nextShare).toFixed(1));
+                        // Extend previous clip's end (but don't exceed next clip's original start)
+                        var newPrevEnd = parseFloat((prevClip.endTime + prevShare).toFixed(1));
+                        var newNextStart = parseFloat((nextClip.startTime - nextShare).toFixed(1));
+                        // Safety: ensure no overlap
+                        if (newNextStart > newPrevEnd && newNextStart > prevClip.endTime) {
+                            prevClip.endTime = newPrevEnd;
+                            nextClip.startTime = newNextStart;
+                        } else {
+                            // Just split the gap in half
+                            var mid = parseFloat(((prevClip.endTime + proposals[g + 1].startTime) / 2).toFixed(1));
+                            prevClip.endTime = mid;
+                            nextClip.startTime = mid;
+                        }
                     }
                 })();
             } catch(e) {
@@ -1020,6 +1029,7 @@
                 }
             });
 
+                console.log("[Motion-Pro] Proposals parsed:", proposals.length, "after negotiation+validation");
             motionPro.proposals = proposals;
             motionPro.saveState();
             mpShowStep(2);
