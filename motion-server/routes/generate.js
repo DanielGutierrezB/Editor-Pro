@@ -81,7 +81,8 @@ router.post('/', (req, res) => {
 router.post('/template', (req, res) => {
   const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette } = req.body;
   if (customPalette) console.log('[generate/template] Custom palette received:', customPalette.bg, customPalette.accent);
-  else console.log('[generate/template] No custom palette — using defaults');
+  else console.log("[generate/template] No custom palette");
+  console.log("[generate/template] provider=" + provider + " model=" + model + " apiKey=" + (apiKey ? apiKey.substring(0,10) + "..." : "EMPTY"));
 
   if (!proposal || !transcriptSegment) {
     return res.status(400).json({ error: 'Missing proposal or transcriptSegment' });
