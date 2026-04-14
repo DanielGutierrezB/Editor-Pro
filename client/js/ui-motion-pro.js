@@ -1671,7 +1671,11 @@
                 parts.push("[" + segStart.toFixed(1) + "s] " + (seg.text || ""));
             }
         }
-        return parts.length > 0 ? parts.join("\n") : state.transcript || "";
+        if (parts.length > 0) return parts.join("\n");
+        // Fallback: return just a portion around startTime/endTime instead of full transcript
+        var fullText = state.transcript || "";
+        if (fullText.length > 2000) return fullText.substring(0, 2000) + "...";
+        return fullText;
     }
 
     // ─── Place in timeline ────────────────────────────────────────

@@ -182,6 +182,7 @@
             });
         });
         req.on("error", function(err) { callback(err); });
+        req.setTimeout(180000, function() { req.destroy(); callback(new Error("Request timeout 180s")); }); // 3 min timeout
         req.write(data);
         req.end();
     };
