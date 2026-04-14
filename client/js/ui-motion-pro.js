@@ -451,13 +451,51 @@
         document.body.appendChild(_colorInput);
         var _activeSwatchKey = null;
 
+        var hexInput = document.getElementById('mp-hex-input');
+        
         document.querySelectorAll('.mp-swatch').forEach(function(sw) {
             sw.addEventListener('click', function() {
                 _activeSwatchKey = sw.getAttribute('data-color-key');
-                _colorInput.value = _rgbToHexFromStyle(sw.style.background || '#000000');
+                var currentHex = _rgbToHexFromStyle(sw.style.background || '#000000');
+                
+                // Show HEX input
+                if (hexInput) {
+                    hexInput.style.display = '';
+                    hexInput.value = currentHex;
+                    hexInput.focus();
+                    hexInput.select();
+                }
+                
+                // Also open native color picker
+                _colorInput.value = currentHex;
                 _colorInput.click();
             });
         });
+        
+        // HEX input handler
+        if (hexInput) {
+            hexInput.addEventListener('change', function() {
+                var hex = hexInput.value.trim();
+                if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+                    if (/^[0-9a-fA-F]{6}$/.test(hex)) hex = '#' + hex;
+                    else return;
+                }
+                if (_activeSwatchKey) {
+                    var sw = document.querySelector('.mp-swatch[data-color-key="' + _activeSwatchKey + '"]');
+                    if (sw) sw.style.background = hex;
+                    if (!state.customPalette) state.customPalette = {};
+                    state.customPalette[_activeSwatchKey] = hex;
+                    if (_activeSwatchKey === 'accent') state.customPalette.green = hex;
+                    if (motionPro) motionPro.customPalette = state.customPalette;
+                    localStorage.setItem("mp_custom_palette", JSON.stringify(state.customPalette));
+                    var label = document.getElementById("mp-style-label");
+                    if (label) label.textContent = "Personalizado";
+                }
+            });
+            hexInput.addEventListener('blur', function() {
+                hexInput.style.display = 'none';
+            });
+        }
 
         _colorInput.addEventListener('input', function() {
             if (!_activeSwatchKey) return;
