@@ -366,6 +366,9 @@
                                     thumb.title = "Frame capturado";
                                     refsContainer.appendChild(thumb);
                                 }
+                                // Enable analyze button
+                                var anBtn = document.getElementById("btn-mp-analyze-palette");
+                                if (anBtn) { anBtn.style.opacity = '1'; anBtn.style.pointerEvents = 'auto'; }
                                 showToast("Frame capturado — click 🎨 Analizar para generar paleta", "success");
                             } catch(readErr) {
                                 showToast("Error al leer frame: " + readErr.message, "error");
