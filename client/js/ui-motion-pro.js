@@ -1428,6 +1428,30 @@
     }
 
     function mpStartGeneration() {
+        if (state.mpGenerating) return;
+        
+        // Real health check before starting generation
+        motionPro.checkServer(function(running) {
+            if (!running) {
+                showToast("Servidor no disponible — reiniciando...", "error");
+                if (window.EPLogger) EPLogger.error("motion-pro", "generate-server-down", "server not responding, attempting restart");
+                var ext = csInterface.getSystemPath(SystemPath.EXTENSION);
+                motionPro.stopServer();
+                motionPro.startServer(ext, function(err) {
+                    mpUpdateServerUI();
+                    if (err) {
+                        showToast("No se pudo iniciar el servidor: " + err.message, "error");
+                    } else {
+                        showToast("Servidor reiniciado — intenta generar de nuevo", "success");
+                    }
+                });
+                return;
+            }
+            _mpDoGenerate();
+        });
+    }
+    
+    function _mpDoGenerate() {
         if (window.EPLogger) EPLogger.log("motion-pro", "generate-attempt", "generating=" + state.mpGenerating + " server=" + motionPro.serverRunning + " proposals=" + motionPro.proposals.length);
         if (state.mpGenerating) return;
         if (!motionPro.serverRunning) {
