@@ -32,6 +32,7 @@
         beforeafter: { label: "Antes/Después", color: "#f472b6" },
         funnel:      { label: "Funnel",      color: "#a3e635" },
         timeline:    { label: "Timeline",    color: "#38bdf8" },
+        ui:          { label: "UI",          color: "#94a3b8" },
     };
 
     function MotionPro() {

@@ -76,7 +76,7 @@ class TemplateManager {
     }
 
     // Match timestamps for arrays with text
-    const arrayKeysToMatch = ['ITEMS', 'CARDS_DATA', 'NODES', 'LIST_ITEMS', 'STEPS_DATA', 'STAGES', 'EVENTS', 'REVEAL_ITEMS'];
+    const arrayKeysToMatch = ['ITEMS', 'CARDS_DATA', 'NODES', 'LIST_ITEMS', 'STEPS_DATA', 'STAGES', 'EVENTS', 'REVEAL_ITEMS', 'BARS', 'METRICS'];
     arrayKeysToMatch.forEach(key => {
       if (contentValues[key] && Array.isArray(contentValues[key])) {
         contentValues[key] = this.matchTimestamps(contentValues[key], transcriptSegment, proposalStartTime || 0);
