@@ -210,7 +210,7 @@
     // ─── Generate + Render pipeline ───────────────────────────────
 
     // Configurable timeout for the generate→render pipeline (default 5 minutes)
-    var MP_PIPELINE_TIMEOUT_MS = 2 * 60 * 1000; // 2 min per clip (was 10 min)
+    var MP_PIPELINE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per clip
     try {
         var savedTimeout = localStorage.getItem("editorpro_mp_pipeline_timeout");
         if (savedTimeout) MP_PIPELINE_TIMEOUT_MS = parseInt(savedTimeout, 10) || MP_PIPELINE_TIMEOUT_MS;

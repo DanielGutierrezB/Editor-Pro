@@ -1571,8 +1571,12 @@
             if (hint) hint.textContent = (total - errors.length) + "/" + total + " generados en " + totalTime + "s";
 
             if (errors.length > 0) {
-                if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", done + "/" + total + " done, " + errors.length + " errors");
-                showToast("✅ " + (total - errors.length) + " motions generados en " + totalTime + "s (" + errors.length + " errores)", "error");
+                var timeoutCount = errors.filter(function(e) { return e.error && (e.error.indexOf("timeout") !== -1 || e.error.indexOf("Timeout") !== -1); }).length;
+                var otherCount = errors.length - timeoutCount;
+                if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", done + "/" + total + " done, " + errors.length + " errors (" + timeoutCount + " timeouts)");
+                var errDetail = timeoutCount > 0 ? (timeoutCount + " timeouts") : "";
+                if (otherCount > 0) errDetail += (errDetail ? ", " : "") + otherCount + " errores";
+                showToast("⚠️ " + (total - errors.length) + "/" + total + " motions generados en " + totalTime + "s — " + errDetail + ". Los que fallaron se pueden reintentar.", "error");
             } else {
                 if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", total + "/" + total + " done, 0 errors");
                 showToast("✅ " + total + " motions generados en " + totalTime + "s", "success");
@@ -1663,6 +1667,10 @@
                     errors.push({ id: proposal.id, error: err.message });
                     if (window.EPLogger) EPLogger.error("motion-pro", "generate-item", proposal.id + ": " + err.message);
                     console.warn("[Motion-Pro] Generation error:", err.message);
+                    // Immediate toast for timeout errors so editor doesn't keep waiting
+                    if (errMsg.indexOf("timeout") !== -1 || errMsg.indexOf("Timeout") !== -1) {
+                        showToast("⏱ Timeout en " + proposal.id + " — saltando al siguiente", "warning");
+                    }
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
                     launchWorker(); // Launch next
                 } else {
