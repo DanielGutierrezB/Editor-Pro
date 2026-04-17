@@ -129,7 +129,7 @@ const STEPS_DATA = [
 // FIXED IMPLEMENTATION — DO NOT MODIFY
 // ============================================================
 
-function stepStartFrame(step: {time?: number}, index: number, totalSteps: number, totalFrames: number): number {
+function stepStartFrame(step: {time?: number; icon?: string; title?: string; desc?: string; accent?: string}, index: number, totalSteps: number, totalFrames: number): number {
   if (step.time !== undefined && step.time > 0) {
     return Math.round(step.time * 30);
   }

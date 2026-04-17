@@ -1584,6 +1584,7 @@ html, body {
 .toast.show { bottom: 16px; }
 .toast-success { background: var(--success); color: #0c0c0e; }
 .toast-error { background: var(--error); color: #fff; }
+.toast-warning { background: #f59e0b; color: #0c0c0e; }
 .toast-info { background: var(--info); color: #0c0c0e; }
 
 /* ─── Custom Tooltips ─── */

@@ -50,6 +50,7 @@ The "time" is in seconds from the START of this clip (not absolute time). If the
     beforeafter: '{"TITLE":"...","BEFORE":{"label":"ANTES","items":[{"text":"...","time":0}]},"AFTER":{"label":"AHORA","items":[{"text":"...","time":0}]}}',
     funnel: '{"TITLE":"...","STAGES":[{"icon":"...","title":"...","pct":"100%","accent":"accent","time":0}]}',
     timeline: '{"TITLE":"...","EVENTS":[{"icon":"...","label":"...","time":"...","accent":"accent","showTime":0}]}',
+    ui: '{"TITLE":"...","FIELDS":[{"label":"...","value":"..."}],"ACCENT_KEY":"accent"}',
   };
 
   const userMsg = `Template type: ${type}
