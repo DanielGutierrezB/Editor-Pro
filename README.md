@@ -385,7 +385,7 @@ Editor-Pro/
 ├── Prompts/         → Las instrucciones de IA para generar motions
 ├── CSXS/            → Configuración de la extensión de Premiere
 ├── dist/            → Versión empaquetada (ZXP)
-└── INSTALL.md       → Este documento
+└── README.md        → Este documento
 ```
 
 ---
