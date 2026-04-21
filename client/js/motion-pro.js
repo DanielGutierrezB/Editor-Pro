@@ -98,6 +98,9 @@
                 return;
             }
 
+            // Kill any zombie process hogging the port before spawning
+            self._killZombieOnPort(function() {
+
             var proc = childProcess.spawn("node", [serverJs], {
                 cwd: serverDir,
                 env: Object.assign({}, process.env, { MP_PORT: String(SERVER_PORT) }),
@@ -143,15 +146,43 @@
                     });
                 }
             }, 15000); // 15 seconds — first start can be slow
+
+            }); // end _killZombieOnPort
         });
     };
 
-    MotionPro.prototype.stopServer = function() {
+    MotionPro.prototype.stopServer = function(callback) {
         if (this.serverProcess) {
             try { this.serverProcess.kill(); } catch(e) {}
             this.serverProcess = null;
         }
         this.serverRunning = false;
+        // Also kill any zombie processes on the port
+        this._killZombieOnPort(callback || function() {});
+    };
+
+    /**
+     * Kill any process listening on SERVER_PORT (zombie cleanup).
+     * Uses lsof to find the PID and sends SIGKILL.
+     */
+    MotionPro.prototype._killZombieOnPort = function(callback) {
+        if (!childProcess) return callback();
+        var port = SERVER_PORT;
+        childProcess.exec(
+            "/usr/sbin/lsof -ti tcp:" + port + " 2>/dev/null",
+            { timeout: 5000 },
+            function(err, stdout) {
+                if (err || !stdout || !stdout.trim()) return callback();
+                var pids = stdout.trim().split("\n").map(function(p) { return p.trim(); }).filter(Boolean);
+                if (pids.length === 0) return callback();
+                console.log("[Motion-Pro] Killing zombie processes on port " + port + ": " + pids.join(", "));
+                if (window.EPLogger) window.EPLogger.log("motion-pro", "kill-zombie", "Killing PIDs on port " + port + ": " + pids.join(", "));
+                childProcess.exec("kill -9 " + pids.join(" ") + " 2>/dev/null", { timeout: 3000 }, function() {
+                    // Brief delay to let the port free up
+                    setTimeout(callback, 500);
+                });
+            }
+        );
     };
 
     // ─── Health Check & Auto-Restart ──────────────────────────────

@@ -2757,6 +2757,23 @@
     // Check on startup after 5 seconds
     setTimeout(_checkForUpdates, 5000);
 
+    /**
+     * Kill motion-server before reload to prevent zombie processes.
+     * Calls callback() when done (or immediately if MotionPro unavailable).
+     */
+    function _cleanupBeforeReload(callback) {
+        try {
+            if (window.motionPro && typeof window.motionPro.stopServer === "function") {
+                console.log("[Editor-Pro] Stopping motion-server before reload...");
+                window.motionPro.stopServer(function() { callback(); });
+                // Safety: if stopServer hangs, reload anyway after 2s
+                setTimeout(callback, 2000);
+                return;
+            }
+        } catch(_e) {}
+        callback();
+    }
+
     window.checkAndReload = function() {
         var btn = document.getElementById("btn-reload");
         var originalHTML = _originalReloadHTML || btn.innerHTML;
@@ -2780,7 +2797,7 @@
                                 if (!err2) {
                                     btn.innerHTML = "✅";
                                     btn.title = "Actualizado! Recargando...";
-                                    setTimeout(function() { location.reload(); }, 500);
+                                    _cleanupBeforeReload(function() { location.reload(); });
                                 } else {
                                     btn.innerHTML = "❌";
                                     btn.title = "Error: " + (err2.message || "git pull falló");
@@ -2791,12 +2808,12 @@
                     } else {
                         btn.innerHTML = "✅";
                         btn.title = "Sin updates — recargando...";
-                        setTimeout(function() { location.reload(); }, 300);
+                        _cleanupBeforeReload(function() { location.reload(); });
                     }
                 }
             );
         } catch(e) {
-            location.reload();
+            _cleanupBeforeReload(function() { location.reload(); });
         }
     };
 
