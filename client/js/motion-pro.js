@@ -71,7 +71,7 @@
             if (callback) callback(false);
         });
         req.setTimeout(3000, function() {
-            req.abort();
+            req.destroy();
             self.serverRunning = false;
             if (callback) callback(false);
         });
@@ -160,6 +160,19 @@
      * Check if motion-server is alive. If not, attempt to restart it.
      * Calls callback(true) if server is OK, callback(false) if unrecoverable.
      */
+    // Cached CSInterface instance for health checks (avoid creating new ones repeatedly)
+    var _cachedCSInterface = null;
+    function _getCSInterface() {
+        if (!_cachedCSInterface) {
+            try {
+                if (typeof CSInterface !== "undefined") {
+                    _cachedCSInterface = new CSInterface();
+                }
+            } catch(_e) {}
+        }
+        return _cachedCSInterface;
+    }
+
     MotionPro.prototype._healthCheckOrRestart = function(callback) {
         var self = this;
         self.checkServer(function(running) {
@@ -178,10 +191,9 @@
             // Try to find extensionPath for startServer
             var extensionPath = "";
             try {
-                // CEP extension path detection
-                if (typeof CSInterface !== "undefined") {
-                    var csInterface = new CSInterface();
-                    extensionPath = csInterface.getSystemPath("extension");
+                var csi = _getCSInterface();
+                if (csi) {
+                    extensionPath = csi.getSystemPath("extension");
                 } else if (pathMod) {
                     extensionPath = pathMod.resolve(__dirname, "..");
                 }
@@ -215,6 +227,13 @@
             callback(new Error("HTTP not available"));
             return;
         }
+        var called = false;
+        function safeCallback(err, data) {
+            if (called) return;
+            called = true;
+            if (err) return callback(err);
+            callback(null, data);
+        }
         var data = JSON.stringify(body);
         var req = http.request({
             hostname: "localhost",
@@ -230,14 +249,14 @@
             res.on("data", function(c) { chunks += c; });
             res.on("end", function() {
                 try {
-                    callback(null, JSON.parse(chunks));
+                    safeCallback(null, JSON.parse(chunks));
                 } catch(e) {
-                    callback(new Error("Parse error: " + chunks.substring(0, 200)));
+                    safeCallback(new Error("Parse error: " + chunks.substring(0, 200)));
                 }
             });
         });
-        req.on("error", function(err) { callback(err); });
-        req.setTimeout(300000, function() { req.destroy(); callback(new Error("Request timeout 300s")); }); // 5 min timeout
+        req.on("error", function(err) { safeCallback(err); });
+        req.setTimeout(120000, function() { req.destroy(); safeCallback(new Error("Request timeout 120s")); }); // 2 min (template gen only)
         req.write(data);
         req.end();
     };
@@ -247,18 +266,79 @@
             callback(new Error("HTTP not available"));
             return;
         }
+        var called = false;
+        function safeCallback(err, data) {
+            if (called) return;
+            called = true;
+            if (err) return callback(err);
+            callback(null, data);
+        }
         var req = http.get(SERVER_URL + path, function(res) {
             var data = "";
             res.on("data", function(c) { data += c; });
             res.on("end", function() {
                 try {
-                    callback(null, JSON.parse(data));
+                    safeCallback(null, JSON.parse(data));
                 } catch(e) {
-                    callback(new Error("Parse error"));
+                    safeCallback(new Error("Parse error"));
                 }
             });
         });
-        req.on("error", function(err) { callback(err); });
+        req.on("error", function(err) { safeCallback(err); });
+        req.setTimeout(15000, function() { req.destroy(); safeCallback(new Error("GET timeout 15s")); });
+    };
+
+    // ─── Async Render Polling ─────────────────────────────────────
+
+    /**
+     * Poll GET /api/render/status/:jobId every 3 seconds until complete or error.
+     * Calls callback(err, result) when done.
+     */
+    MotionPro.prototype._pollRenderJob = function(jobId, callback) {
+        var self = this;
+        var pollInterval = 3000; // 3 seconds
+        var maxPolls = 140; // 140 × 3s = ~7 min safety net
+        var pollCount = 0;
+
+        function poll() {
+            pollCount++;
+            if (pollCount > maxPolls) {
+                return callback(new Error("Render poll timeout (" + (maxPolls * pollInterval / 1000) + "s) for job " + jobId));
+            }
+            self._get("/api/render/status/" + jobId, function(err, status) {
+                if (err) {
+                    // Network error polling — retry once after a brief delay
+                    setTimeout(function() {
+                        self._get("/api/render/status/" + jobId, function(err2, status2) {
+                            if (err2) return callback(err2);
+                            handleStatus(status2);
+                        });
+                    }, 2000);
+                    return;
+                }
+                handleStatus(status);
+            });
+        }
+
+        function handleStatus(status) {
+            if (!status) return callback(new Error("Empty status response for job " + jobId));
+
+            if (status.error && status.status === "error") {
+                return callback(new Error("Render error: " + status.error));
+            }
+            if (status.status === "complete" && status.result) {
+                return callback(null, status.result);
+            }
+            if (status.status === "queued" || status.status === "rendering") {
+                setTimeout(poll, pollInterval);
+                return;
+            }
+            // Unknown status
+            return callback(new Error("Unknown job status: " + status.status));
+        }
+
+        // Start first poll immediately
+        poll();
     };
 
     // ─── Generate + Render pipeline ───────────────────────────────
@@ -324,47 +404,59 @@
                     return callback(new Error("Motion-Pro server not responding before render"));
                 }
 
-            self._post("/api/render", renderBody, function(renderErr, renderResult) {
+            // Start async render — returns jobId immediately
+            self._post("/api/render", renderBody, function(renderErr, renderResponse) {
                 if (timedOut) return;
-                clearTimeout(pipelineTimer);
-                if (renderErr) return callback(renderErr);
-                if (renderResult.error) return callback(new Error(renderResult.error));
+                if (renderErr) { clearTimeout(pipelineTimer); return callback(renderErr); }
+                if (renderResponse.error) { clearTimeout(pipelineTimer); return callback(new Error(renderResponse.error)); }
 
-                var versionData = {
-                    version: version,
-                    compositionId: result.compositionId,
-                    tsxPath: result.tsxPath,
-                    mp4Path: renderResult.mp4Path,
-                    mediaDurationSec: typeof renderResult.mediaDurationSec === "number" ? renderResult.mediaDurationSec : null,
-                    status: "rendered",
-                    feedback: "",
-                    createdAt: new Date().toISOString()
-                };
-
-                if (existingMotion) {
-                    existingMotion.versions.push(versionData);
-                    existingMotion.activeVersion = version;
-                } else {
-                    var motion = {
-                        id: proposal.id,
-                        startTime: proposal.startTime,
-                        endTime: proposal.endTime,
-                        type: proposal.type,
-                        description: proposal.description,
-                        group: proposal.group || '',
-                        baseTrackIndex: -1,
-                        versions: [versionData],
-                        activeVersion: version,
-                        placedInTimeline: false
-                    };
-                    self.motions.push(motion);
+                if (!renderResponse.jobId) {
+                    clearTimeout(pipelineTimer);
+                    return callback(new Error("Server did not return jobId"));
                 }
 
-                callback(null, {
-                    motionId: proposal.id,
-                    version: version,
-                    mp4Path: renderResult.mp4Path,
-                    compositionId: result.compositionId
+                // Poll until render completes
+                self._pollRenderJob(renderResponse.jobId, function(pollErr, renderResult) {
+                    if (timedOut) return;
+                    clearTimeout(pipelineTimer);
+                    if (pollErr) return callback(pollErr);
+
+                    var versionData = {
+                        version: version,
+                        compositionId: result.compositionId,
+                        tsxPath: result.tsxPath,
+                        mp4Path: renderResult.mp4Path,
+                        mediaDurationSec: typeof renderResult.mediaDurationSec === "number" ? renderResult.mediaDurationSec : null,
+                        status: "rendered",
+                        feedback: "",
+                        createdAt: new Date().toISOString()
+                    };
+
+                    if (existingMotion) {
+                        existingMotion.versions.push(versionData);
+                        existingMotion.activeVersion = version;
+                    } else {
+                        var motion = {
+                            id: proposal.id,
+                            startTime: proposal.startTime,
+                            endTime: proposal.endTime,
+                            type: proposal.type,
+                            description: proposal.description,
+                            group: proposal.group || '',
+                            baseTrackIndex: -1,
+                            versions: [versionData],
+                            activeVersion: version,
+                            placedInTimeline: false
+                        };
+                        self.motions.push(motion);
+                    }
+
+                    callback(null, {
+                        motionId: proposal.id,
+                        version: version,
+                        mp4Path: renderResult.mp4Path,
+                        compositionId: result.compositionId
+                    });
                 });
             });
             }); // end _healthCheckOrRestart before render
@@ -380,6 +472,12 @@
         var currentVersion = motion.versions[motion.versions.length - 1];
         var newVersion = motion.versions.length + 1;
 
+        var timedOut = false;
+        var pipelineTimer = setTimeout(function() {
+            timedOut = true;
+            callback(new Error("Feedback pipeline timeout (" + Math.round(MP_PIPELINE_TIMEOUT_MS / 1000) + "s) for " + motionId));
+        }, MP_PIPELINE_TIMEOUT_MS);
+
         var body = {
             compositionId: currentVersion.compositionId,
             feedback: feedback,
@@ -394,35 +492,50 @@
         };
 
         self._post("/api/feedback", body, function(err, result) {
-            if (err) return callback(err);
-            if (result.error) return callback(new Error(result.error));
+            if (timedOut) return;
+            if (err) { clearTimeout(pipelineTimer); return callback(err); }
+            if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
 
             var renderBody = { compositionId: result.compositionId, sessionDir: outputDir || "" };
             if (outputDir) renderBody.outputDir = outputDir;
 
-            self._post("/api/render", renderBody, function(renderErr, renderResult) {
-                if (renderErr) return callback(renderErr);
-                if (renderResult.error) return callback(new Error(renderResult.error));
+            // Start async render — returns jobId immediately
+            self._post("/api/render", renderBody, function(renderErr, renderResponse) {
+                if (timedOut) return;
+                if (renderErr) { clearTimeout(pipelineTimer); return callback(renderErr); }
+                if (renderResponse.error) { clearTimeout(pipelineTimer); return callback(new Error(renderResponse.error)); }
 
-                var versionData = {
-                    version: newVersion,
-                    compositionId: result.compositionId,
-                    tsxPath: result.tsxPath,
-                    mp4Path: renderResult.mp4Path,
-                    mediaDurationSec: typeof renderResult.mediaDurationSec === "number" ? renderResult.mediaDurationSec : null,
-                    status: "rendered",
-                    feedback: feedback,
-                    createdAt: new Date().toISOString()
-                };
+                if (!renderResponse.jobId) {
+                    clearTimeout(pipelineTimer);
+                    return callback(new Error("Server did not return jobId"));
+                }
 
-                motion.versions.push(versionData);
-                motion.activeVersion = newVersion;
+                // Poll until render completes
+                self._pollRenderJob(renderResponse.jobId, function(pollErr, renderResult) {
+                    if (timedOut) return;
+                    clearTimeout(pipelineTimer);
+                    if (pollErr) return callback(pollErr);
 
-                callback(null, {
-                    motionId: motionId,
-                    version: newVersion,
-                    mp4Path: renderResult.mp4Path,
-                    compositionId: result.compositionId
+                    var versionData = {
+                        version: newVersion,
+                        compositionId: result.compositionId,
+                        tsxPath: result.tsxPath,
+                        mp4Path: renderResult.mp4Path,
+                        mediaDurationSec: typeof renderResult.mediaDurationSec === "number" ? renderResult.mediaDurationSec : null,
+                        status: "rendered",
+                        feedback: feedback,
+                        createdAt: new Date().toISOString()
+                    };
+
+                    motion.versions.push(versionData);
+                    motion.activeVersion = newVersion;
+
+                    callback(null, {
+                        motionId: motionId,
+                        version: newVersion,
+                        mp4Path: renderResult.mp4Path,
+                        compositionId: result.compositionId
+                    });
                 });
             });
         });
