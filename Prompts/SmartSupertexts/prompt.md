@@ -3,19 +3,19 @@ Analiza la siguiente transcripción de una clase educativa grabada en video (tí
 TRANSCRIPCIÓN COMPLETA (los tiempos entre corchetes están en SEGUNDOS, ej: [30.0s - 35.0s] significa segundo 30 al 35):
 {TRANSCRIPT}
 
-Tu tarea es proponer SUPERTEXTOS que acompañen al profesor **de forma casi continua**. Cada idea, concepto, dato, regla, ejemplo o conclusión que el profesor verbalice puede traducirse a un texto breve en pantalla que expanda, resuma o refuerce lo dicho. **No dejes tiempos vacíos**: si el profesor está hablando de algo que aporta al aprendizaje, debe haber un supertexto acompañándolo.
+Tu tarea es proponer SUPERTEXTOS que acompañen al profesor **de forma casi continua**. Cada idea, concepto, dato, regla, ejemplo o conclusión que el profesor verbalice puede traducirse a un texto breve en pantalla que expanda, resuma o refuerce lo dicho. **No deben ser transcripciones literales, sino abstracciones de conceptos e ideas que refuercen la recepción visual del contenido para quien lo ve**. **No dejes tiempos vacíos**: si el profesor está hablando de algo que aporta al aprendizaje, debe haber un supertexto acompañándolo. Para seleccionar los destacados, filtra respondiendo a la pregunta: ¿Esto aporta al reforzamiento de la idea? Si la respuesta es sí, adelante. Si la respuesta es NO, omítelo.
 
 COMPOSICIÓN Y LECTURA (MUY IMPORTANTE — encaja con MOGRT de 2 líneas y leading ~39px):
 - El texto en pantalla suele ir en el **tercio izquierdo**; el presentador ocupa la zona derecha. **No escribas una sola línea muy larga** que se meta en la cara del presentador.
-- Si una idea necesita más de **~40 caracteres** en una línea, divide en **dos líneas** usando salto explícito: en el JSON pon el carácter **\n** entre líneas (ej: `"línea corta\nsegunda línea"`). El MOGRT soporta hasta 2 líneas con salto `\n`.
+- Si una idea necesita más de **~40 caracteres** en una línea, divide en **dos líneas** usando salto explícito: en el JSON pon el carácter **\n** entre líneas (ej: `"línea corta\nsegunda línea"`). El MOGRT soporta hasta 2 líneas con salto `\n`. Al dividir líneas, evita **huérfanas** (conjunciones o preposiciones sueltas al final de una línea) y **viudas** (última palabra aislada en la segunda línea).
 - Si puedes decir lo mismo en **menos palabras** sin perder sentido, hazlo. Ofrece **variante breve**; el aire visual importa tanto como la frase completa.
 - Palabras clave del profesor (CTR, CPA, Meta, funnel…) pueden ir solas en una línea si ganan claridad.
 - Máximo aproximado **~90 caracteres totales** por supertexto (en 1 o 2 líneas).
 
 TIPOS DE SUPERTEXTO:
-- TÍTULOS DE TEMAS: nuevo bloque o sección
-- BULLETS: ideas clave
-- PASO A PASO: procedimientos numerados
+- TÍTULOS DE TEMAS: nuevo bloque o sección. **Tipografía más grande, otro color — marcan cambio de tema.**
+- BULLETS: ideas clave. **Aparecen uno a uno, conforme el transcript va señalándolo.**
+- PASO A PASO: procedimientos numerados. **Aparecen uno a uno, conforme el transcript va señalándolo.**
 - DEFINICIONES: términos nuevos
 - DATOS CLAVE: números, URLs, nombres técnicos
 - HIGHLIGHTS: frases memorables o reglas ("no toques la campaña…")
@@ -34,6 +34,7 @@ AGRUPACIÓN (campo 'group') — DETECCIÓN EXHAUSTIVA DE LISTAS:
 
 RITMO Y CANTIDAD (cobertura máxima, no cuota baja):
 - **Filosofía: si el profesor lo dice y aporta, merece un supertexto.** No te limites a "momentos clave" aislados — acompaña el discurso de forma continua, como subtítulos pedagógicos enriquecidos.
+- Los supertextos no son transcripciones literales, sino refuerzos visuales — equivalentes a un resaltado tipográfico en un impreso: resaltan ideas, no compiten con los subtítulos.
 - El alumno debería poder seguir la clase SOLO con los supertextos y entender la estructura completa del contenido.
 - Propón textos que **expandan** (añaden contexto visual a lo que se dice), **resuman** (sintetizan una explicación larga en una frase), o **refuercen** (repiten la palabra clave textualmente).
 - **No dejes huecos mayores a ~15 s** sin supertexto, salvo que el profesor haga una pausa real o cuente una anécdota sin valor pedagógico.

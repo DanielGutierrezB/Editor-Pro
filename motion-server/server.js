@@ -213,8 +213,13 @@ process.on('SIGINT', () => {
 
 // Prevent server from crashing on uncaught errors
 process.on('uncaughtException', (err) => {
-  console.error('[motion-server] Uncaught exception (server stays alive):', err.stack || err.message);
-  // Don't exit — keep serving
+  console.error('[motion-server] Uncaught exception:', err.stack || err.message);
+  // EADDRINUSE is fatal — server can't function without the port
+  if (err.code === 'EADDRINUSE') {
+    console.error('[motion-server] Port in use — exiting with code 1');
+    process.exit(1);
+  }
+  // Other exceptions — keep serving
 });
 
 process.on('unhandledRejection', (reason) => {
