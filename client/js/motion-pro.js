@@ -154,6 +154,60 @@
         this.serverRunning = false;
     };
 
+    // ─── Health Check & Auto-Restart ──────────────────────────────
+
+    /**
+     * Check if motion-server is alive. If not, attempt to restart it.
+     * Calls callback(true) if server is OK, callback(false) if unrecoverable.
+     */
+    MotionPro.prototype._healthCheckOrRestart = function(callback) {
+        var self = this;
+        self.checkServer(function(running) {
+            if (running) return callback(true);
+
+            console.warn("[Motion-Pro] Server not responding, attempting restart...");
+            if (window.EPLogger) window.EPLogger.log("motion-pro", "health-restart", "Server not responding, restarting...");
+
+            // Kill any zombie process
+            if (self.serverProcess) {
+                try { self.serverProcess.kill(); } catch(_e) {}
+                self.serverProcess = null;
+            }
+            self.serverRunning = false;
+
+            // Try to find extensionPath for startServer
+            var extensionPath = "";
+            try {
+                // CEP extension path detection
+                if (typeof CSInterface !== "undefined") {
+                    var csInterface = new CSInterface();
+                    extensionPath = csInterface.getSystemPath("extension");
+                } else if (pathMod) {
+                    extensionPath = pathMod.resolve(__dirname, "..");
+                }
+            } catch(_e) {
+                if (pathMod) extensionPath = pathMod.resolve(__dirname, "..");
+            }
+
+            if (!extensionPath) {
+                console.error("[Motion-Pro] Cannot determine extension path for restart");
+                return callback(false);
+            }
+
+            self.startServer(extensionPath, function(err) {
+                if (err) {
+                    console.error("[Motion-Pro] Restart failed:", err.message);
+                    if (window.EPLogger) window.EPLogger.error("motion-pro", "health-restart-fail", err.message);
+                    return callback(false);
+                }
+                console.log("[Motion-Pro] Server restarted successfully");
+                if (window.EPLogger) window.EPLogger.log("motion-pro", "health-restart-ok", "Server restarted");
+                // Brief delay to let server stabilize
+                setTimeout(function() { callback(true); }, 1000);
+            });
+        });
+    };
+
     // ─── HTTP helpers ─────────────────────────────────────────────
 
     MotionPro.prototype._post = function(path, body, callback) {
@@ -183,7 +237,7 @@
             });
         });
         req.on("error", function(err) { callback(err); });
-        req.setTimeout(180000, function() { req.destroy(); callback(new Error("Request timeout 180s")); }); // 3 min timeout
+        req.setTimeout(300000, function() { req.destroy(); callback(new Error("Request timeout 300s")); }); // 5 min timeout
         req.write(data);
         req.end();
     };
@@ -210,7 +264,7 @@
     // ─── Generate + Render pipeline ───────────────────────────────
 
     // Configurable timeout for the generate→render pipeline (default 5 minutes)
-    var MP_PIPELINE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per clip
+    var MP_PIPELINE_TIMEOUT_MS = 7 * 60 * 1000; // 7 min per clip (includes health check + retry margin)
     try {
         var savedTimeout = localStorage.getItem("editorpro_mp_pipeline_timeout");
         if (savedTimeout) MP_PIPELINE_TIMEOUT_MS = parseInt(savedTimeout, 10) || MP_PIPELINE_TIMEOUT_MS;
@@ -248,6 +302,13 @@
             customPalette: self.customPalette || null
         };
 
+        // Health check before starting the pipeline
+        self._healthCheckOrRestart(function(healthOk) {
+            if (!healthOk) {
+                clearTimeout(pipelineTimer);
+                return callback(new Error("Motion-Pro server not responding after restart attempt"));
+            }
+
         self._post("/api/generate/template", body, function(err, result) {
             if (timedOut) return;
             if (err) { clearTimeout(pipelineTimer); return callback(err); }
@@ -255,6 +316,13 @@
 
             var renderBody = { compositionId: result.compositionId, sessionDir: outputDir || "" };
             if (outputDir) renderBody.outputDir = outputDir;
+
+            // Health check before render (the server may have died during generate)
+            self._healthCheckOrRestart(function(renderHealthOk) {
+                if (!renderHealthOk) {
+                    clearTimeout(pipelineTimer);
+                    return callback(new Error("Motion-Pro server not responding before render"));
+                }
 
             self._post("/api/render", renderBody, function(renderErr, renderResult) {
                 if (timedOut) return;
@@ -299,7 +367,9 @@
                     compositionId: result.compositionId
                 });
             });
+            }); // end _healthCheckOrRestart before render
         });
+        }); // end _healthCheckOrRestart before pipeline
     };
 
     MotionPro.prototype.regenerateWithFeedback = function(motionId, feedback, aiConfig, callback, outputDir) {

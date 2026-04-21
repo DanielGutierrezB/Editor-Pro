@@ -1633,11 +1633,15 @@
 
                 if (err) {
                     var errMsg = err.message || '';
-                    // Retry once on network errors
-                    if ((errMsg.includes('ECONNRESET') || errMsg.includes('EPIPE') || errMsg.includes('ECONNREFUSED')) && !proposal._retried) {
+                    // Retry once on network/timeout/socket errors
+                    var isRetryable = errMsg.includes('ECONNRESET') || errMsg.includes('EPIPE') || errMsg.includes('ECONNREFUSED')
+                        || errMsg.includes('timeout') || errMsg.includes('Timeout') || errMsg.includes('socket hang up')
+                        || errMsg.includes('not responding');
+                    if (isRetryable && !proposal._retried) {
                         proposal._retried = true;
-                        console.log('[Motion-Pro] Retrying ' + proposal.id + ' after network error...');
+                        console.log('[Motion-Pro] Retrying ' + proposal.id + ' after error: ' + errMsg);
                         if (window.EPLogger) EPLogger.log("motion-pro", "retry", proposal.id + " — " + errMsg);
+                        showToast("🔄 Reintentando " + proposal.id + "...", "info");
                         done--; // Don't count as done yet
                         activeWorkers++;
                         setTimeout(function() {
