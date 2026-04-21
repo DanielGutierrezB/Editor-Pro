@@ -156,49 +156,60 @@ class RemotionManager {
    * The AI often uses Globe, Facebook, Camera etc. instead of actual brand logos.
    */
   _replaceBrandIcons(tsxCode) {
-    const brandMap = {
-      'meta': { icons: ['Globe', 'Building', 'Layers'], svg: 'meta.svg' },
-      'facebook': { icons: ['Facebook', 'ThumbsUp'], svg: 'facebook.svg' },
-      'instagram': { icons: ['Camera', 'Image', 'Aperture'], svg: 'instagram.svg' },
-      'whatsapp': { icons: ['MessageCircle', 'Phone', 'MessageSquare'], svg: 'whatsapp.svg' },
-      'google': { icons: ['Search', 'Chrome'], svg: 'google.svg' },
-      'youtube': { icons: ['Play', 'Video', 'PlayCircle'], svg: 'youtube.svg' },
-      'tiktok': { icons: ['Music', 'Film'], svg: 'tiktok.svg' },
-      'linkedin': { icons: ['Linkedin', 'Briefcase'], svg: 'linkedin.svg' },
-      'twitter': { icons: ['Twitter', 'AtSign', 'Bird'], svg: 'twitter.svg' },
-      'telegram': { icons: ['Send', 'MessageCircle'], svg: 'telegram.svg' },
-      'slack': { icons: ['Hash', 'MessageSquare'], svg: 'slack.svg' },
-      'github': { icons: ['Github', 'Code'], svg: 'github.svg' },
-      'apple': { icons: ['Apple', 'Smartphone'], svg: 'apple.svg' },
-      'microsoft': { icons: ['Monitor', 'Grid'], svg: 'microsoft.svg' },
-      'amazon': { icons: ['ShoppingCart', 'Package'], svg: 'amazon.svg' },
-      'netflix': { icons: ['Film', 'Tv'], svg: 'netflix.svg' },
-      'spotify': { icons: ['Music', 'Headphones'], svg: 'spotify.svg' },
-    };
+    // Ordered by specificity: brands with unique icon names first, generic ones last.
+    // This prevents ambiguous matches (e.g., Music matching TikTok before Spotify).
+    const brandOrder = [
+      // Brands with unique/specific icon names — process first
+      { brand: 'facebook',  icons: ['Facebook', 'ThumbsUp'], svg: 'facebook.svg' },
+      { brand: 'instagram', icons: ['Aperture'], svg: 'instagram.svg' },
+      { brand: 'linkedin',  icons: ['Linkedin'], svg: 'linkedin.svg' },
+      { brand: 'twitter',   icons: ['Twitter', 'Bird'], svg: 'twitter.svg' },
+      { brand: 'github',    icons: ['Github'], svg: 'github.svg' },
+      { brand: 'apple',     icons: ['Apple'], svg: 'apple.svg' },
+      { brand: 'google',    icons: ['Chrome'], svg: 'google.svg' },
+      { brand: 'youtube',   icons: ['PlayCircle'], svg: 'youtube.svg' },
+      { brand: 'slack',     icons: ['Hash'], svg: 'slack.svg' },
+      { brand: 'amazon',    icons: ['ShoppingCart', 'Package'], svg: 'amazon.svg' },
+      // Brands with ambiguous icons — only match if the brand name appears in the code
+      { brand: 'meta',      icons: ['Globe', 'Building', 'Layers'], svg: 'meta.svg', requireBrandName: true },
+      { brand: 'whatsapp',  icons: ['MessageCircle', 'Phone', 'MessageSquare'], svg: 'whatsapp.svg', requireBrandName: true },
+      { brand: 'tiktok',    icons: ['Music', 'Film'], svg: 'tiktok.svg', requireBrandName: true },
+      { brand: 'telegram',  icons: ['Send'], svg: 'telegram.svg', requireBrandName: true },
+      { brand: 'microsoft', icons: ['Monitor', 'Grid'], svg: 'microsoft.svg', requireBrandName: true },
+      { brand: 'netflix',   icons: ['Tv'], svg: 'netflix.svg', requireBrandName: true },
+      { brand: 'spotify',   icons: ['Headphones'], svg: 'spotify.svg', requireBrandName: true },
+    ];
 
     let changed = false;
-    const availableLogos = fs.readdirSync(path.join(this.projectPath, 'public', 'logos')).filter(f => f.endsWith('.svg'));
+    let logosDir;
+    try {
+      logosDir = path.join(this.projectPath, 'public', 'logos');
+    } catch(_e) { return tsxCode; }
+    if (!fs.existsSync(logosDir)) return tsxCode;
+    const availableLogos = fs.readdirSync(logosDir).filter(f => f.endsWith('.svg'));
+    // Track which icons have already been replaced to avoid double-replacement
+    const replacedIcons = new Set();
 
-    Object.keys(brandMap).forEach(brand => {
-      const regex = new RegExp(brand, 'i');
-      if (!regex.test(tsxCode)) return;
+    brandOrder.forEach(entry => {
+      const regex = new RegExp(entry.brand, 'i');
+      // For ambiguous brands, require the brand name to appear in TSX (e.g., "tiktok" in a comment or string)
+      if (entry.requireBrandName && !regex.test(tsxCode)) return;
+      // For specific brands, at least check presence
+      if (!entry.requireBrandName && !regex.test(tsxCode)) return;
       
-      const svgFile = brandMap[brand].svg;
-      // Only replace if we have the SVG file
+      const svgFile = entry.svg;
       if (!availableLogos.includes(svgFile)) return;
-      
-      // Already using the correct SVG
       if (tsxCode.includes("staticFile('logos/" + svgFile + "')")) return;
       
-      // Replace lucide icons that represent this brand with the real SVG
-      brandMap[brand].icons.forEach(icon => {
-        // Match <IconName size={...} color={...} .../> patterns
+      entry.icons.forEach(icon => {
+        if (replacedIcons.has(icon)) return; // Already claimed by a more specific brand
         const iconRegex = new RegExp('<' + icon + '\\s+[^>]*\\/>', 'g');
         const before = tsxCode;
         tsxCode = tsxCode.replace(iconRegex, 
           `<Img src={staticFile('logos/${svgFile}')} style={{width:60,height:60,objectFit:'contain'}} />`);
         if (tsxCode !== before) {
-          console.log(`[RemotionManager] Replacing <${icon}/> with ${svgFile} for brand "${brand}"`);
+          console.log(`[RemotionManager] Replacing <${icon}/> with ${svgFile} for brand "${entry.brand}"`);
+          replacedIcons.add(icon);
           changed = true;
         }
       });
@@ -380,8 +391,9 @@ class RemotionManager {
           // Check if this is a dangling open quote near end of line
           const afterQuote = line.slice(lastIdx + 1).trim();
           if (afterQuote === '' || afterQuote === '>' || afterQuote === '/>') {
-            // Insert closing quote before the trailing characters
-            line = line.slice(0, lastIdx + 1) + line.slice(lastIdx + 1).replace(/^/, q);
+            // Insert closing quote right after the last opening quote
+            const trailing = line.slice(lastIdx + 1);
+            line = line.slice(0, lastIdx + 1) + q + trailing;
             console.log(`[RemotionManager] Auto-fixed unterminated ${q} on line ${i + 1}`);
           }
         }
@@ -427,41 +439,28 @@ class RemotionManager {
       return;
     }
 
-    // Acquire file lock to prevent Root.tsx race conditions with concurrent writes
-    const lockPath = this.rootTsxPath + '.lock';
-    let attempts = 0;
-    while (fs.existsSync(lockPath) && attempts < 50) {
-      const start = Date.now();
-      while (Date.now() - start < 100) {} // busy-wait 100ms
-      attempts++;
+    // No lock needed — render queue serializes all renders sequentially
+    let root = fs.readFileSync(this.rootTsxPath, 'utf8');
+
+    const componentName = this._componentName(compositionId);
+    const importLine = `import { ${componentName} } from './compositions/${compositionId}';`;
+    const compBlock = `      <Composition id="${compositionId}" component={${componentName}} durationInFrames={${durationFrames}} fps={30} width={1920} height={1080} />`;
+
+    if (!root.includes(importLine)) {
+      root = root.replace(
+        '// === DYNAMIC IMPORTS END ===',
+        `${importLine}\n// === DYNAMIC IMPORTS END ===`
+      );
     }
-    fs.writeFileSync(lockPath, String(Date.now()), 'utf8');
 
-    try {
-      let root = fs.readFileSync(this.rootTsxPath, 'utf8');
-
-      const componentName = this._componentName(compositionId);
-      const importLine = `import { ${componentName} } from './compositions/${compositionId}';`;
-      const compBlock = `      <Composition id="${compositionId}" component={${componentName}} durationInFrames={${durationFrames}} fps={30} width={1920} height={1080} />`;
-
-      if (!root.includes(importLine)) {
-        root = root.replace(
-          '// === DYNAMIC IMPORTS END ===',
-          `${importLine}\n// === DYNAMIC IMPORTS END ===`
-        );
-      }
-
-      if (!root.includes(`id="${compositionId}"`)) {
-        root = root.replace(
-          '{/* === DYNAMIC COMPOSITIONS END === */}',
-          `${compBlock}\n      {/* === DYNAMIC COMPOSITIONS END === */}`
-        );
-      }
-
-      fs.writeFileSync(this.rootTsxPath, root, 'utf8');
-    } finally {
-      try { fs.unlinkSync(lockPath); } catch (_e) {}
+    if (!root.includes(`id="${compositionId}"`)) {
+      root = root.replace(
+        '{/* === DYNAMIC COMPOSITIONS END === */}',
+        `${compBlock}\n      {/* === DYNAMIC COMPOSITIONS END === */}`
+      );
     }
+
+    fs.writeFileSync(this.rootTsxPath, root, 'utf8');
   }
 
   /**
@@ -515,8 +514,13 @@ class RemotionManager {
         const syntaxCheck = this._validateSyntax(content);
         if (!syntaxCheck.valid) {
           console.warn(`[RemotionManager] Skipping broken session file ${f}:`, syntaxCheck.errors);
-          // Also remove the broken file from the session to prevent it from re-infecting
-          try { fs.unlinkSync(path.join(srcFolder, f)); } catch(_e) {}
+          // Move broken file to .broken/ subfolder instead of deleting
+          try {
+            const brokenDir = path.join(srcFolder, '.broken');
+            if (!fs.existsSync(brokenDir)) fs.mkdirSync(brokenDir, { recursive: true });
+            fs.renameSync(path.join(srcFolder, f), path.join(brokenDir, f));
+            console.warn(`[RemotionManager] Moved ${f} to .broken/`);
+          } catch(_e) {}
           return; // skip this file
         }
         fs.copyFileSync(path.join(srcFolder, f), path.join(this.compositionsDir, f));

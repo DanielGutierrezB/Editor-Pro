@@ -1491,17 +1491,6 @@
         
         mpSetProgress("mp-generate", 5, "Preparando carpeta del proyecto...");
 
-        // Get sequence FPS for Remotion
-        var seqFps = 30;
-        try {
-            csInterface.evalScript('getSequenceFps()', function(fpsResult) {
-                try {
-                    var parsed = JSON.parse(fpsResult);
-                    if (parsed.fps) seqFps = Math.round(parsed.fps);
-                } catch(e) {}
-            });
-        } catch(e) {}
-
         mpResolveOutputDir(function(outputDir) {
             if (outputDir) {
                 showToast("Archivos en: " + outputDir, "info");

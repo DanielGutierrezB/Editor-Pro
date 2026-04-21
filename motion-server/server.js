@@ -196,19 +196,19 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: err.message });
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`[motion-server] Running on http://localhost:${PORT}`);
+const server = app.listen(PORT, '127.0.0.1', () => {
+  console.log(`[motion-server] Running on http://127.0.0.1:${PORT}`);
   console.log(`[motion-server] Remotion project: ${RENDER_PROJECT}`);
 });
 
 process.on('SIGTERM', () => {
-  console.log('[motion-server] Shutting down...');
-  server.close();
+  console.log('[motion-server] Shutting down (SIGTERM)...');
+  server.close(() => process.exit(0));
 });
 
 process.on('SIGINT', () => {
-  console.log('[motion-server] Shutting down...');
-  server.close();
+  console.log('[motion-server] Shutting down (SIGINT)...');
+  server.close(() => process.exit(0));
 });
 
 // Prevent server from crashing on uncaught errors

@@ -1,9 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const { execSync, execFileSync } = require('child_process');
+const { execSync, execFileSync, execFile } = require('child_process');
 const fs = require('fs');
 const RemotionManager = require('../lib/remotion-manager');
+const RenderQueue = require('../lib/render-queue');
+
+// Singleton render queue for this server
+const renderQueue = new RenderQueue();
 
 /**
  * Duración útil (s): el mínimo entre contenedor y pista de vídeo, para no alargar el clip en timeline por metadata inflada.
@@ -39,46 +43,94 @@ function probeVideoDurationSec(filePath) {
   return Math.min.apply(null, candidates);
 }
 
-/** Reescribe el mp4 con moov al inicio (sin re-codificar); mejora lectura en Premiere. */
-function faststartMp4InPlace(filePath) {
-  if (!filePath || !fs.existsSync(filePath)) return;
+/** Reescribe el mp4 con moov al inicio (async, no bloquea event loop); mejora lectura en Premiere. */
+function faststartMp4InPlace(filePath, callback) {
+  if (!filePath || !fs.existsSync(filePath)) return callback ? callback() : undefined;
   const tmp = filePath + '.__fst.mp4';
-  try {
-    // Re-encode with all-intra keyframes (-g 1), no B-frames (-bf 0), 
-    // high profile, and faststart. This prevents Premiere's hardware decoder
-    // from choking on long GOP decode chains.
-    execFileSync(
-      'ffmpeg',
-      ['-y', '-i', filePath, 
-       '-c:v', 'libx264', '-crf', '15', '-preset', 'fast',
-       '-g', '1', '-bf', '0',
-       '-profile:v', 'high', '-level', '4.2',
-       '-pix_fmt', 'yuv420p',
-       '-movflags', '+faststart',
-       '-an', tmp],
-      { encoding: 'utf8', timeout: 600000, maxBuffer: 10 * 1024 * 1024 }
-    );
-    if (fs.existsSync(tmp)) {
-      fs.unlinkSync(filePath);
-      fs.renameSync(tmp, filePath);
-    }
-  } catch (_e) {
-    // Fallback: try copy-only faststart if re-encode fails
-    try {
-      execFileSync(
+  const done = callback || function() {};
+
+  // Re-encode with all-intra keyframes (-g 1), no B-frames (-bf 0), 
+  // high profile, and faststart. This prevents Premiere's hardware decoder
+  // from choking on long GOP decode chains.
+  execFile(
+    'ffmpeg',
+    ['-y', '-i', filePath, 
+     '-c:v', 'libx264', '-crf', '15', '-preset', 'fast',
+     '-g', '1', '-bf', '0',
+     '-profile:v', 'high', '-level', '4.2',
+     '-pix_fmt', 'yuv420p',
+     '-movflags', '+faststart',
+     '-an', tmp],
+    { encoding: 'utf8', timeout: 600000, maxBuffer: 10 * 1024 * 1024 },
+    function(err) {
+      if (!err && fs.existsSync(tmp)) {
+        try { fs.unlinkSync(filePath); } catch(_e) {}
+        try { fs.renameSync(tmp, filePath); } catch(_e) {}
+        return done();
+      }
+      // Fallback: try copy-only faststart if re-encode fails
+      execFile(
         'ffmpeg',
         ['-y', '-i', filePath, '-c', 'copy', '-movflags', '+faststart', tmp],
-        { encoding: 'utf8', timeout: 600000, maxBuffer: 10 * 1024 * 1024 }
+        { encoding: 'utf8', timeout: 600000, maxBuffer: 10 * 1024 * 1024 },
+        function(err2) {
+          if (!err2 && fs.existsSync(tmp)) {
+            try { fs.unlinkSync(filePath); } catch(_e) {}
+            try { fs.renameSync(tmp, filePath); } catch(_e) {}
+          }
+          try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_e3) {}
+          done();
+        }
       );
-      if (fs.existsSync(tmp)) {
-        fs.unlinkSync(filePath);
-        fs.renameSync(tmp, filePath);
-      }
-    } catch (_e2) {}
-    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_e3) {}
-  }
+    }
+  );
 }
 
+// Configure the render queue's render function
+// This captures req.app.locals via closure when the first request arrives
+let _renderFnConfigured = false;
+function _ensureRenderFn(app) {
+  if (_renderFnConfigured) return;
+  _renderFnConfigured = true;
+
+  renderQueue.setRenderFn(function(job, done) {
+    const manager = new RemotionManager(app.locals.renderProject);
+
+    // Sync session before render to ensure Root.tsx is correct
+    if (job.sessionDir) manager.syncFromSession(job.sessionDir);
+
+    const tsx = manager.getCompositionTsx(job.compositionId);
+    if (!tsx) {
+      return done(new Error('Composition ' + job.compositionId + ' not found'));
+    }
+
+    manager.render(job.compositionId, function(err, result) {
+      if (err) return done(err);
+
+      // Post-process: faststart (async) + probe duration
+      var mp4 = result.mp4Path;
+      var doFaststart = mp4 && mp4.endsWith('.mp4');
+
+      function finish() {
+        var mediaDurationSec = probeVideoDurationSec(mp4);
+        done(null, {
+          compositionId: result.compositionId,
+          mp4Path: mp4,
+          mediaDurationSec: mediaDurationSec,
+          status: 'rendered',
+        });
+      }
+
+      if (doFaststart) {
+        faststartMp4InPlace(mp4, finish);
+      } else {
+        finish();
+      }
+    }, job.outputDir || null);
+  });
+}
+
+// POST /api/render — enqueue a render job, return jobId immediately
 router.post('/', (req, res) => {
   const { compositionId, outputDir, sessionDir } = req.body;
 
@@ -86,31 +138,43 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'Missing compositionId' });
   }
 
-  const manager = new RemotionManager(req.app.locals.renderProject);
+  _ensureRenderFn(req.app);
 
-  // Sync session before render to ensure Root.tsx is correct
-  if (sessionDir) manager.syncFromSession(sessionDir);
+  // Don't sync/validate here — the render function handles syncFromSession when the job executes.
+  // This avoids double-sync which could cause race conditions if compositions change between enqueue and render.
+  const job = renderQueue.enqueue({ compositionId, outputDir: outputDir || null, sessionDir: sessionDir || null });
 
-  const tsx = manager.getCompositionTsx(compositionId);
-  if (!tsx) {
-    return res.status(404).json({ error: `Composition ${compositionId} not found` });
+  res.json({
+    jobId: job.id,
+    compositionId: compositionId,
+    status: job.status,
+  });
+});
+
+// GET /api/render/status/:jobId — poll job status
+router.get('/status/:jobId', (req, res) => {
+  const job = renderQueue.getJob(req.params.jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found: ' + req.params.jobId });
   }
 
-  manager.render(compositionId, (err, result) => {
-    if (err) {
-      return res.status(500).json({ error: 'Render error: ' + err.message });
-    }
-    try {
-      if (result.mp4Path && result.mp4Path.endsWith(".mp4")) faststartMp4InPlace(result.mp4Path);
-    } catch (_e) {}
-    const mediaDurationSec = probeVideoDurationSec(result.mp4Path);
-    res.json({
-      compositionId: result.compositionId,
-      mp4Path: result.mp4Path,
-      mediaDurationSec: mediaDurationSec,
-      status: 'rendered',
-    });
-  }, outputDir || null);
+  const response = {
+    jobId: job.id,
+    compositionId: job.compositionId,
+    status: job.status,
+    createdAt: job.createdAt,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+  };
+
+  if (job.status === 'complete' && job.result) {
+    response.result = job.result;
+  }
+  if (job.status === 'error' && job.error) {
+    response.error = job.error;
+  }
+
+  res.json(response);
 });
 
 // Preview: render single frame as PNG
