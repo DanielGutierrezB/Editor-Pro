@@ -988,6 +988,13 @@
             if (callback) callback([], {});
             return;
         }
+
+        // Pre-read folder contents once for partial matching
+        var folderFiles = {};
+        for (var ff = 0; ff < folders.length; ff++) {
+            try { folderFiles[folders[ff]] = fs.readdirSync(folders[ff]); } catch(_e) { folderFiles[folders[ff]] = []; }
+        }
+
         csInterface.evalScript("getAllProjectSequences()", function(res) {
             try {
                 var data = JSON.parse(res);
@@ -995,12 +1002,34 @@
                 var cache = {};
                 for (var si = 0; si < seqs.length; si++) {
                     var sname = seqs[si].name;
+                    if (cache[sname]) continue;
                     var baseName = sname.replace(/[\/\\:*?"<>|]/g, "_");
-                    for (var fi = 0; fi < folders.length; fi++) {
+                    var found = false;
+
+                    // 1. Exact match first
+                    for (var fi = 0; fi < folders.length && !found; fi++) {
                         var jp = path.join(folders[fi], baseName + ".json");
-                        if (fs.existsSync(jp)) { cache[sname] = jp; break; }
+                        if (fs.existsSync(jp)) { cache[sname] = jp; found = true; break; }
                         var sp = path.join(folders[fi], baseName + ".srt");
-                        if (fs.existsSync(sp)) { cache[sname] = sp; break; }
+                        if (fs.existsSync(sp)) { cache[sname] = sp; found = true; break; }
+                    }
+
+                    // 2. Partial match: file name contains sequence name
+                    if (!found) {
+                        var seqLower = baseName.toLowerCase();
+                        for (var fi2 = 0; fi2 < folders.length && !found; fi2++) {
+                            var files = folderFiles[folders[fi2]] || [];
+                            for (var fj = 0; fj < files.length; fj++) {
+                                var fname = files[fj];
+                                var fnameLower = fname.toLowerCase();
+                                if ((fnameLower.endsWith(".json") || fnameLower.endsWith(".srt")) &&
+                                    fnameLower.indexOf(seqLower) !== -1) {
+                                    cache[sname] = path.join(folders[fi2], fname);
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
                 state.transcriptCache = cache;
