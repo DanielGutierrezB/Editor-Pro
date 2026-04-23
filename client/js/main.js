@@ -1015,16 +1015,19 @@
                         if (fs.existsSync(sp)) { cache[sname] = sp; found = true; break; }
                     }
 
-                    // 2. Partial match: file name contains sequence name
-                    if (!found) {
+                    // 2. Partial match: file name starts with sequence name
+                    //    Skip very short names (< 3 chars) to avoid false positives like "S"
+                    if (!found && baseName.length >= 3) {
                         var seqLower = baseName.toLowerCase();
                         for (var fi2 = 0; fi2 < folders.length && !found; fi2++) {
                             var files = folderFiles[folders[fi2]] || [];
                             for (var fj = 0; fj < files.length; fj++) {
                                 var fname = files[fj];
                                 var fnameLower = fname.toLowerCase();
-                                if ((fnameLower.endsWith(".json") || fnameLower.endsWith(".srt")) &&
-                                    fnameLower.indexOf(seqLower) !== -1) {
+                                if (!(fnameLower.endsWith(".json") || fnameLower.endsWith(".srt"))) continue;
+                                // File must start with the sequence name (strip extension for comparison)
+                                var fnameBase = fnameLower.replace(/\.(json|srt)$/, "");
+                                if (fnameBase === seqLower || fnameBase.indexOf(seqLower) === 0) {
                                     cache[sname] = path.join(folders[fi2], fname);
                                     found = true;
                                     break;
