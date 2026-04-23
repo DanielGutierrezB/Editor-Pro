@@ -1325,10 +1325,21 @@
                     return;
                 }
 
+                // Priority 1: Check known transcript folders (last import path, Transcribe/)
+                var knownFolders = _getTranscriptFolders();
+                for (var kf = 0; kf < knownFolders.length; kf++) {
+                    if (_tryLoadTranscriptFromFolder(knownFolders[kf], info.sequenceName)) {
+                        resetBtn();
+                        return;
+                    }
+                }
+
+                // Priority 2: Search near project/media files
                 var found = findTranscriptFiles(info.projectPath, info.mediaPaths, info.sequenceName);
                 if (found) {
                     var fileSrt = sttResultToSRT(found.result);
                     loadTranscriptText(fileSrt, path.basename(found.file));
+                    _saveLastTranscriptFolder(found.file);
                     resetBtn();
                     return;
                 }
