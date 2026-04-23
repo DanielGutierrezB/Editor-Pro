@@ -1757,13 +1757,11 @@ function _mogrtOneLineName(s) {
 }
 
 /**
- * Añade "Dip to Black" al FINAL del clip MOGRT.
- * Dip to Black es una transición de salida pura (fade a negro), no un cross entre clips.
+ * Añade "Cross Dissolve" al FINAL del clip MOGRT.
  * Usa QE DOM. Falla silenciosamente.
  *
  * addTransition(transition, atStart, duration):
  *   atStart = false → al FINAL del clip;  atStart = true → al inicio.
- *   Probamos ambas si la primera no queda donde queremos.
  */
 function _addOutDissolve(seq, trackIdx, startSecs, durFrames) {
     try {
@@ -1782,9 +1780,9 @@ function _addOutDissolve(seq, trackIdx, startSecs, durFrames) {
                 try { qeStart = parseFloat(qeClip.start); } catch(_e2) { continue; }
             }
             if (Math.abs(qeStart - startSecs) < 1.5) {
-                var dip = qe.project.getVideoTransitionByName("Dip to Black");
-                if (!dip) dip = qe.project.getVideoTransitionByName("Fundido a negro");
-                if (!dip) dip = qe.project.getVideoTransitionByName("Cross Dissolve");
+                var dip = qe.project.getVideoTransitionByName("Cross Dissolve");
+                if (!dip) dip = qe.project.getVideoTransitionByName("Disolución cruzada");
+                if (!dip) dip = qe.project.getVideoTransitionByName("Dip to Black");
                 if (!dip) return;
 
                 var df = durFrames || 20;
