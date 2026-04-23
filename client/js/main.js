@@ -995,7 +995,8 @@
             try { folderFiles[folders[ff]] = fs.readdirSync(folders[ff]); } catch(_e) { folderFiles[folders[ff]] = []; }
         }
 
-        csInterface.evalScript("getAllProjectSequences()", function(res) {
+        // Use lightweight listProjectSequences (no tab close/reopen)
+        csInterface.evalScript("listProjectSequences()", function(res) {
             try {
                 var data = JSON.parse(res);
                 var seqs = data.sequences || [];
@@ -1033,6 +1034,14 @@
                     }
                 }
                 state.transcriptCache = cache;
+
+                // Add transcript-available sequences to the seq dropdown cache
+                for (var cacheKey in cache) {
+                    if (cache.hasOwnProperty(cacheKey) && !_seqCache[cacheKey]) {
+                        _seqCache[cacheKey] = { transcript: "cached" };
+                    }
+                }
+
                 if (callback) callback(seqs, cache);
             } catch (e) {
                 state.transcriptCache = {};

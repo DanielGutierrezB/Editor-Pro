@@ -293,14 +293,18 @@
         var listEl = document.getElementById("st2-batch-list");
         listEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:12px;text-align:center">Buscando secuencias...</div>';
 
-        _buildTranscriptCache(function(seqs, cache) {
+        // Use getAllProjectSequences for isOpen info, transcript cache for lookups
+        var cache = (state && state.transcriptCache) ? state.transcriptCache : {};
+        csInterface.evalScript("getAllProjectSequences()", function(res) {
             try {
+                var data = JSON.parse(res);
+                var seqs = data.sequences || [];
                 var withTranscript = [];
 
                 for (var si = 0; si < seqs.length; si++) {
                     if (!seqs[si].isOpen) continue;
                     var sname = seqs[si].name;
-                    var hasT = cache[sname] || null;
+                    var hasT = cache[sname] || _st2BatchFindTranscript(_getTranscriptFolders(), sname);
                     if (hasT) {
                         withTranscript.push({ name: sname, id: seqs[si].sequenceID, transcriptPath: hasT });
                     }
