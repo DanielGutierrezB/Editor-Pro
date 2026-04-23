@@ -1110,14 +1110,19 @@
                 return;
             }
 
+            // Save transcript folder from file path and rebuild cache
+            var _jsonFolder = path.dirname(file.path);
+            if (!state.transcribeFolder || state.transcribeFolder !== _jsonFolder) {
+                state.transcribeFolder = _jsonFolder;
+                localStorage.setItem("editorpro_transcript_folder", _jsonFolder);
+            }
+
             if (state.sequenceName) {
                 copyTranscriptToFolder(file.path, state.sequenceName);
-                if (state.transcribeFolder) {
-                    var _cacheKey = state.sequenceName;
-                    var _cachePath = path.join(state.transcribeFolder, state.sequenceName.replace(/[\/\\:*?"<>|]/g, "_") + ".json");
-                    state.transcriptCache[_cacheKey] = _cachePath;
-                }
             }
+
+            // Rebuild cache: scan the folder for ALL transcripts matching project sequences
+            _buildTranscriptCache();
 
             state.sttResult = parsed;
             state.lastWhisperResult = parsed;
