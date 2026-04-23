@@ -23,7 +23,7 @@
     var readTranscriptFromProjectFile, readCaptionsFromProjectFile;
     var srtSegmentsToSttResult, renderTranscriptFromSegments, bindCollapsibles;
     var MP_ANTICIPATION_SECS;
-    var _getTranscriptFolders, parseTranscriptJson;
+    var _getTranscriptFolders, parseTranscriptJson, _buildTranscriptCache;
 
     function _initRefs() {
         state       = global._epState;
@@ -83,6 +83,7 @@
         MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0.35;
         _getTranscriptFolders    = global._epGetTranscriptFolders;
         parseTranscriptJson      = global._epParseTranscriptJson;
+        _buildTranscriptCache    = global._epBuildTranscriptCache;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -292,17 +293,14 @@
         var listEl = document.getElementById("st2-batch-list");
         listEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:12px;text-align:center">Buscando secuencias...</div>';
 
-        csInterface.evalScript("getAllProjectSequences()", function(res) {
+        _buildTranscriptCache(function(seqs, cache) {
             try {
-                var data = JSON.parse(res);
-                var seqs = data.sequences || [];
-                var folders = _getTranscriptFolders();
                 var withTranscript = [];
 
                 for (var si = 0; si < seqs.length; si++) {
                     if (!seqs[si].isOpen) continue;
                     var sname = seqs[si].name;
-                    var hasT = _st2BatchFindTranscript(folders, sname);
+                    var hasT = cache[sname] || null;
                     if (hasT) {
                         withTranscript.push({ name: sname, id: seqs[si].sequenceID, transcriptPath: hasT });
                     }

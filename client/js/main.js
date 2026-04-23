@@ -50,6 +50,7 @@
         markersPlaced: false,
         transcribeFolder: (function() { try { return localStorage.getItem("editorpro_transcript_folder") || ""; } catch(_e) { return ""; } })(),
         lastWhisperResult: null,
+        transcriptCache: {},
         // Motion-Pro state
         mpAnalyzing: false,
         mpGenerating: false,
@@ -486,6 +487,7 @@
                 if (data.success && data.path) {
                     state.transcribeFolder = data.path;
                     _saveLastTranscriptFolder(data.path + "/dummy");
+                    _buildTranscriptCache();
                 }
             } catch(e) {}
         });
@@ -517,8 +519,10 @@
                             try {
                                 var tfData = JSON.parse(tfResult);
                                 if (tfData.success && tfData.path) {
+                                    var _prevFolder = state.transcribeFolder;
                                     state.transcribeFolder = tfData.path;
                                     _saveLastTranscriptFolder(tfData.path + "/dummy");
+                                    if (tfData.path !== _prevFolder) _buildTranscriptCache();
                                 }
                             } catch(e) {}
                         });
@@ -919,10 +923,93 @@
 
     function autoLoadTranscriptForSequence(seqName) {
         if (!seqName || !fs || !path) return;
+        if (state.transcriptCache && state.transcriptCache[seqName]) {
+            var cachedPath = state.transcriptCache[seqName];
+            try {
+                if (fs.existsSync(cachedPath)) {
+                    _loadTranscriptFromPath(cachedPath, seqName);
+                    return;
+                }
+            } catch (_e) {}
+            delete state.transcriptCache[seqName];
+        }
         var folders = _getTranscriptFolders();
         for (var fi = 0; fi < folders.length; fi++) {
             if (_tryLoadTranscriptFromFolder(folders[fi], seqName)) return;
         }
+    }
+
+    function _loadTranscriptFromPath(filePath, seqName) {
+        if (!filePath || !fs || !path) return false;
+        try {
+            var ext = filePath.indexOf(".json") !== -1 ? "json" : (filePath.indexOf(".srt") !== -1 ? "srt" : "");
+            var baseName = seqName ? seqName.replace(/[\/\\:*?"<>|]/g, "_") : path.basename(filePath).replace(/\.(json|srt)$/i, "");
+            if (ext === "json") {
+                var parsed = parseTranscriptJson(filePath);
+                if (parsed && parsed.words && parsed.words.length > 5) {
+                    state.sttResult = parsed;
+                    state.lastWhisperResult = parsed;
+                    try { state.transcriptJson = JSON.parse(fs.readFileSync(filePath, "utf8")); } catch (_re) {}
+                    refreshTraerTranscriptButtons();
+                    applySttResultToRecordingNotes(parsed, true);
+                    hideElement("recording-empty");
+                    loadTranscriptText(sttResultToSRT(parsed), baseName + ".json");
+                    showToast("Transcript auto-cargado: " + baseName, "success");
+                    return true;
+                }
+            } else if (ext === "srt") {
+                var content = fs.readFileSync(filePath, "utf8");
+                var segments = parseSRT(content);
+                if (segments && segments.length > 3) {
+                    var sttResult = srtSegmentsToSttResult(segments);
+                    state.sttResult = sttResult;
+                    state.lastWhisperResult = sttResult;
+                    refreshTraerTranscriptButtons();
+                    applySttResultToRecordingNotes(sttResult, true);
+                    hideElement("recording-empty");
+                    loadTranscriptText(sttResultToSRT(sttResult), baseName + ".srt");
+                    showToast("Transcript auto-cargado: " + baseName, "success");
+                    return true;
+                }
+            }
+        } catch (_e) {}
+        return false;
+    }
+
+    function _buildTranscriptCache(callback) {
+        if (!fs || !path) {
+            state.transcriptCache = {};
+            if (callback) callback([], {});
+            return;
+        }
+        var folders = _getTranscriptFolders();
+        if (!folders.length) {
+            state.transcriptCache = {};
+            if (callback) callback([], {});
+            return;
+        }
+        csInterface.evalScript("getAllProjectSequences()", function(res) {
+            try {
+                var data = JSON.parse(res);
+                var seqs = data.sequences || [];
+                var cache = {};
+                for (var si = 0; si < seqs.length; si++) {
+                    var sname = seqs[si].name;
+                    var baseName = sname.replace(/[\/\\:*?"<>|]/g, "_");
+                    for (var fi = 0; fi < folders.length; fi++) {
+                        var jp = path.join(folders[fi], baseName + ".json");
+                        if (fs.existsSync(jp)) { cache[sname] = jp; break; }
+                        var sp = path.join(folders[fi], baseName + ".srt");
+                        if (fs.existsSync(sp)) { cache[sname] = sp; break; }
+                    }
+                }
+                state.transcriptCache = cache;
+                if (callback) callback(seqs, cache);
+            } catch (e) {
+                state.transcriptCache = {};
+                if (callback) callback([], {});
+            }
+        });
     }
 
     // ─── Info Modal ─────────────────────────────────────────────
@@ -996,6 +1083,11 @@
 
             if (state.sequenceName) {
                 copyTranscriptToFolder(file.path, state.sequenceName);
+                if (state.transcribeFolder) {
+                    var _cacheKey = state.sequenceName;
+                    var _cachePath = path.join(state.transcribeFolder, state.sequenceName.replace(/[\/\\:*?"<>|]/g, "_") + ".json");
+                    state.transcriptCache[_cacheKey] = _cachePath;
+                }
             }
 
             state.sttResult = parsed;
@@ -2733,6 +2825,7 @@
     window._epGetTranscriptFolders = _getTranscriptFolders;
     window._epParseTranscriptJson = parseTranscriptJson;
     window._epFindTranscriptFiles = findTranscriptFiles;
+    window._epBuildTranscriptCache = _buildTranscriptCache;
     window._epShowTranscriptExportInstructions = showTranscriptExportInstructions;
     window._epGetTakeAnalysisPromptContext = getTakeAnalysisPromptContext;
     window._epToggleSettings = toggleSettings;
