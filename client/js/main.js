@@ -1018,22 +1018,27 @@
 
                     // 2. Partial match: file name starts with sequence name
                     //    Skip very short names (< 3 chars) to avoid false positives like "S"
+                    //    Pick the best (shortest) match to avoid cross-contamination
                     if (!found && baseName.length >= 3) {
                         var seqLower = baseName.toLowerCase();
-                        for (var fi2 = 0; fi2 < folders.length && !found; fi2++) {
+                        var bestMatch = null;
+                        var bestLen = Infinity;
+                        for (var fi2 = 0; fi2 < folders.length; fi2++) {
                             var files = folderFiles[folders[fi2]] || [];
                             for (var fj = 0; fj < files.length; fj++) {
                                 var fname = files[fj];
                                 var fnameLower = fname.toLowerCase();
                                 if (!(fnameLower.endsWith(".json") || fnameLower.endsWith(".srt"))) continue;
-                                // File must start with the sequence name (strip extension for comparison)
                                 var fnameBase = fnameLower.replace(/\.(json|srt)$/, "");
-                                if (fnameBase === seqLower || fnameBase.indexOf(seqLower) === 0) {
-                                    cache[sname] = path.join(folders[fi2], fname);
-                                    found = true;
-                                    break;
+                                if (fnameBase.indexOf(seqLower) === 0 && fnameBase.length < bestLen) {
+                                    bestMatch = path.join(folders[fi2], fname);
+                                    bestLen = fnameBase.length;
                                 }
                             }
+                        }
+                        if (bestMatch) {
+                            cache[sname] = bestMatch;
+                            found = true;
                         }
                     }
                 }
