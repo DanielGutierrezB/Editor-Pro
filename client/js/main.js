@@ -896,8 +896,7 @@
                             refreshTraerTranscriptButtons();
                             applySttResultToRecordingNotes(p2, true);
                             hideElement("recording-empty");
-                            loadTranscriptText(sttResultToSRT(p2), fname);
-                            showToast("Transcript auto-cargado: " + fname, "success");
+                            loadTranscriptText(sttResultToSRT(p2), seqName);
                             return true;
                         }
                     } else {
@@ -910,8 +909,7 @@
                             refreshTraerTranscriptButtons();
                             applySttResultToRecordingNotes(st2, true);
                             hideElement("recording-empty");
-                            loadTranscriptText(sttResultToSRT(st2), fname);
-                            showToast("Transcript auto-cargado: " + fname, "success");
+                            loadTranscriptText(sttResultToSRT(st2), seqName);
                             return true;
                         }
                     }
@@ -944,7 +942,8 @@
         if (!filePath || !fs || !path) return false;
         try {
             var ext = filePath.indexOf(".json") !== -1 ? "json" : (filePath.indexOf(".srt") !== -1 ? "srt" : "");
-            var baseName = seqName ? seqName.replace(/[\/\\:*?"<>|]/g, "_") : path.basename(filePath).replace(/\.(json|srt)$/i, "");
+            // Always use sequence name as the display label (not the file name)
+            var label = seqName || path.basename(filePath).replace(/\.(json|srt)$/i, "");
             if (ext === "json") {
                 var parsed = parseTranscriptJson(filePath);
                 if (parsed && parsed.words && parsed.words.length > 5) {
@@ -954,8 +953,7 @@
                     refreshTraerTranscriptButtons();
                     applySttResultToRecordingNotes(parsed, true);
                     hideElement("recording-empty");
-                    loadTranscriptText(sttResultToSRT(parsed), baseName + ".json");
-                    showToast("Transcript auto-cargado: " + baseName, "success");
+                    loadTranscriptText(sttResultToSRT(parsed), label);
                     return true;
                 }
             } else if (ext === "srt") {
@@ -968,8 +966,7 @@
                     refreshTraerTranscriptButtons();
                     applySttResultToRecordingNotes(sttResult, true);
                     hideElement("recording-empty");
-                    loadTranscriptText(sttResultToSRT(sttResult), baseName + ".srt");
-                    showToast("Transcript auto-cargado: " + baseName, "success");
+                    loadTranscriptText(sttResultToSRT(sttResult), label);
                     return true;
                 }
             }
