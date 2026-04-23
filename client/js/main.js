@@ -983,81 +983,134 @@
             if (callback) callback([], {});
             return;
         }
-        var folders = _getTranscriptFolders();
-        if (!folders.length) {
-            state.transcriptCache = {};
-            if (callback) callback([], {});
-            return;
-        }
 
-        // Pre-read folder contents once for partial matching
-        var folderFiles = {};
-        for (var ff = 0; ff < folders.length; ff++) {
-            try { folderFiles[folders[ff]] = fs.readdirSync(folders[ff]); } catch(_e) { folderFiles[folders[ff]] = []; }
-        }
-
-        // Use lightweight listProjectSequences (no tab close/reopen)
-        csInterface.evalScript("listProjectSequences()", function(res) {
+        // 1. Get the Transcribe folder (next to .prproj) — this is the canonical source
+        csInterface.evalScript("getTranscribeFolder()", function(tfRes) {
+            var transcribeFolder = null;
             try {
-                var data = JSON.parse(res);
-                var seqs = data.sequences || [];
-                var cache = {};
-                for (var si = 0; si < seqs.length; si++) {
-                    var sname = seqs[si].name;
-                    if (cache[sname]) continue;
-                    var baseName = sname.replace(/[\/\\:*?"<>|]/g, "_");
-                    var found = false;
+                var tfData = JSON.parse(tfRes);
+                if (tfData.success && tfData.path) transcribeFolder = tfData.path;
+            } catch(_e) {}
 
-                    // 1. Exact match first
-                    for (var fi = 0; fi < folders.length && !found; fi++) {
-                        var jp = path.join(folders[fi], baseName + ".json");
-                        if (fs.existsSync(jp)) { cache[sname] = jp; found = true; break; }
-                        var sp = path.join(folders[fi], baseName + ".srt");
-                        if (fs.existsSync(sp)) { cache[sname] = sp; found = true; break; }
-                    }
+            // Source folders: user's import folder + Transcribe folder
+            var sourceFolders = _getTranscriptFolders();
+            // Always include Transcribe folder as primary
+            if (transcribeFolder && sourceFolders.indexOf(transcribeFolder) === -1) {
+                sourceFolders.unshift(transcribeFolder);
+            }
 
-                    // 2. Partial match: file name starts with sequence name
-                    //    Skip very short names (< 3 chars) to avoid false positives like "S"
-                    //    Pick the best (shortest) match to avoid cross-contamination
-                    if (!found && baseName.length >= 3) {
-                        var seqLower = baseName.toLowerCase();
-                        var bestMatch = null;
-                        var bestLen = Infinity;
-                        for (var fi2 = 0; fi2 < folders.length; fi2++) {
-                            var files = folderFiles[folders[fi2]] || [];
-                            for (var fj = 0; fj < files.length; fj++) {
-                                var fname = files[fj];
-                                var fnameLower = fname.toLowerCase();
-                                if (!(fnameLower.endsWith(".json") || fnameLower.endsWith(".srt"))) continue;
-                                var fnameBase = fnameLower.replace(/\.(json|srt)$/, "");
-                                if (fnameBase.indexOf(seqLower) === 0 && fnameBase.length < bestLen) {
-                                    bestMatch = path.join(folders[fi2], fname);
-                                    bestLen = fnameBase.length;
-                                }
-                            }
-                        }
-                        if (bestMatch) {
-                            cache[sname] = bestMatch;
-                            found = true;
-                        }
-                    }
-                }
-                state.transcriptCache = cache;
-
-                // Add transcript-available sequences to the seq dropdown cache
-                // Use _hasTranscriptFile flag so restoreSequenceState doesn't
-                // load the placeholder string as actual transcript content
-                for (var cacheKey in cache) {
-                    if (cache.hasOwnProperty(cacheKey) && !_seqCache[cacheKey]) {
-                        _seqCache[cacheKey] = { _hasTranscriptFile: true };
-                    }
-                }
-
-                if (callback) callback(seqs, cache);
-            } catch (e) {
+            if (!sourceFolders.length) {
                 state.transcriptCache = {};
                 if (callback) callback([], {});
+                return;
             }
+
+            // Pre-read all source folder contents
+            var folderFiles = {};
+            for (var ff = 0; ff < sourceFolders.length; ff++) {
+                try { folderFiles[sourceFolders[ff]] = fs.readdirSync(sourceFolders[ff]); } catch(_e) { folderFiles[sourceFolders[ff]] = []; }
+            }
+
+            // 2. Get all project sequences (lightweight, no tab cycling)
+            csInterface.evalScript("listProjectSequences()", function(res) {
+                try {
+                    var data = JSON.parse(res);
+                    var seqs = data.sequences || [];
+                    var cache = {};
+                    var seqNames = {};
+                    for (var si = 0; si < seqs.length; si++) {
+                        seqNames[seqs[si].name] = true;
+                    }
+
+                    // 3. For each sequence, find matching transcript
+                    for (var si2 = 0; si2 < seqs.length; si2++) {
+                        var sname = seqs[si2].name;
+                        if (cache[sname]) continue;
+                        var baseName = sname.replace(/[\/\\:*?"<>|]/g, "_");
+
+                        // 3a. Check Transcribe folder first (exact match — canonical)
+                        if (transcribeFolder) {
+                            var tjp = path.join(transcribeFolder, baseName + ".json");
+                            if (fs.existsSync(tjp)) { cache[sname] = tjp; continue; }
+                            var tsp = path.join(transcribeFolder, baseName + ".srt");
+                            if (fs.existsSync(tsp)) { cache[sname] = tsp; continue; }
+                        }
+
+                        // 3b. Check source folders (exact match)
+                        var found = false;
+                        for (var fi = 0; fi < sourceFolders.length && !found; fi++) {
+                            if (sourceFolders[fi] === transcribeFolder) continue; // already checked
+                            var jp = path.join(sourceFolders[fi], baseName + ".json");
+                            if (fs.existsSync(jp)) {
+                                // Copy to Transcribe with canonical name
+                                if (transcribeFolder) {
+                                    var dest = path.join(transcribeFolder, baseName + ".json");
+                                    try { fs.copyFileSync(jp, dest); cache[sname] = dest; } catch(_ce) { cache[sname] = jp; }
+                                } else { cache[sname] = jp; }
+                                found = true; break;
+                            }
+                            var sp = path.join(sourceFolders[fi], baseName + ".srt");
+                            if (fs.existsSync(sp)) {
+                                if (transcribeFolder) {
+                                    var destS = path.join(transcribeFolder, baseName + ".srt");
+                                    try { fs.copyFileSync(sp, destS); cache[sname] = destS; } catch(_ce) { cache[sname] = sp; }
+                                } else { cache[sname] = sp; }
+                                found = true; break;
+                            }
+                        }
+
+                        // 3c. Partial match in source folders (file starts with seq name)
+                        //     Copy to Transcribe with canonical name on match
+                        if (!found && baseName.length >= 3) {
+                            var seqLower = baseName.toLowerCase();
+                            var bestMatch = null;
+                            var bestLen = Infinity;
+                            for (var fi2 = 0; fi2 < sourceFolders.length; fi2++) {
+                                if (sourceFolders[fi2] === transcribeFolder) continue;
+                                var files = folderFiles[sourceFolders[fi2]] || [];
+                                for (var fj = 0; fj < files.length; fj++) {
+                                    var fname = files[fj];
+                                    var fnameLower = fname.toLowerCase();
+                                    if (!(fnameLower.endsWith(".json") || fnameLower.endsWith(".srt"))) continue;
+                                    var fnameBase = fnameLower.replace(/\.(json|srt)$/, "");
+                                    if (fnameBase.indexOf(seqLower) === 0 && fnameBase.length < bestLen) {
+                                        bestMatch = path.join(sourceFolders[fi2], fname);
+                                        bestLen = fnameBase.length;
+                                    }
+                                }
+                            }
+                            if (bestMatch) {
+                                // Copy to Transcribe with canonical name
+                                var ext = bestMatch.toLowerCase().endsWith(".srt") ? ".srt" : ".json";
+                                if (transcribeFolder) {
+                                    var destP = path.join(transcribeFolder, baseName + ext);
+                                    try { fs.copyFileSync(bestMatch, destP); cache[sname] = destP; } catch(_ce) { cache[sname] = bestMatch; }
+                                } else { cache[sname] = bestMatch; }
+                                found = true;
+                            }
+                        }
+                    }
+
+                    state.transcriptCache = cache;
+
+                    // Update Transcribe as the active folder
+                    if (transcribeFolder) {
+                        state.transcribeFolder = transcribeFolder;
+                    }
+
+                    // Add transcript-available sequences to the seq dropdown cache
+                    for (var cacheKey in cache) {
+                        if (cache.hasOwnProperty(cacheKey) && !_seqCache[cacheKey]) {
+                            _seqCache[cacheKey] = { _hasTranscriptFile: true };
+                        }
+                    }
+
+                    if (callback) callback(seqs, cache);
+                } catch (e) {
+                    state.transcriptCache = {};
+                    if (callback) callback([], {});
+                }
+            });
         });
     }
 
@@ -1130,18 +1183,16 @@
                 return;
             }
 
-            // Save transcript folder from file path and rebuild cache
+            // Save the source folder for scanning, then rebuild cache
+            // _buildTranscriptCache will copy matching files to the Transcribe folder
             var _jsonFolder = path.dirname(file.path);
-            if (!state.transcribeFolder || state.transcribeFolder !== _jsonFolder) {
+            // Store source folder so _getTranscriptFolders includes it for scanning
+            if (!state.transcribeFolder) {
                 state.transcribeFolder = _jsonFolder;
-                localStorage.setItem("editorpro_transcript_folder", _jsonFolder);
             }
+            localStorage.setItem("editorpro_transcript_folder", _jsonFolder);
 
-            if (state.sequenceName) {
-                copyTranscriptToFolder(file.path, state.sequenceName);
-            }
-
-            // Rebuild cache: scan the folder for ALL transcripts matching project sequences
+            // Rebuild cache: scans source folder, copies matches to Transcribe/
             _buildTranscriptCache();
 
             state.sttResult = parsed;
