@@ -605,7 +605,7 @@
 
     function buildSeqSummaryTags(cached) {
         var tags = [];
-        if (cached.transcript && cached.transcript.trim().length > 0) {
+        if ((cached.transcript && cached.transcript.trim().length > 0) || cached._hasTranscriptFile) {
             tags.push({ label: "📝 Transcripción", color: "var(--text-secondary)" });
         }
         if (cached.es2Highlights && cached.es2Highlights.length > 0) {
@@ -680,7 +680,8 @@
 
     function restoreSequenceState(seqName) {
         var cached = _seqCache[seqName];
-        if (cached) {
+        var isPlaceholder = cached && cached._hasTranscriptFile && !cached.transcript;
+        if (cached && !isPlaceholder) {
             _seqCacheTouch(seqName);
             state.transcript = cached.transcript || "";
             state.segments = cached.segments || [];
@@ -1039,9 +1040,11 @@
                 state.transcriptCache = cache;
 
                 // Add transcript-available sequences to the seq dropdown cache
+                // Use _hasTranscriptFile flag so restoreSequenceState doesn't
+                // load the placeholder string as actual transcript content
                 for (var cacheKey in cache) {
                     if (cache.hasOwnProperty(cacheKey) && !_seqCache[cacheKey]) {
-                        _seqCache[cacheKey] = { transcript: "cached" };
+                        _seqCache[cacheKey] = { _hasTranscriptFile: true };
                     }
                 }
 
