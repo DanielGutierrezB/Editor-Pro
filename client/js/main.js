@@ -467,7 +467,8 @@
                 if (data.markerCount > 0) meta.push(data.markerCount + " markers");
                 document.getElementById("seq-meta").textContent = meta.join(" · ");
 
-                if (changed && _st2BatchCurrentNav < 0) {
+                var _batchActive = window.EditorProUI && window.EditorProUI.supertexts && window.EditorProUI.supertexts.isBatchActive && window.EditorProUI.supertexts.isBatchActive();
+                if (changed && !_batchActive) {
                     restoreSequenceState(newSeqName);
                     mpSwitchToSequence();
                 } else if (isFirstLoad) {
@@ -497,16 +498,30 @@
                     var data = JSON.parse(result);
                     if (data.error || !data.name) return;
                     if (data.name !== _lastSeqName && _lastSeqName !== "") {
+                        if (window.EPLogger) EPLogger.log("main", "sequence-change-poll", _lastSeqName + " → " + data.name);
+                        // Save state of PREVIOUS sequence before updating _lastSeqName
+                        saveCurrentSequenceState();
+                        // Now update to new sequence
                         _lastSeqName = data.name;
                         state.sequenceName = data.name;
                         document.getElementById("seq-name").textContent = data.name;
                         var meta = [];
-                        if (data.textClipCount > 0) meta.push(data.textClipCount + " textos");
                         if (data.markerCount > 0) meta.push(data.markerCount + " markers");
                         document.getElementById("seq-meta").textContent = meta.join(" · ");
-                        if (_st2BatchCurrentNav >= 0) return;
-                        saveCurrentSequenceState();
+                        var _pollBatchActive = window.EditorProUI && window.EditorProUI.supertexts && window.EditorProUI.supertexts.isBatchActive && window.EditorProUI.supertexts.isBatchActive();
+                        if (_pollBatchActive) return;
                         restoreSequenceState(data.name);
+                        mpSwitchToSequence();
+                        // Refresh transcribe folder for new sequence
+                        csInterface.evalScript("getTranscribeFolder()", function(tfResult) {
+                            try {
+                                var tfData = JSON.parse(tfResult);
+                                if (tfData.success && tfData.path) {
+                                    state.transcribeFolder = tfData.path;
+                                    _saveLastTranscriptFolder(tfData.path + "/dummy");
+                                }
+                            } catch(e) {}
+                        });
                     } else if (!_lastSeqName) {
                         _lastSeqName = data.name;
                         state.sequenceName = data.name;

@@ -1740,6 +1740,7 @@
         batchNavPrev: st2BatchNavPrev,
         batchNavNext: st2BatchNavNext,
         batchNavBack: st2BatchNavBack,
+        isBatchActive: function() { return _st2BatchCurrentNav >= 0; },
         ST2_ANTICIPATION_SECS: ST2_ANTICIPATION_SECS,
         ST2_READING_BUFFER_SECS: ST2_READING_BUFFER_SECS,
         ST2_MIN_DURATION_SECS: ST2_MIN_DURATION_SECS,
