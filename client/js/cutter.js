@@ -849,6 +849,14 @@
         var markers = state.postMarkers || [];
         dom.markerMgrCount.textContent = markers.length;
 
+        // Log raw marker data for debugging
+        if (window.EPLogger) {
+            var markerSummary = markers.map(function(mk) {
+                return "name=" + JSON.stringify(mk.name) + " comments=" + JSON.stringify((mk.comments || "").substring(0, 30)) + " isOut=" + mk.isOut;
+            }).join(" | ");
+            EPLogger.log("cutter", "post-markers-raw", markers.length + " markers: " + markerSummary);
+        }
+
         for (var i = 0; i < markers.length; i++) {
             var mk = markers[i];
             var markerColor = getMarkerCssColor(mk.colorIndex);
@@ -1039,14 +1047,45 @@
         return store.presets[store.active] || {};
     }
 
+    /** Default marker names that Premiere assigns (EN + ES) — not useful as view names */
+    var DEFAULT_MARKER_NAMES = [
+        "marker", "marcador", "chapter marker", "marcador de capítulo",
+        "subclip marker", "marcador de subclip", "comment marker",
+        "marcador de comentario", "segmentation"
+    ];
+
+    function _getViewName(mk) {
+        var n = (mk.name || "").trim();
+        // Filter default marker names (case-insensitive)
+        if (n) {
+            var nLower = n.toLowerCase();
+            // Skip if it's a default name or just a default + number like "Marcador 1"
+            var isDefault = false;
+            for (var di = 0; di < DEFAULT_MARKER_NAMES.length; di++) {
+                if (nLower === DEFAULT_MARKER_NAMES[di] || nLower.indexOf(DEFAULT_MARKER_NAMES[di] + " ") === 0) {
+                    isDefault = true;
+                    break;
+                }
+            }
+            if (!isDefault && n !== "K") return n;
+        }
+        // Fallback: try first word of editorNote or comments (before " - ")
+        if (mk.editorNote) {
+            var note = mk.editorNote.trim();
+            if (note && note.length <= 20) return note;
+        }
+        return n && n !== "K" ? n : "";
+    }
+
     function getUniqueMarkerNames(markers) {
         var names = {};
         for (var i = 0; i < markers.length; i++) {
             var mk = markers[i];
             if (mk.isOut) continue;
-            var n = (mk.name || "").trim();
-            if (n && n !== "K") names[n] = true;
+            var n = _getViewName(mk);
+            if (n) names[n] = true;
         }
+        if (window.EPLogger) EPLogger.log("cutter", "unique-marker-names", Object.keys(names).join(", ") || "(none)");
         var result = [];
         for (var k in names) {
             if (names.hasOwnProperty(k)) result.push(k);
@@ -1060,8 +1099,8 @@
         for (var i = 0; i < markers.length; i++) {
             var mk = markers[i];
             if (!mk.isOut) {
-                var n = (mk.name || "").trim();
-                if (n && n !== "K") {
+                var n = _getViewName(mk);
+                if (n) {
                     filtered.push({ time: mk.startSeconds, name: n });
                 }
             }
