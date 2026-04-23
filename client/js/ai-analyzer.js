@@ -365,11 +365,22 @@
             callback({ error: "Transcripción vacía" });
             return;
         }
+        // Force Sonnet for supertexts (faster, cheaper, good quality for this task)
+        var originalModel = this.model;
+        if (this.provider === "openrouter" && this.model.indexOf("opus") !== -1) {
+            this.model = "anthropic/claude-sonnet-4";
+        } else if (this.provider === "anthropic" && this.model.indexOf("opus") !== -1) {
+            this.model = "claude-sonnet-4-20250514";
+        }
+        var self = this;
         var systemMsg = (context && context.customSystemMsg) || SYSTEM_MSGS.supertexts;
         var prompt = (context && context.customPrompt)
             ? context.customPrompt.replace("{TRANSCRIPT}", transcript)
             : this._buildSupertextsPrompt(transcript, context);
-        this._send(systemMsg, prompt, callback);
+        this._send(systemMsg, prompt, function(result) {
+            self.model = originalModel;
+            callback(result);
+        });
     };
 
     AIAnalyzer.prototype.analyzeEditSuggestions2 = function(transcript, context, callback) {

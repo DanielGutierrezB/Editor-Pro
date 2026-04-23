@@ -600,7 +600,8 @@
 
         var filterChecks = document.querySelectorAll(".st2-track-filter:checked");
         var useFilter = filterChecks.length > 0;
-        var effectiveConcurrency = useFilter ? 1 : ST2_BATCH_CONCURRENCY;
+        var hasCache = useFilter && state._trackRangesCache && Object.keys(state._trackRangesCache).length > 0;
+        var effectiveConcurrency = (!useFilter || hasCache) ? ST2_BATCH_CONCURRENCY : 1;
 
         var queue = [];
         checks.forEach(function(cb) {
@@ -682,7 +683,41 @@
                 return;
             }
 
-            // Filter mode: activate sequence first so getClipRangesOnTrack reads the right sequence
+            // Filter mode: use cached ranges if available (parallel OK)
+            if (hasCache && state._trackRangesCache[item.id]) {
+                var checkedTracks = [];
+                filterChecks.forEach(function(cb) { checkedTracks.push(parseInt(cb.value)); });
+                var cachedRanges = [];
+                for (var cti = 0; cti < checkedTracks.length; cti++) {
+                    var tr = state._trackRangesCache[item.id][checkedTracks[cti]];
+                    if (tr) { for (var cri = 0; cri < tr.length; cri++) cachedRanges.push(tr[cri]); }
+                }
+                if (cachedRanges.length > 0) {
+                    cachedRanges.sort(function(a, b) { return a.start - b.start; });
+                    // Merge overlapping ranges
+                    var merged = [{ start: cachedRanges[0].start, end: cachedRanges[0].end }];
+                    for (var mi = 1; mi < cachedRanges.length; mi++) {
+                        var lastM = merged[merged.length - 1];
+                        if (cachedRanges[mi].start <= lastM.end) {
+                            if (cachedRanges[mi].end > lastM.end) lastM.end = cachedRanges[mi].end;
+                        } else {
+                            merged.push({ start: cachedRanges[mi].start, end: cachedRanges[mi].end });
+                        }
+                    }
+                    var txForAI = _st2FilterTranscriptByRanges(timedTranscript, merged);
+                    aiAnalyzer.analyzeSupertexts(txForAI, getSupertext2PromptContext(), function(result) {
+                        _handleAnalysisResult(item, txEnd, result);
+                    });
+                } else {
+                    // No clips on selected tracks for this sequence — skip
+                    _st2BatchUpdateCardStatus(item.name, "st2-error", "Sin clips en tracks");
+                    _st2BatchResults[item.name] = { error: "Sin clips en tracks seleccionados", seqId: item.id };
+                    onItemDone();
+                }
+                return;
+            }
+
+            // Fallback: activate sequence and read live (sequential)
             csInterface.evalScript('openSequenceById("' + item.id.replace(/"/g, '\\"') + '")', function() {
                 setTimeout(function() {
                     if (_st2BatchCancelled) { onItemDone(); return; }
@@ -968,6 +1003,98 @@
         } catch(_e) {}
         document.querySelectorAll(".st2-track-filter").forEach(function(cb) {
             cb.addEventListener("change", _st2SaveTrackFilterState);
+        });
+        var scanBtn = document.getElementById("btn-st2-scan-tracks");
+        if (scanBtn) scanBtn.addEventListener("click", _st2ScanTracks);
+    }
+
+    function _st2ScanTracks() {
+        var statusEl = document.getElementById("st2-scan-status");
+        var btn = document.getElementById("btn-st2-scan-tracks");
+        if (statusEl) statusEl.textContent = "Escaneando...";
+        if (btn) { btn.disabled = true; btn.textContent = "⏳"; }
+
+        csInterface.evalScript("getAllProjectSequences()", function(res) {
+            try {
+                var data = JSON.parse(res);
+                var seqs = data.sequences || [];
+                var openSeqs = seqs.filter(function(s) { return s.isOpen; });
+                var activeSeqId = null;
+                for (var ai = 0; ai < seqs.length; ai++) {
+                    if (seqs[ai].isActive) { activeSeqId = seqs[ai].sequenceID; break; }
+                }
+
+                if (openSeqs.length === 0) {
+                    if (statusEl) statusEl.textContent = "Sin secuencias abiertas";
+                    if (btn) { btn.disabled = false; btn.textContent = "🔍 Escanear"; }
+                    return;
+                }
+
+                state._trackRangesCache = {};
+                var total = openSeqs.length;
+                var current = 0;
+
+                function scanNext() {
+                    if (current >= total) {
+                        if (activeSeqId) {
+                            csInterface.evalScript('openSequenceById("' + activeSeqId.replace(/"/g, '\\"') + '")', function() {});
+                        }
+                        var maxTrackIdx = -1;
+                        for (var sid in state._trackRangesCache) {
+                            if (!state._trackRangesCache.hasOwnProperty(sid)) continue;
+                            var trackMap = state._trackRangesCache[sid];
+                            for (var tidxStr in trackMap) {
+                                if (!trackMap.hasOwnProperty(tidxStr)) continue;
+                                var ti = parseInt(tidxStr);
+                                if (trackMap[tidxStr].length > 0 && ti > maxTrackIdx) maxTrackIdx = ti;
+                            }
+                        }
+                        var labels = document.querySelectorAll(".st2-track-label");
+                        labels.forEach(function(lbl) {
+                            var cb = lbl.querySelector(".st2-track-filter");
+                            if (!cb) return;
+                            var trackIdx = parseInt(cb.value);
+                            lbl.style.display = (maxTrackIdx >= 0 && trackIdx > maxTrackIdx) ? "none" : "";
+                        });
+                        var trackCount = maxTrackIdx + 1;
+                        if (statusEl) statusEl.textContent = total + " seq · " + (trackCount > 0 ? trackCount + " tracks" : "sin clips");
+                        if (btn) { btn.disabled = false; btn.textContent = "🔍 Escanear"; }
+                        return;
+                    }
+
+                    var seq = openSeqs[current];
+                    current++;
+                    var seqId = seq.sequenceID;
+                    if (statusEl) statusEl.textContent = "Escaneando " + current + "/" + total + "...";
+
+                    csInterface.evalScript('openSequenceById("' + seqId.replace(/"/g, '\\"') + '")', function() {
+                        setTimeout(function() {
+                            state._trackRangesCache[seqId] = {};
+                            var NUM_TRACKS = 8;
+                            var tracksDone = 0;
+                            for (var ti = 0; ti < NUM_TRACKS; ti++) {
+                                (function(trackIndex) {
+                                    csInterface.evalScript('getClipRangesOnTrack(' + trackIndex + ')', function(r) {
+                                        try {
+                                            var d = JSON.parse(r);
+                                            state._trackRangesCache[seqId][trackIndex] = (d && d.ranges) ? d.ranges : [];
+                                        } catch(_e) {
+                                            state._trackRangesCache[seqId][trackIndex] = [];
+                                        }
+                                        tracksDone++;
+                                        if (tracksDone >= NUM_TRACKS) scanNext();
+                                    });
+                                })(ti);
+                            }
+                        }, 600);
+                    });
+                }
+
+                scanNext();
+            } catch(e) {
+                if (statusEl) statusEl.textContent = "Error: " + e.message;
+                if (btn) { btn.disabled = false; btn.textContent = "🔍 Escanear"; }
+            }
         });
     }
 
