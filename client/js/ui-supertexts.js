@@ -84,6 +84,7 @@
         _getTranscriptFolders    = global._epGetTranscriptFolders;
         parseTranscriptJson      = global._epParseTranscriptJson;
         _buildTranscriptCache    = global._epBuildTranscriptCache;
+        _st2InitTrackFilter();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -597,6 +598,10 @@
         hideElement("btn-st2-batch-create");
         showElement("st2-batch-progress");
 
+        var filterChecks = document.querySelectorAll(".st2-track-filter:checked");
+        var useFilter = filterChecks.length > 0;
+        var effectiveConcurrency = useFilter ? 1 : ST2_BATCH_CONCURRENCY;
+
         var queue = [];
         checks.forEach(function(cb) {
             queue.push({ name: cb.dataset.seqName, id: cb.dataset.seqId, transcript: cb.dataset.transcript });
@@ -629,10 +634,30 @@
         }
 
         function launchNext() {
-            while (nextIdx < total && (nextIdx - completed) < ST2_BATCH_CONCURRENCY) {
+            while (nextIdx < total && (nextIdx - completed) < effectiveConcurrency) {
                 launchOne(nextIdx);
                 nextIdx++;
             }
+        }
+
+        function _handleAnalysisResult(item, txEnd, result) {
+            if (_st2BatchCancelled) return;
+            if (result.error) {
+                _st2BatchUpdateCardStatus(item.name, "st2-error", "Error");
+                _st2BatchResults[item.name] = { error: result.error, seqId: item.id };
+            } else {
+                var supertexts = (result.supertexts || []).map(function(st) {
+                    if (st.type) st.type = st.type.toLowerCase().replace(/_/g, "").replace("bulletpoint", "bullet").replace("datapoint", "data");
+                    if (ST2_TYPES.indexOf(st.type) === -1) st.type = "bullet";
+                    normalizeSt2Fields(st);
+                    st.checked = true;
+                    return st;
+                });
+                supertexts = _st2CapEndTimes(supertexts, txEnd);
+                _st2BatchResults[item.name] = { supertexts: supertexts, seqId: item.id, transcript: item.transcript };
+                _st2BatchUpdateCardStatus(item.name, "st2-total", supertexts.length + " supertextos");
+            }
+            onItemDone();
         }
 
         function launchOne(idx) {
@@ -648,28 +673,26 @@
                 return;
             }
 
-            // Capturar el fin del transcript ANTES del análisis (no depender de state)
             var txEnd = _st2ExtractTranscriptEnd(timedTranscript);
 
-            aiAnalyzer.analyzeSupertexts(timedTranscript, getSupertext2PromptContext(), function(result) {
-                if (_st2BatchCancelled) return;
+            if (!useFilter) {
+                aiAnalyzer.analyzeSupertexts(timedTranscript, getSupertext2PromptContext(), function(result) {
+                    _handleAnalysisResult(item, txEnd, result);
+                });
+                return;
+            }
 
-                if (result.error) {
-                    _st2BatchUpdateCardStatus(item.name, "st2-error", "Error");
-                    _st2BatchResults[item.name] = { error: result.error, seqId: item.id };
-                } else {
-                    var supertexts = (result.supertexts || []).map(function(st) {
-                        if (st.type) st.type = st.type.toLowerCase().replace(/_/g, "").replace("bulletpoint", "bullet").replace("datapoint", "data");
-                        if (ST2_TYPES.indexOf(st.type) === -1) st.type = "bullet";
-                        normalizeSt2Fields(st);
-                        st.checked = true;
-                        return st;
+            // Filter mode: activate sequence first so getClipRangesOnTrack reads the right sequence
+            csInterface.evalScript('openSequenceById("' + item.id.replace(/"/g, '\\"') + '")', function() {
+                setTimeout(function() {
+                    if (_st2BatchCancelled) { onItemDone(); return; }
+                    _st2GetFilterRanges(function(ranges) {
+                        var txForAI = ranges ? _st2FilterTranscriptByRanges(timedTranscript, ranges) : timedTranscript;
+                        aiAnalyzer.analyzeSupertexts(txForAI, getSupertext2PromptContext(), function(result) {
+                            _handleAnalysisResult(item, txEnd, result);
+                        });
                     });
-                    supertexts = _st2CapEndTimes(supertexts, txEnd);
-                    _st2BatchResults[item.name] = { supertexts: supertexts, seqId: item.id, transcript: item.transcript };
-                    _st2BatchUpdateCardStatus(item.name, "st2-total", supertexts.length + " supertextos");
-                }
-                onItemDone();
+                }, 800);
             });
         }
 
@@ -867,6 +890,88 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // TRACK FILTER — pre-analysis filtering by clip ranges
+    // ═══════════════════════════════════════════════════════════════
+
+    function _st2FilterTranscriptByRanges(timedTranscript, ranges) {
+        if (!timedTranscript || !ranges || ranges.length === 0) return timedTranscript;
+        var lines = timedTranscript.split("\n");
+        var filtered = lines.filter(function(line) {
+            var m = line.match(/^\[(\d+\.?\d*)s\s*-\s*(\d+\.?\d*)s\]/);
+            if (!m) return true;
+            var lineStart = parseFloat(m[1]);
+            var lineEnd = parseFloat(m[2]);
+            for (var ri = 0; ri < ranges.length; ri++) {
+                if (lineStart < ranges[ri].end && lineEnd > ranges[ri].start) return true;
+            }
+            return false;
+        });
+        return filtered.join("\n");
+    }
+
+    function _st2GetFilterRanges(callback) {
+        var checks = document.querySelectorAll(".st2-track-filter:checked");
+        if (checks.length === 0) { callback(null); return; }
+
+        var trackIndices = [];
+        checks.forEach(function(cb) { trackIndices.push(parseInt(cb.value)); });
+
+        var allRanges = [];
+        var pending = trackIndices.length;
+
+        trackIndices.forEach(function(idx) {
+            csInterface.evalScript('getClipRangesOnTrack(' + idx + ')', function(res) {
+                try {
+                    var data = JSON.parse(res);
+                    if (data && data.ranges) {
+                        for (var ri = 0; ri < data.ranges.length; ri++) {
+                            allRanges.push(data.ranges[ri]);
+                        }
+                    }
+                } catch(_e) {}
+                pending--;
+                if (pending === 0) {
+                    if (allRanges.length === 0) { callback(null); return; }
+                    allRanges.sort(function(a, b) { return a.start - b.start; });
+                    var merged = [{ start: allRanges[0].start, end: allRanges[0].end }];
+                    for (var i = 1; i < allRanges.length; i++) {
+                        var last = merged[merged.length - 1];
+                        if (allRanges[i].start <= last.end) {
+                            if (allRanges[i].end > last.end) last.end = allRanges[i].end;
+                        } else {
+                            merged.push({ start: allRanges[i].start, end: allRanges[i].end });
+                        }
+                    }
+                    callback(merged);
+                }
+            });
+        });
+    }
+
+    function _st2SaveTrackFilterState() {
+        var checked = [];
+        document.querySelectorAll(".st2-track-filter:checked").forEach(function(cb) {
+            checked.push(parseInt(cb.value));
+        });
+        localStorage.setItem("editorpro_st2_track_filter", JSON.stringify(checked));
+    }
+
+    function _st2InitTrackFilter() {
+        try {
+            var saved = localStorage.getItem("editorpro_st2_track_filter");
+            if (saved) {
+                var checked = JSON.parse(saved);
+                document.querySelectorAll(".st2-track-filter").forEach(function(cb) {
+                    cb.checked = checked.indexOf(parseInt(cb.value)) !== -1;
+                });
+            }
+        } catch(_e) {}
+        document.querySelectorAll(".st2-track-filter").forEach(function(cb) {
+            cb.addEventListener("change", _st2SaveTrackFilterState);
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
 
     function startSupertexts2() {
         if (state.analyzing) return;
@@ -929,36 +1034,46 @@
         setST2Progress(20, "Analizando transcripción con IA...");
         var timedTranscript = buildTimedTranscript();
 
-        aiAnalyzer.analyzeSupertexts(timedTranscript, getSupertext2PromptContext(), function(result) {
-            setST2Progress(100, "Completado");
-            setTimeout(function() {
-                try {
-                    hideElement("st2-progress"); hideElement("st2-progress-header");
-                    enableBtn("btn-supertexts2");
+        _st2GetFilterRanges(function(ranges) {
+            var txForAI = timedTranscript;
+            if (ranges) {
+                txForAI = _st2FilterTranscriptByRanges(timedTranscript, ranges);
+                var totalLines = timedTranscript.split("\n").filter(function(l) { return /^\[\d/.test(l); }).length;
+                var keptLines = txForAI.split("\n").filter(function(l) { return /^\[\d/.test(l); }).length;
+                setST2Progress(25, "Filtrado: " + keptLines + "/" + totalLines + " líneas. Analizando...");
+            }
 
-                    if (result.error) {
-                        if (window.EPLogger) EPLogger.error("supertexts", "analysis-complete", result.error);
-                        showToast("Error: " + result.error, "error");
-                        showElement("st2-empty");
-                        return;
+            aiAnalyzer.analyzeSupertexts(txForAI, getSupertext2PromptContext(), function(result) {
+                setST2Progress(100, "Completado");
+                setTimeout(function() {
+                    try {
+                        hideElement("st2-progress"); hideElement("st2-progress-header");
+                        enableBtn("btn-supertexts2");
+
+                        if (result.error) {
+                            if (window.EPLogger) EPLogger.error("supertexts", "analysis-complete", result.error);
+                            showToast("Error: " + result.error, "error");
+                            showElement("st2-empty");
+                            return;
+                        }
+
+                        if (window.EPLogger) EPLogger.log("supertexts", "analysis-complete", (result.supertexts ? result.supertexts.length : 0) + " supertexts found");
+                        var mapped = (result.supertexts || []).map(function(st) {
+                            st.checked = true;
+                            if (st.type) st.type = st.type.toLowerCase().replace(/_/g, "").replace("bulletpoint", "bullet").replace("datapoint", "data");
+                            if (ST2_TYPES.indexOf(st.type) === -1) st.type = "bullet";
+                            normalizeSt2Fields(st);
+                            return st;
+                        });
+                        state.supertexts2 = _st2CapEndTimes(mapped, 0);
+                        renderSupertext2Results(result);
+                        showElement("st2-results");
+                        showToast(state.supertexts2.length + " supertextos detectados", "success");
+                    } finally {
+                        state.analyzing = false;
                     }
-
-                    if (window.EPLogger) EPLogger.log("supertexts", "analysis-complete", (result.supertexts ? result.supertexts.length : 0) + " supertexts found");
-                    var mapped = (result.supertexts || []).map(function(st) {
-                        st.checked = true;
-                        if (st.type) st.type = st.type.toLowerCase().replace(/_/g, "").replace("bulletpoint", "bullet").replace("datapoint", "data");
-                        if (ST2_TYPES.indexOf(st.type) === -1) st.type = "bullet";
-                        normalizeSt2Fields(st);
-                        return st;
-                    });
-                    state.supertexts2 = _st2CapEndTimes(mapped, 0);
-                    renderSupertext2Results(result);
-                    showElement("st2-results");
-                    showToast(state.supertexts2.length + " supertextos detectados", "success");
-                } finally {
-                    state.analyzing = false;
-                }
-            }, 500);
+                }, 500);
+            });
         });
     }
 
