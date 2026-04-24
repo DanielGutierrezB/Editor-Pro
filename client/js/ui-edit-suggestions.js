@@ -449,13 +449,16 @@
     function placeES2ErrorMarkers() {
         var markers = [];
         state.es2Errors.forEach(function(err, errIdx) {
-            if (!err.occurrences || err.occurrences.length < 2) return;
+            if (!err.occurrences || err.occurrences.length === 0) return;
             err.occurrences.forEach(function(occ, occIdx) {
                 var isKeep = occIdx === err.keepIndex;
+                var label = err.occurrences.length >= 2
+                    ? (isKeep ? "✓ CONSERVAR" : "✗ ELIMINAR")
+                    : "⚠ " + (err.type || "ERROR").toUpperCase();
                 markers.push({
                     time: occ.time,
                     endTime: occ.endTime || occ.time + 5,
-                    name: "[ER" + (errIdx + 1) + "] " + (isKeep ? "✓ CONSERVAR" : "✗ ELIMINAR") + " — " + err.title,
+                    name: "[ER" + (errIdx + 1) + "] " + label + " — " + err.title,
                     comment: err.type.toUpperCase() + ": " + (occ.text || err.description || ""),
                     color: isKeep ? 5 : 1
                 });
@@ -466,17 +469,20 @@
 
     function placeES2SingleErrorMarkers(errIdx) {
         var err = state.es2Errors[errIdx];
-        if (!err || !err.occurrences || err.occurrences.length < 2) {
-            showToast("Este error no tiene suficientes ocurrencias", "info");
+        if (!err || !err.occurrences || err.occurrences.length === 0) {
+            showToast("Este error no tiene ocurrencias para marcar", "info");
             return;
         }
         var markers = [];
         err.occurrences.forEach(function(occ, occIdx) {
             var isKeep = occIdx === err.keepIndex;
+            var label = err.occurrences.length >= 2
+                ? (isKeep ? "✓ CONSERVAR" : "✗ ELIMINAR")
+                : "⚠ " + (err.type || "ERROR").toUpperCase();
             markers.push({
                 time: occ.time,
                 endTime: occ.endTime || occ.time + 5,
-                name: "[ER" + (errIdx + 1) + "] " + (isKeep ? "✓ CONSERVAR" : "✗ ELIMINAR") + " — " + err.title,
+                name: "[ER" + (errIdx + 1) + "] " + label + " — " + err.title,
                 comment: err.type.toUpperCase() + ": " + (occ.text || err.description || ""),
                 color: isKeep ? 5 : 1
             });
