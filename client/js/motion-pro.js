@@ -267,7 +267,7 @@
         }
         var data = JSON.stringify(body);
         var req = http.request({
-            hostname: "localhost",
+            hostname: "127.0.0.1",
             port: SERVER_PORT,
             path: path,
             method: "POST",
