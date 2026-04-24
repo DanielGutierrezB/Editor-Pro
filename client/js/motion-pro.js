@@ -381,6 +381,177 @@
         if (savedTimeout) MP_PIPELINE_TIMEOUT_MS = parseInt(savedTimeout, 10) || MP_PIPELINE_TIMEOUT_MS;
     } catch(_e) {}
 
+    // ─── Preview Flow: Generate template → render still (PNG) ───
+
+    MotionPro.prototype.generatePreview = function(proposal, transcriptSegment, aiConfig, callback, outputDir) {
+        var self = this;
+        var version = 1;
+        var existingMotion = self._findMotion(proposal.id);
+        if (existingMotion) {
+            version = existingMotion.versions.length + 1;
+        }
+
+        var timedOut = false;
+        var pipelineTimer = setTimeout(function() {
+            timedOut = true;
+            callback(new Error("Preview pipeline timeout (120s) for " + proposal.id));
+        }, 120000); // 2 min — stills are much faster
+
+        var body = {
+            proposal: {
+                id: proposal.id,
+                type: proposal.type,
+                description: proposal.description,
+                startTime: proposal.startTime,
+                endTime: proposal.endTime,
+                version: version
+            },
+            transcriptSegment: transcriptSegment,
+            provider: aiConfig.provider,
+            model: aiConfig.model,
+            apiKey: aiConfig.apiKey,
+            sessionDir: outputDir || "",
+            brandfetchKey: aiConfig.brandfetchKey || "",
+            customPalette: self.customPalette || null
+        };
+
+        // Health check before starting
+        self._healthCheckOrRestart(function(healthOk) {
+            if (!healthOk) {
+                clearTimeout(pipelineTimer);
+                return callback(new Error("Motion-Pro server not responding after restart attempt"));
+            }
+
+            // Step 1: Generate template (TSX)
+            self._post("/api/generate/template", body, function(err, result) {
+                if (timedOut) return;
+                if (err) { clearTimeout(pipelineTimer); return callback(err); }
+                if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
+
+                // Step 2: Render still (PNG) instead of video
+                var previewBody = {
+                    compositionId: result.compositionId,
+                    sessionDir: outputDir || "",
+                    outputDir: outputDir || "",
+                    frame: 30
+                };
+
+                self._post("/api/render/preview", previewBody, function(prevErr, prevResult) {
+                    if (timedOut) return;
+                    clearTimeout(pipelineTimer);
+                    if (prevErr) return callback(prevErr);
+                    if (prevResult.error) return callback(new Error(prevResult.error));
+
+                    var versionData = {
+                        version: version,
+                        compositionId: result.compositionId,
+                        tsxPath: result.tsxPath,
+                        pngPath: prevResult.pngPath || null,
+                        preview: prevResult.preview || null,
+                        mp4Path: null,
+                        mediaDurationSec: null,
+                        status: "preview",
+                        feedback: "",
+                        createdAt: new Date().toISOString()
+                    };
+
+                    if (existingMotion) {
+                        existingMotion.versions.push(versionData);
+                        existingMotion.activeVersion = version;
+                    } else {
+                        var motion = {
+                            id: proposal.id,
+                            startTime: proposal.startTime,
+                            endTime: proposal.endTime,
+                            type: proposal.type,
+                            description: proposal.description,
+                            group: proposal.group || '',
+                            baseTrackIndex: -1,
+                            versions: [versionData],
+                            activeVersion: version,
+                            placedInTimeline: false
+                        };
+                        self.motions.push(motion);
+                    }
+
+                    callback(null, {
+                        motionId: proposal.id,
+                        version: version,
+                        pngPath: prevResult.pngPath,
+                        preview: prevResult.preview,
+                        compositionId: result.compositionId
+                    });
+                });
+            });
+        });
+    };
+
+    // ─── Animate: Render video from existing template ─────────────
+
+    MotionPro.prototype.animateMotion = function(motionId, durationFrames, aiConfig, callback, outputDir) {
+        var self = this;
+        var motion = self._findMotion(motionId);
+        if (!motion) return callback(new Error("Motion not found: " + motionId));
+
+        var currentVersion = motion.versions[motion.versions.length - 1];
+        if (!currentVersion || !currentVersion.compositionId) {
+            return callback(new Error("No composition to animate for " + motionId));
+        }
+
+        var timedOut = false;
+        var pipelineTimer = setTimeout(function() {
+            timedOut = true;
+            callback(new Error("Animate timeout (7min) for " + motionId));
+        }, 7 * 60 * 1000);
+
+        self._healthCheckOrRestart(function(healthOk) {
+            if (!healthOk) {
+                clearTimeout(pipelineTimer);
+                return callback(new Error("Motion-Pro server not responding"));
+            }
+
+            var renderBody = {
+                compositionId: currentVersion.compositionId,
+                sessionDir: outputDir || "",
+                durationFrames: durationFrames || null
+            };
+            if (outputDir) renderBody.outputDir = outputDir;
+
+            // Start async render with durationFrames override
+            self._post("/api/render", renderBody, function(renderErr, renderResponse) {
+                if (timedOut) return;
+                if (renderErr) { clearTimeout(pipelineTimer); return callback(renderErr); }
+                if (renderResponse.error) { clearTimeout(pipelineTimer); return callback(new Error(renderResponse.error)); }
+
+                if (!renderResponse.jobId) {
+                    clearTimeout(pipelineTimer);
+                    return callback(new Error("Server did not return jobId"));
+                }
+
+                // Poll until render completes
+                self._pollRenderJob(renderResponse.jobId, function(pollErr, renderResult) {
+                    if (timedOut) return;
+                    clearTimeout(pipelineTimer);
+                    if (pollErr) return callback(pollErr);
+
+                    // Update the current version with video info
+                    currentVersion.mp4Path = renderResult.mp4Path;
+                    currentVersion.mediaDurationSec = typeof renderResult.mediaDurationSec === "number" ? renderResult.mediaDurationSec : null;
+                    currentVersion.status = "rendered";
+
+                    callback(null, {
+                        motionId: motionId,
+                        version: currentVersion.version,
+                        mp4Path: renderResult.mp4Path,
+                        compositionId: currentVersion.compositionId
+                    });
+                });
+            });
+        });
+    };
+
+    // ─── Original full pipeline (kept for backward compat) ────────
+
     MotionPro.prototype.generateMotion = function(proposal, transcriptSegment, aiConfig, callback, outputDir) {
         var self = this;
         var version = 1;
@@ -527,46 +698,42 @@
             if (err) { clearTimeout(pipelineTimer); return callback(err); }
             if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
 
-            var renderBody = { compositionId: result.compositionId, sessionDir: outputDir || "" };
-            if (outputDir) renderBody.outputDir = outputDir;
+            // Render a preview still instead of full video
+            var previewBody = {
+                compositionId: result.compositionId,
+                sessionDir: outputDir || "",
+                outputDir: outputDir || "",
+                frame: 30
+            };
 
-            // Start async render — returns jobId immediately
-            self._post("/api/render", renderBody, function(renderErr, renderResponse) {
+            self._post("/api/render/preview", previewBody, function(prevErr, prevResult) {
                 if (timedOut) return;
-                if (renderErr) { clearTimeout(pipelineTimer); return callback(renderErr); }
-                if (renderResponse.error) { clearTimeout(pipelineTimer); return callback(new Error(renderResponse.error)); }
+                clearTimeout(pipelineTimer);
+                if (prevErr) return callback(prevErr);
+                if (prevResult.error) return callback(new Error(prevResult.error));
 
-                if (!renderResponse.jobId) {
-                    clearTimeout(pipelineTimer);
-                    return callback(new Error("Server did not return jobId"));
-                }
+                var versionData = {
+                    version: newVersion,
+                    compositionId: result.compositionId,
+                    tsxPath: result.tsxPath,
+                    pngPath: prevResult.pngPath || null,
+                    preview: prevResult.preview || null,
+                    mp4Path: null,
+                    mediaDurationSec: null,
+                    status: "preview",
+                    feedback: feedback,
+                    createdAt: new Date().toISOString()
+                };
 
-                // Poll until render completes
-                self._pollRenderJob(renderResponse.jobId, function(pollErr, renderResult) {
-                    if (timedOut) return;
-                    clearTimeout(pipelineTimer);
-                    if (pollErr) return callback(pollErr);
+                motion.versions.push(versionData);
+                motion.activeVersion = newVersion;
 
-                    var versionData = {
-                        version: newVersion,
-                        compositionId: result.compositionId,
-                        tsxPath: result.tsxPath,
-                        mp4Path: renderResult.mp4Path,
-                        mediaDurationSec: typeof renderResult.mediaDurationSec === "number" ? renderResult.mediaDurationSec : null,
-                        status: "rendered",
-                        feedback: feedback,
-                        createdAt: new Date().toISOString()
-                    };
-
-                    motion.versions.push(versionData);
-                    motion.activeVersion = newVersion;
-
-                    callback(null, {
-                        motionId: motionId,
-                        version: newVersion,
-                        mp4Path: renderResult.mp4Path,
-                        compositionId: result.compositionId
-                    });
+                callback(null, {
+                    motionId: motionId,
+                    version: newVersion,
+                    pngPath: prevResult.pngPath,
+                    preview: prevResult.preview,
+                    compositionId: result.compositionId
                 });
             });
         });

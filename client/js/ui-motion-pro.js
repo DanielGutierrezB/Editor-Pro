@@ -1647,7 +1647,8 @@
 
             var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
 
-            motionPro.generateMotion(proposal, segment, aiConfig, function(err, result) {
+            // Use preview flow: template → still (PNG) instead of full video render
+            motionPro.generatePreview(proposal, segment, aiConfig, function(err, result) {
                 done++;
                 activeWorkers--;
 
@@ -1666,7 +1667,7 @@
                         activeWorkers++;
                         setTimeout(function() {
                             _mpTimers.itemStarts[proposal.id] = Date.now();
-                            motionPro.generateMotion(proposal, segment, aiConfig, function(err2, result2) {
+                            motionPro.generatePreview(proposal, segment, aiConfig, function(err2, result2) {
                                 done++;
                                 activeWorkers--;
                                 if (err2) {
@@ -1675,9 +1676,9 @@
                                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
                                     launchWorker();
                                 } else {
-                                    if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result2.motionId || "?") + " (retry success)");
-                                    mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando " + done + "/" + total + " en timeline...");
-                                    mpPlaceSingleInTimeline(result2.motionId, function() {
+                                    if (window.EPLogger) EPLogger.log("motion-pro", "preview-complete", proposal.id + " → " + (result2.motionId || "?") + " (retry success)");
+                                    mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando still " + done + "/" + total + " en timeline...");
+                                    mpPlacePreviewInTimeline(result2.motionId, function() {
                                         proposal.generated = true;
                                         motionPro.saveState();
                                         mpRenderControlPanel();
@@ -1691,16 +1692,15 @@
                     errors.push({ id: proposal.id, error: err.message });
                     if (window.EPLogger) EPLogger.error("motion-pro", "generate-item", proposal.id + ": " + err.message);
                     console.warn("[Motion-Pro] Generation error:", err.message);
-                    // Immediate toast for timeout errors so editor doesn't keep waiting
                     if (errMsg.indexOf("timeout") !== -1 || errMsg.indexOf("Timeout") !== -1) {
                         showToast("⏱ Timeout en " + proposal.id + " — saltando al siguiente", "warning");
                     }
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
                     launchWorker(); // Launch next
                 } else {
-                    if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result.motionId || "?"));
-                    mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando " + done + "/" + total + " en timeline...");
-                    mpPlaceSingleInTimeline(result.motionId, function() {
+                    if (window.EPLogger) EPLogger.log("motion-pro", "preview-complete", proposal.id + " → " + (result.motionId || "?"));
+                    mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando still " + done + "/" + total + " en timeline...");
+                    mpPlacePreviewInTimeline(result.motionId, function() {
                         proposal.generated = true;
                         motionPro.saveState();
                         mpRenderControlPanel();
@@ -1762,6 +1762,174 @@
         // Fallback if no media duration available
         var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
         return Math.max(0.1, motion.endTime - mpStart);
+    }
+
+    // ─── Place PNG preview still in timeline ────────────────────
+
+    function mpPlacePreviewInTimeline(motionId, callback) {
+        var motion = motionPro._findMotion(motionId);
+        if (!motion) { if (callback) callback(); return; }
+        var v = motionPro.getActiveVersion(motionId);
+        if (!v || !v.pngPath) { if (callback) callback(); return; }
+        if (window.EPLogger) EPLogger.log("motion-pro", "timeline-place-preview", motionId + " at " + motion.startTime.toFixed(1) + "s");
+
+        var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
+        // PNG stills use the proposal's time range as duration
+        var mpDuration = Math.max(0.1, motion.endTime - mpStart);
+        var mediaPath = mpNormalizeMediaPath(v.pngPath);
+
+        var payload = {
+            clips: [{
+                mp4Path: mediaPath, // importAndPlaceMotions handles both images and videos
+                startTimeSecs: mpStart,
+                durationSecs: mpDuration,
+                clipName: _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1),
+                labelColor: _mpLabelColorForType(motion.type)
+            }]
+        };
+
+        var tmpPath = _writeTempJson(payload, "mp_preview");
+        if (!tmpPath) { if (callback) callback(); return; }
+
+        csInterface.evalScript('importAndPlaceMotions("' + mpEscapePathForEvalScript(tmpPath) + '")', function(res) {
+            if (res === undefined || res === null || res === "undefined" || res === "null" || res === "EvalScript error." || (typeof res === "string" && res.trim() === "")) {
+                console.warn("[Motion-Pro] PlacePreview: evalScript returned empty or error:", res);
+                if (callback) callback();
+                return;
+            }
+            try {
+                var result = typeof res === "string" ? JSON.parse(res) : res;
+                if (result.error) {
+                    console.warn("[Motion-Pro] PlacePreview error:", result.error);
+                } else {
+                    motion.placedInTimeline = true;
+                    motion.baseTrackIndex = result.trackIndex != null ? result.trackIndex : -1;
+                    mpMovePlayhead(mpStart);
+                }
+            } catch(e) {
+                console.warn("[Motion-Pro] PlacePreview parse error:", e.message);
+            }
+            if (callback) callback();
+        });
+    }
+
+    // ─── Animate: render video + replace PNG in timeline ──────────
+
+    function mpAnimateSingle(motionId, callback) {
+        var motion = motionPro._findMotion(motionId);
+        if (!motion) { if (callback) callback(new Error("Motion not found")); return; }
+        var v = motionPro.getActiveVersion(motionId);
+        if (!v || v.status !== "preview") { if (callback) callback(new Error("Not in preview state")); return; }
+
+        // Step 1: Find the PNG clip in Premiere to get its duration
+        var clipName = _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0];
+
+        csInterface.evalScript('getClipInfoByName("' + mpEscapePathForEvalScript(clipName) + '")', function(clipRes) {
+            var clipInfo;
+            try { clipInfo = JSON.parse(clipRes); } catch(e) { clipInfo = { error: "Parse error" }; }
+
+            var fps = 30;
+            var durationFrames;
+
+            if (clipInfo.found && clipInfo.durationSecs > 0) {
+                durationFrames = Math.round(clipInfo.durationSecs * fps);
+            } else {
+                // Fallback: use proposal time range
+                var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
+                durationFrames = Math.round((motion.endTime - mpStart) * fps);
+            }
+
+            if (durationFrames < 30) durationFrames = 30; // Min 1 second
+
+            // Step 2: Animate (render video with duration override)
+            var aiConfig = {
+                provider: state.settings.aiProvider,
+                model: state.settings.aiModel,
+                apiKey: aiAnalyzer.getActiveKey()
+            };
+
+            motionPro.animateMotion(motionId, durationFrames, aiConfig, function(err, result) {
+                if (err) { if (callback) callback(err); return; }
+
+                // Step 3: Replace PNG with video in timeline
+                var payload = {
+                    mp4Path: mpNormalizeMediaPath(result.mp4Path),
+                    targetClipName: clipName,
+                    clipName: clipName + "_Anim",
+                    labelColor: _mpLabelColorForType(motion.type),
+                    durationSecs: typeof v.mediaDurationSec === "number" ? v.mediaDurationSec : (durationFrames / fps)
+                };
+
+                var tmpPath = _writeTempJson(payload, "mp_animate");
+                if (!tmpPath) { if (callback) callback(); return; }
+
+                csInterface.evalScript('importAndPlaceAbove("' + mpEscapePathForEvalScript(tmpPath) + '")', function(placeRes) {
+                    try {
+                        var placeResult = JSON.parse(placeRes);
+                        if (placeResult.error) {
+                            console.warn("[Motion-Pro] Animate place error:", placeResult.error);
+                            showToast("Error al colocar animación: " + placeResult.error, "error");
+                        } else {
+                            motion.placedInTimeline = true;
+                            showToast("🎬 " + motionId + " animado (v" + result.version + ")", "success");
+                        }
+                    } catch(e) {
+                        console.warn("[Motion-Pro] Animate place parse error:", e.message);
+                    }
+                    motionPro.saveState();
+                    mpRenderControlPanel();
+                    if (callback) callback();
+                });
+            }, _mpOutputDir || undefined);
+        });
+    }
+
+    function mpAnimateAll(callback) {
+        var previews = [];
+        for (var i = 0; i < motionPro.motions.length; i++) {
+            var v = motionPro.getActiveVersion(motionPro.motions[i].id);
+            if (v && v.status === "preview") {
+                previews.push(motionPro.motions[i].id);
+            }
+        }
+        if (previews.length === 0) {
+            showToast("No hay previews para animar", "info");
+            if (callback) callback();
+            return;
+        }
+
+        var total = previews.length;
+        var done = 0;
+        var errors = [];
+
+        showToast("🎬 Animando " + total + " motions...", "info");
+
+        function next() {
+            if (done >= total) {
+                state.mpGenerating = false;
+                if (errors.length > 0) {
+                    showToast("⚠️ " + (total - errors.length) + "/" + total + " animados, " + errors.length + " errores", "error");
+                } else {
+                    showToast("✅ " + total + " motions animados", "success");
+                }
+                mpRenderControlPanel();
+                if (callback) callback();
+                return;
+            }
+
+            var motionId = previews[done];
+            mpSetProgress("mp-generate", Math.round((done / total) * 100), "Animando " + (done + 1) + "/" + total + ": " + motionId);
+
+            mpAnimateSingle(motionId, function(err) {
+                done++;
+                if (err) errors.push({ id: motionId, error: err.message });
+                next();
+            });
+        }
+
+        state.mpGenerating = true;
+        showElement("mp-generate-progress");
+        next();
     }
 
     function mpPlaceSingleInTimeline(motionId, callback) {
@@ -1918,9 +2086,18 @@
         });
 
         // Expand All / Collapse All toolbar
+        // Count how many are in preview state
+        var previewCount = 0;
+        motions.forEach(function(m) {
+            var av = motionPro.getActiveVersion(m.id);
+            if (av && av.status === "preview") previewCount++;
+        });
+
         var toolbar = document.createElement('div');
-        toolbar.style.cssText = 'display:flex; gap:8px; margin-bottom:8px;';
-        toolbar.innerHTML = '<button class="btn btn-sm btn-ghost" id="btn-mp-expand-all">Desplegar todos</button>' +
+        toolbar.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;';
+        toolbar.innerHTML = (previewCount > 0 ?
+                            '<button class="btn btn-sm btn-success" id="btn-mp-animate-all" title="Renderizar video de todos los previews">🎬 Animar Todos (' + previewCount + ')</button>' : '') +
+                            '<button class="btn btn-sm btn-ghost" id="btn-mp-expand-all">Desplegar todos</button>' +
                             '<button class="btn btn-sm btn-ghost" id="btn-mp-collapse-all">Replegar todos</button>';
         list.appendChild(toolbar);
 
@@ -1954,10 +2131,12 @@
             card.setAttribute("data-group", grpName);
 
             var statusBadge = activeV ? (
-                activeV.status === "placed" || m.placedInTimeline ?
+                activeV.status === "placed" || (m.placedInTimeline && activeV.status === "rendered") ?
                     '<span class="mp-status-badge mp-status-placed">En timeline</span>' :
                 activeV.status === "rendered" ?
                     '<span class="mp-status-badge mp-status-rendered">Renderizado</span>' :
+                activeV.status === "preview" ?
+                    '<span class="mp-status-badge mp-status-preview" style="background:#fbbf2422;color:#fbbf24;border:1px solid #fbbf2444">📸 Preview</span>' :
                 activeV.status === "error" ?
                     '<span class="mp-status-badge mp-status-error">Error</span>' :
                     '<span class="mp-status-badge mp-status-generating">Generando...</span>'
@@ -1971,6 +2150,16 @@
                     (ver.feedback ? ' (feedback)' : '') + '</option>';
             }
 
+            // Preview thumbnail (only if status=preview and we have base64 data)
+            var previewThumbHtml = '';
+            if (activeV && activeV.status === "preview" && activeV.preview) {
+                previewThumbHtml = '<div class="mp-preview-thumb-wrap" style="margin:6px 0;text-align:center;">' +
+                    '<img src="' + activeV.preview + '" class="mp-preview-thumb" data-motion-id="' + m.id + '" ' +
+                    'style="max-width:100%;max-height:180px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;" ' +
+                    'title="Click para ver a tamaño completo">' +
+                    '</div>';
+            }
+
             card.innerHTML =
                 '<div class="mp-motion-header mp-clickable-header">' +
                     '<span class="mp-type-badge" data-type="' + esc(m.type) + '" style="background:' + typeInfo.color + '22;color:' + typeInfo.color + ';border:1px solid ' + typeInfo.color + '44">' + esc(typeInfo.label) + '</span>' +
@@ -1978,6 +2167,7 @@
                     '<span class="mp-motion-time">' + formatTimeFull(m.startTime) + ' — ' + formatTimeFull(m.endTime) + '</span>' +
                     statusBadge +
                 '</div>' +
+                previewThumbHtml +
                 '<div class="mp-motion-desc">' + esc(m.description) + '</div>' +
                 '<div class="mp-motion-controls">' +
                     '<div class="mp-version-row">' +
@@ -1985,6 +2175,8 @@
                         '<select class="mp-version-select select-input" data-motion-id="' + m.id + '">' + versionOptions + '</select>' +
                     '</div>' +
                     '<div class="mp-action-row">' +
+                        (activeV && activeV.status === "preview" ?
+                            '<button class="btn btn-sm btn-success mp-btn-animate" data-motion-id="' + m.id + '" title="Renderizar video y colocar en timeline">🎬 Animar</button>' : '') +
                         '<button class="btn btn-sm btn-ghost mp-btn-studio" data-motion-id="' + m.id + '" title="Abrir en Remotion Studio">🖥 Remotion</button>' +
                         '<button class="btn btn-sm btn-ghost mp-btn-regen" data-motion-id="' + m.id + '" title="Regenerar del todo">🔄 Regenerar</button>' +
                     '</div>' +
@@ -2027,6 +2219,27 @@
                     if (v && v.mp4Path) mpReplaceInTimeline(motionId, v);
                     motionPro.saveState();
                     mpRenderControlPanel();
+                });
+
+                // Animate (render video from preview)
+                var animateBtn = card.querySelector(".mp-btn-animate");
+                if (animateBtn) animateBtn.addEventListener("click", function() {
+                    if (!motionPro.serverRunning) { showToast("Inicia el servidor primero", "error"); return; }
+                    if (state.mpGenerating) { showToast("Espera a que termine el proceso actual", "info"); return; }
+                    state.mpGenerating = true;
+                    animateBtn.disabled = true;
+                    animateBtn.textContent = "🎬 Animando...";
+                    if (window.EPLogger) EPLogger.log("motion-pro", "animate-single", motionId);
+
+                    mpAnimateSingle(motionId, function(err) {
+                        state.mpGenerating = false;
+                        if (err) {
+                            showToast("Error al animar: " + err.message, "error");
+                            if (window.EPLogger) EPLogger.error("motion-pro", "animate-error", motionId + ": " + err.message);
+                        }
+                        motionPro.saveState();
+                        mpRenderControlPanel();
+                    });
                 });
 
                 // Remotion Studio
@@ -2202,10 +2415,14 @@
                         if (err) {
                             showToast("Error con feedback: " + err.message, "error");
                         } else {
-                            showToast("Versión " + result.version + " creada con feedback", "success");
-                            if (result.mp4Path) {
-                                var v = motionPro.getActiveVersion(motionId);
-                                if (v) mpReplaceInTimeline(motionId, v);
+                            showToast("Versión " + result.version + " preview con feedback", "success");
+                            // Place new PNG preview in timeline (replaces old one)
+                            if (result.pngPath) {
+                                mpPlacePreviewInTimeline(motionId, function() {
+                                    motionPro.saveState();
+                                    mpRenderControlPanel();
+                                });
+                                return; // callback chain handles saveState+render
                             }
                         }
                         motionPro.saveState();
@@ -2216,8 +2433,19 @@
         }
         }); // end groupOrder.forEach
 
-        // Bind Expand All / Collapse All buttons
+        // Bind toolbar buttons
         setTimeout(function() {
+            var animateAllBtn = document.getElementById('btn-mp-animate-all');
+            if (animateAllBtn) animateAllBtn.addEventListener('click', function() {
+                if (!motionPro.serverRunning) { showToast("Inicia el servidor primero", "error"); return; }
+                if (state.mpGenerating) { showToast("Espera a que termine el proceso actual", "info"); return; }
+                animateAllBtn.disabled = true;
+                animateAllBtn.textContent = "🎬 Animando...";
+                mpAnimateAll(function() {
+                    // Control panel re-rendered by mpAnimateAll
+                });
+            });
+
             var expandBtn = document.getElementById('btn-mp-expand-all');
             var collapseBtn = document.getElementById('btn-mp-collapse-all');
             if (expandBtn) expandBtn.addEventListener('click', function() {
@@ -2296,7 +2524,10 @@
         resolveOutputDir: mpResolveOutputDir,
         bindStepHeaders: mpBindStepHeaders,
         switchToSequence: mpSwitchToSequence,
-        updateAnalyzeButton: mpUpdateAnalyzeButton
+        updateAnalyzeButton: mpUpdateAnalyzeButton,
+        animateSingle: mpAnimateSingle,
+        animateAll: mpAnimateAll,
+        placePreviewInTimeline: mpPlacePreviewInTimeline
     };
 
 })(window);
