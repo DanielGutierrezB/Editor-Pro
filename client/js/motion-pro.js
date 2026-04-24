@@ -428,12 +428,13 @@
                 if (err) { clearTimeout(pipelineTimer); return callback(err); }
                 if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
 
-                // Step 2: Render still (PNG) instead of video
+                // Step 2: Render still (PNG) — use last frame so all elements are visible
+                var lastFrame = Math.max(1, (result.durationFrames || 90) - 1);
                 var previewBody = {
                     compositionId: result.compositionId,
                     sessionDir: outputDir || "",
                     outputDir: outputDir || "",
-                    frame: 30
+                    frame: lastFrame
                 };
 
                 self._post("/api/render/preview", previewBody, function(prevErr, prevResult) {
@@ -699,12 +700,13 @@
             if (err) { clearTimeout(pipelineTimer); return callback(err); }
             if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
 
-            // Render a preview still instead of full video
+            // Render a preview still — use last frame so all elements are visible
+            var lastFrame2 = Math.max(1, (result.durationFrames || 90) - 1);
             var previewBody = {
                 compositionId: result.compositionId,
                 sessionDir: outputDir || "",
                 outputDir: outputDir || "",
-                frame: 30
+                frame: lastFrame2
             };
 
             self._post("/api/render/preview", previewBody, function(prevErr, prevResult) {
