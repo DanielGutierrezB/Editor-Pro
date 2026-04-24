@@ -267,23 +267,40 @@
 
         // On init, restart server to ensure clean state
         if (motionPro) {
-            motionPro.stopServer();
-            mpUpdateServerUI();
             var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
-            motionPro.startServer(extensionPath, function(err) {
-                if (err) {
-                    if (window.EPLogger) EPLogger.error("motion-pro", "auto-start-failed", err.message);
-                    showToast("Servidor no arrancó automáticamente — click Iniciar", "error");
-                } else {
-                    if (window.EPLogger) EPLogger.log("motion-pro", "auto-start-ok", "server running");
-                }
+            motionPro.stopServer(function() {
                 mpUpdateServerUI();
+                _mpStartServerWithRetry(extensionPath, 0);
             });
         }
 
         // Resolve session from active sequence, then load state + render UI
         mpResolveOutputDir(function() {
             mpRenderFullUI();
+        });
+    }
+
+    var MP_MAX_START_RETRIES = 3;
+    var MP_RETRY_DELAY_MS = 3000;
+
+    function _mpStartServerWithRetry(extensionPath, attempt) {
+        motionPro.startServer(extensionPath, function(err) {
+            if (!err) {
+                if (window.EPLogger) EPLogger.log("motion-pro", "auto-start-ok", "server running (attempt " + (attempt + 1) + ")");
+                mpUpdateServerUI();
+                return;
+            }
+            if (attempt < MP_MAX_START_RETRIES - 1) {
+                console.warn("[Motion-Pro] Start attempt " + (attempt + 1) + " failed, retrying in " + (MP_RETRY_DELAY_MS / 1000) + "s...");
+                if (window.EPLogger) EPLogger.log("motion-pro", "auto-start-retry", "attempt " + (attempt + 1) + " failed: " + err.message);
+                setTimeout(function() {
+                    _mpStartServerWithRetry(extensionPath, attempt + 1);
+                }, MP_RETRY_DELAY_MS);
+            } else {
+                if (window.EPLogger) EPLogger.error("motion-pro", "auto-start-failed", err.message + " (after " + MP_MAX_START_RETRIES + " attempts)");
+                showToast("⚠️ Servidor de motions no arrancó — intenta reiniciar la extensión", "error");
+                mpUpdateServerUI();
+            }
         });
     }
 
