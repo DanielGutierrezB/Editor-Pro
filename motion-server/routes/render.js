@@ -217,10 +217,16 @@ router.post('/preview', (req, res) => {
   const outPath = path.join(previewDir, `${compositionId}.png`);
 
   try {
-    const npxPath = execSync('which npx', { encoding: 'utf8' }).trim();
+    let npxPath;
+    try { npxPath = execSync('which npx', { encoding: 'utf8' }).trim(); } catch(_e) { npxPath = 'npx'; }
     const entryPoint = path.join(req.app.locals.renderProject, 'src', 'index.ts');
     const staticProps = JSON.stringify({staticPreview: true});
-    execSync(`"${npxPath}" remotion still "${entryPoint}" ${compositionId} "${outPath}" --frame=${previewFrame} --image-format=png --props='${staticProps}'`, {
+    execFileSync(npxPath, [
+      'remotion', 'still', entryPoint, compositionId, outPath,
+      `--frame=${previewFrame}`,
+      '--image-format=png',
+      `--props=${staticProps}`,
+    ], {
       cwd: req.app.locals.renderProject,
       stdio: 'ignore',
       timeout: 30000,

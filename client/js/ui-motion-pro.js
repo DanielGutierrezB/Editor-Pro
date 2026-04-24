@@ -1450,8 +1450,7 @@
         showElement("mp-proposals-summary");
         var countEl = document.getElementById("mp-proposal-count");
         if (countEl) countEl.textContent = proposals.length;
-        mpUpdateSelectionCount();
-        mpUpdateGenerateButton();
+        mpUpdateSelectionCount(); // also calls mpUpdateGenerateButton
         mpUpdateMotionProEmptyState();
     }
 
@@ -1527,7 +1526,7 @@
             motionPro.saveState();
             mpRenderProposals();
             mpUpdateGenerateButton();
-            showToast("Propuesta visual generada para Clip" + (idx + 1), "success");
+            showToast("Propuesta visual generada para Clip " + (idx + 1), "success");
         });
     }
 

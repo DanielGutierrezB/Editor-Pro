@@ -198,13 +198,13 @@ class RemotionManager {
         return prefix + '\n  if (_static) return <div style={{opacity:1,...style}}>{children}</div>;\n';
       });
     } else {
-      // Try alternate pattern: function-body-level patch
-      // Look for the E component with a slightly different format
       const eAltRe = /(const E:React\.FC<[^>]*>\s*=\s*\(\{.*?children.*?\}\)\s*=>\s*\{)/s;
       if (eAltRe.test(tsxCode)) {
         tsxCode = tsxCode.replace(eAltRe, (match, prefix) => {
           return prefix + '\n  if (_static) return <div style={{opacity:1,...(style||{})}}>{children}</div>;';
         });
+      } else {
+        console.warn('[RemotionManager] _injectStaticPreview: E component pattern not matched — static preview will not suppress E animations');
       }
     }
 
@@ -220,6 +220,8 @@ class RemotionManager {
         tsxCode = tsxCode.replace(fdAltRe, (match, prefix) => {
           return prefix + '\n  if (_static) return <div style={{opacity:1,position:\'absolute\',inset:0}}>{children}</div>;';
         });
+      } else {
+        console.warn('[RemotionManager] _injectStaticPreview: Fd component pattern not matched — static preview will not suppress Fd fade animations');
       }
     }
 
