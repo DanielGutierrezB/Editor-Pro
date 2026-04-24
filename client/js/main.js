@@ -291,6 +291,19 @@
 
         initPromptEditor();
 
+        // Edit Suggestions — Batch
+        on("btn-es2-batch", "click", es2BatchOpen);
+        on("btn-es2-batch-analyze", "click", es2BatchAnalyzeAll);
+        on("btn-es2-batch-cancel", "click", es2BatchClose);
+        on("btn-es2-bnav-prev", "click", es2BatchNavPrev);
+        on("btn-es2-bnav-next", "click", es2BatchNavNext);
+        on("btn-es2-bnav-back", "click", es2BatchNavBack);
+        var es2BSelAll = document.getElementById("es2-batch-select-all");
+        if (es2BSelAll) es2BSelAll.addEventListener("change", function() {
+            var checked = this.checked;
+            document.querySelectorAll(".es2b-check").forEach(function(cb) { cb.checked = checked; });
+        });
+
         // Edit Suggestions
         on("btn-editsuggestions2", "click", startEditSuggestions2);
         on("btn-es2-export", "click", exportEditSuggestions2);
@@ -2789,6 +2802,12 @@
     function st2BatchNavPrev() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchNavPrev(); }
     function st2BatchNavNext() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchNavNext(); }
     function st2BatchNavBack() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchNavBack(); }
+    function es2BatchOpen() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchOpen(); }
+    function es2BatchAnalyzeAll() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchAnalyzeAll(); }
+    function es2BatchClose() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchClose(); }
+    function es2BatchNavPrev() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchNavPrev(); }
+    function es2BatchNavNext() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchNavNext(); }
+    function es2BatchNavBack() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchNavBack(); }
     function renderES2Results(r) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.render(r); }
     function renderReelResults(r) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.renderReelResults(r); }
     function startEditSuggestions2() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.start(); }
