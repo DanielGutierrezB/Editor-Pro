@@ -206,7 +206,16 @@ function _sendAnthropic(cfg, model, apiKey, systemMsg, userMsg, callback) {
     res.on('end', () => {
       try {
         const parsed = JSON.parse(data);
+        // Check for Anthropic API errors
+        if (parsed.type === 'error' || parsed.error) {
+          const errMsg = parsed.error?.message || JSON.stringify(parsed.error || parsed);
+          console.error('[llm] Anthropic API error:', errMsg);
+          return safeCb(new Error('Anthropic API error: ' + errMsg));
+        }
         const text = parsed.content?.[0]?.text || '';
+        if (!text) {
+          console.warn('[llm] Empty content from Anthropic. Response type:', parsed.type, 'stop_reason:', parsed.stop_reason);
+        }
         safeCb(null, text);
       } catch (e) {
         safeCb(new Error('Parse error: ' + e.message));
@@ -247,7 +256,16 @@ function _sendOpenAI(cfg, model, apiKey, systemMsg, userMsg, callback) {
     res.on('end', () => {
       try {
         const parsed = JSON.parse(data);
+        // Check for API error responses
+        if (parsed.error) {
+          const errMsg = parsed.error.message || JSON.stringify(parsed.error);
+          console.error('[llm] API error from ' + cfg.host + ':', errMsg);
+          return safeCb(new Error('API error: ' + errMsg));
+        }
         const text = parsed.choices?.[0]?.message?.content || '';
+        if (!text) {
+          console.warn('[llm] Empty content from ' + cfg.host + '. Response keys:', Object.keys(parsed).join(','));
+        }
         safeCb(null, text);
       } catch (e) {
         safeCb(new Error('Parse error: ' + e.message));

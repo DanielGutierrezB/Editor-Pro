@@ -1520,6 +1520,7 @@
 
         if (window.EPLogger) EPLogger.log("motion-pro", "generate-start", selected.length + " proposals selected");
         _mpTimers.generateStart = Date.now();
+        if (!_mpTimers.totalStart) _mpTimers.totalStart = Date.now(); // Fix: ensure totalStart is set even without analysis
         state.mpGenerating = true;
         state.mpGenerateCancelRequested = false;
 

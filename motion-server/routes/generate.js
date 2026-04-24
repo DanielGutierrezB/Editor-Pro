@@ -100,12 +100,19 @@ router.post('/template', (req, res) => {
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawResponse) => {
     if (err) return res.status(500).json({ error: 'LLM error: ' + err.message });
 
+    // Guard against empty LLM response
+    if (!rawResponse || rawResponse.trim().length === 0) {
+      console.error('[generate/template] LLM returned empty response. provider=' + provider + ' model=' + model);
+      return res.status(500).json({ error: 'LLM returned empty response — check API key and model' });
+    }
+
     try {
       // Parse JSON from response (strip markdown if present)
       let jsonStr = rawResponse.trim();
       const jsonMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
       if (jsonMatch) jsonStr = jsonMatch[1].trim();
 
+      console.log('[generate/template] Parsing LLM response (' + jsonStr.length + ' chars)');
       const contentValues = JSON.parse(jsonStr);
 
       // Fill template with content values (apply custom palette if provided)
