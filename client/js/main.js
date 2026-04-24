@@ -443,6 +443,7 @@
     var _seqCacheOrder = []; // LRU order tracking
     var _SEQ_CACHE_MAX = 20;
     var _lastSeqName = "";
+    var _seqSwitchInProgress = false; // Guard against polling race condition
 
     function _seqCacheTouch(name) {
         var idx = _seqCacheOrder.indexOf(name);
@@ -508,7 +509,9 @@
 
     function startSequencePolling() {
         setInterval(function() {
+            if (_seqSwitchInProgress) return; // Skip while dropdown switch is in progress
             csInterface.evalScript("getActiveSequenceInfo()", function(result) {
+                if (_seqSwitchInProgress) return; // Re-check in callback (async guard)
                 try {
                     var data = JSON.parse(result);
                     if (data.error || !data.name) return;
@@ -648,12 +651,14 @@
     function openSequenceByName(seqName) {
         if (seqName === _lastSeqName) return;
         saveCurrentSequenceState();
+        _seqSwitchInProgress = true; // Block polling during switch
 
         var safeName = seqName.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
         csInterface.evalScript('findAndOpenSequenceByName("' + safeName + '")', function(result) {
             try {
                 var res = JSON.parse(result);
                 if (res.error) {
+                    _seqSwitchInProgress = false;
                     showToast("Error: " + res.error, "error");
                     return;
                 }
@@ -664,6 +669,7 @@
             } catch(e) {
                 showToast("Error al abrir secuencia", "error");
             }
+            _seqSwitchInProgress = false;
         });
     }
 
