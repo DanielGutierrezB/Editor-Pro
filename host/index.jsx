@@ -3141,11 +3141,12 @@ function importAndPlaceAbove(jsonPath) {
             } catch(eDur) {}
         }
 
-        // Remove the PNG preview clip from the original track
+        // Disable the PNG preview clip (video on track above will cover it).
+        // Don't remove() — not all Premiere versions support it and it can crash.
         try {
-            targetClip.remove(true, true);
-        } catch(eRm) {
-            // Some Premiere versions don't support remove — leave it
+            targetClip.disabled = true;
+        } catch(eDis) {
+            // If disable not supported, leave it — video above covers it anyway
         }
 
         return JSON.stringify({

@@ -440,8 +440,9 @@ class RemotionManager {
     let root = fs.readFileSync(this.rootTsxPath, 'utf8');
 
     // Replace durationInFrames={OLD} for this specific composition
+    const escapedId = compositionId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(
-      `(<Composition\\s+id="${compositionId.replace(/[-]/g, '\\-')}"[^>]*durationInFrames=\\{)\\d+(\\})`
+      `(<Composition\\s+id="${escapedId}"[^>]*durationInFrames=\\{)\\d+(\\})`
     );
     if (regex.test(root)) {
       root = root.replace(regex, '$1' + durationFrames + '$2');

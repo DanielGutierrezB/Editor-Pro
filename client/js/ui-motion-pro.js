@@ -1801,6 +1801,7 @@
                 var result = typeof res === "string" ? JSON.parse(res) : res;
                 if (result.error) {
                     console.warn("[Motion-Pro] PlacePreview error:", result.error);
+                    showToast("Preview no colocado: " + result.error, "error");
                 } else {
                     motion.placedInTimeline = true;
                     motion.baseTrackIndex = result.trackIndex != null ? result.trackIndex : -1;
@@ -1852,12 +1853,17 @@
                 if (err) { if (callback) callback(err); return; }
 
                 // Step 3: Replace PNG with video in timeline
+                // v is the preview version (mediaDurationSec is always null for previews)
+                // Use the rendered result's duration, fallback to durationFrames/fps
+                var animDurationSecs = (result.mp4Path && motionPro.getActiveVersion(motionId) && typeof motionPro.getActiveVersion(motionId).mediaDurationSec === "number")
+                    ? motionPro.getActiveVersion(motionId).mediaDurationSec
+                    : (durationFrames / fps);
                 var payload = {
                     mp4Path: mpNormalizeMediaPath(result.mp4Path),
                     targetClipName: clipName,
                     clipName: clipName + "_Anim",
                     labelColor: _mpLabelColorForType(motion.type),
-                    durationSecs: typeof v.mediaDurationSec === "number" ? v.mediaDurationSec : (durationFrames / fps)
+                    durationSecs: animDurationSecs
                 };
 
                 var tmpPath = _writeTempJson(payload, "mp_animate");
@@ -1907,6 +1913,8 @@
         function next() {
             if (done >= total) {
                 state.mpGenerating = false;
+                hideElement("mp-generate-progress");
+                refreshMPHeaderProgressVisibility();
                 if (errors.length > 0) {
                     showToast("⚠️ " + (total - errors.length) + "/" + total + " animados, " + errors.length + " errores", "error");
                 } else {
@@ -2150,14 +2158,23 @@
                     (ver.feedback ? ' (feedback)' : '') + '</option>';
             }
 
-            // Preview thumbnail (only if status=preview and we have base64 data)
+            // Preview thumbnail (read from disk via pngPath, not from base64 in state)
             var previewThumbHtml = '';
-            if (activeV && activeV.status === "preview" && activeV.preview) {
-                previewThumbHtml = '<div class="mp-preview-thumb-wrap" style="margin:6px 0;text-align:center;">' +
-                    '<img src="' + activeV.preview + '" class="mp-preview-thumb" data-motion-id="' + m.id + '" ' +
-                    'style="max-width:100%;max-height:180px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;" ' +
-                    'title="Click para ver a tamaño completo">' +
-                    '</div>';
+            if (activeV && activeV.status === "preview" && activeV.pngPath) {
+                var _thumbSrc = '';
+                try {
+                    if (fs && fs.existsSync(activeV.pngPath)) {
+                        var _imgData = fs.readFileSync(activeV.pngPath);
+                        _thumbSrc = 'data:image/png;base64,' + _imgData.toString('base64');
+                    }
+                } catch(_thumbErr) {}
+                if (_thumbSrc) {
+                    previewThumbHtml = '<div class="mp-preview-thumb-wrap" style="margin:6px 0;text-align:center;">' +
+                        '<img src="' + _thumbSrc + '" class="mp-preview-thumb" data-motion-id="' + m.id + '" ' +
+                        'style="max-width:100%;max-height:180px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;" ' +
+                        'title="Click para ver a tamaño completo">' +
+                        '</div>';
+                }
             }
 
             card.innerHTML =

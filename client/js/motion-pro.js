@@ -447,7 +447,8 @@
                         compositionId: result.compositionId,
                         tsxPath: result.tsxPath,
                         pngPath: prevResult.pngPath || null,
-                        preview: prevResult.preview || null,
+                        // NOTE: base64 preview NOT stored in versionData (would bloat localStorage).
+                        // It's passed via callback for immediate UI display only.
                         mp4Path: null,
                         mediaDurationSec: null,
                         status: "preview",
@@ -478,7 +479,7 @@
                         motionId: proposal.id,
                         version: version,
                         pngPath: prevResult.pngPath,
-                        preview: prevResult.preview,
+                        preview: prevResult.preview,  // base64 for immediate UI display
                         compositionId: result.compositionId
                     });
                 });
@@ -717,7 +718,7 @@
                     compositionId: result.compositionId,
                     tsxPath: result.tsxPath,
                     pngPath: prevResult.pngPath || null,
-                    preview: prevResult.preview || null,
+                    // NOTE: base64 NOT stored — passed via callback only
                     mp4Path: null,
                     mediaDurationSec: null,
                     status: "preview",
