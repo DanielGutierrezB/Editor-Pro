@@ -99,6 +99,12 @@ function _ensureRenderFn(app) {
     // Sync session before render to ensure Root.tsx is correct
     if (job.sessionDir) manager.syncFromSession(job.sessionDir);
 
+    // If durationFrames override is set (e.g., "Animar" matching timeline clip length),
+    // update the composition registration in Root.tsx before rendering
+    if (job.durationFrames && job.durationFrames > 0) {
+      manager.updateCompositionDuration(job.compositionId, job.durationFrames);
+    }
+
     const tsx = manager.getCompositionTsx(job.compositionId);
     if (!tsx) {
       return done(new Error('Composition ' + job.compositionId + ' not found'));
@@ -131,8 +137,9 @@ function _ensureRenderFn(app) {
 }
 
 // POST /api/render — enqueue a render job, return jobId immediately
+// Optional: durationFrames overrides the composition's registered duration (used by "Animar" to match timeline clip length)
 router.post('/', (req, res) => {
-  const { compositionId, outputDir, sessionDir } = req.body;
+  const { compositionId, outputDir, sessionDir, durationFrames } = req.body;
 
   if (!compositionId) {
     return res.status(400).json({ error: 'Missing compositionId' });
@@ -142,7 +149,12 @@ router.post('/', (req, res) => {
 
   // Don't sync/validate here — the render function handles syncFromSession when the job executes.
   // This avoids double-sync which could cause race conditions if compositions change between enqueue and render.
-  const job = renderQueue.enqueue({ compositionId, outputDir: outputDir || null, sessionDir: sessionDir || null });
+  const job = renderQueue.enqueue({
+    compositionId,
+    outputDir: outputDir || null,
+    sessionDir: sessionDir || null,
+    durationFrames: durationFrames ? parseInt(durationFrames, 10) : null,
+  });
 
   res.json({
     jobId: job.id,
@@ -177,9 +189,9 @@ router.get('/status/:jobId', (req, res) => {
   res.json(response);
 });
 
-// Preview: render single frame as PNG
+// Preview: render single frame as PNG (persistent — saved to session/previews/)
 router.post('/preview', (req, res) => {
-  const { compositionId, sessionDir, frame } = req.body;
+  const { compositionId, sessionDir, frame, outputDir } = req.body;
   if (!compositionId) return res.status(400).json({ error: 'Missing compositionId' });
 
   const manager = new RemotionManager(req.app.locals.renderProject);
@@ -189,7 +201,20 @@ router.post('/preview', (req, res) => {
   if (!tsx) return res.status(404).json({ error: `Composition ${compositionId} not found` });
 
   const previewFrame = frame || 30;
-  const outPath = path.join(req.app.locals.outputDir, `preview_${compositionId}.png`);
+
+  // Determine output path: persist to session's previews/ folder if outputDir given
+  let previewDir;
+  if (outputDir) {
+    previewDir = path.join(outputDir, 'previews');
+  } else if (sessionDir) {
+    previewDir = path.join(sessionDir, 'previews');
+  } else {
+    previewDir = path.join(req.app.locals.outputDir, 'previews');
+  }
+  if (!fs.existsSync(previewDir)) {
+    fs.mkdirSync(previewDir, { recursive: true });
+  }
+  const outPath = path.join(previewDir, `${compositionId}.png`);
 
   try {
     const npxPath = execSync('which npx', { encoding: 'utf8' }).trim();
@@ -203,8 +228,8 @@ router.post('/preview', (req, res) => {
     if (fs.existsSync(outPath)) {
       const imgData = fs.readFileSync(outPath);
       const b64 = 'data:image/png;base64,' + imgData.toString('base64');
-      fs.unlinkSync(outPath);
-      res.json({ success: true, preview: b64, compositionId, frame: previewFrame });
+      // PNG persists on disk — NOT deleted
+      res.json({ success: true, preview: b64, pngPath: outPath, compositionId, frame: previewFrame });
     } else {
       res.status(500).json({ error: 'Preview frame not generated' });
     }

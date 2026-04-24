@@ -431,6 +431,31 @@ class RemotionManager {
     return Math.max(calculated, fallback || 300);
   }
 
+  /**
+   * Update an already-registered composition's durationInFrames in Root.tsx.
+   * Used by "Animar" to override duration to match the timeline clip length.
+   */
+  updateCompositionDuration(compositionId, durationFrames) {
+    if (!fs.existsSync(this.rootTsxPath)) return;
+    let root = fs.readFileSync(this.rootTsxPath, 'utf8');
+
+    // Replace durationInFrames={OLD} for this specific composition
+    const regex = new RegExp(
+      `(<Composition\\s+id="${compositionId.replace(/[-]/g, '\\-')}"[^>]*durationInFrames=\\{)\\d+(\\})`
+    );
+    if (regex.test(root)) {
+      root = root.replace(regex, '$1' + durationFrames + '$2');
+      fs.writeFileSync(this.rootTsxPath, root, 'utf8');
+      console.log(`[RemotionManager] Updated ${compositionId} duration to ${durationFrames} frames`);
+    } else {
+      console.warn(`[RemotionManager] Could not find ${compositionId} in Root.tsx to update duration`);
+    }
+
+    // Also update the .duration metadata file
+    const metaPath = path.join(this.compositionsDir, `${compositionId}.duration`);
+    fs.writeFileSync(metaPath, String(durationFrames), 'utf8');
+  }
+
   _registerInRoot(compositionId, durationFrames) {
     // Verify the TSX file actually exists before registering
     const tsxPath = path.join(this.compositionsDir, `${compositionId}.tsx`);

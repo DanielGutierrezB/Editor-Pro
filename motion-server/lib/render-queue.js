@@ -25,6 +25,7 @@ RenderQueue.prototype.enqueue = function(opts) {
     compositionId: opts.compositionId,
     outputDir: opts.outputDir || null,
     sessionDir: opts.sessionDir || null,
+    durationFrames: opts.durationFrames || null,  // override for "Animar" (match timeline clip)
     status: 'queued',  // queued | rendering | complete | error
     result: null,
     error: null,
