@@ -249,9 +249,64 @@
         this._aborted = true;
     };
 
+    // ── Auto-correct provider/model mismatches ──────────────────
+    // Fixes cases where API key type doesn't match selected provider
+    // (e.g. sk-ant-* key with OpenRouter provider, or vice versa)
+    var _ANTHROPIC_MODEL_MAP = {
+        "anthropic/claude-sonnet-4":  "claude-sonnet-4-20250514",
+        "anthropic/claude-opus-4":    "claude-opus-4-20250514",
+        "anthropic/claude-haiku-4":   "claude-haiku-4-20250514"
+    };
+    var _REVERSE_ANTHROPIC_MAP = {};
+    (function() { for (var k in _ANTHROPIC_MODEL_MAP) { _REVERSE_ANTHROPIC_MAP[_ANTHROPIC_MODEL_MAP[k]] = k; } })();
+
+    AIAnalyzer.prototype._resolveProviderModel = function() {
+        var p = this.provider;
+        var m = this.model;
+        var key = this.getActiveKey();
+
+        // Key-based auto-detect
+        if (key) {
+            if (key.indexOf("sk-ant-") === 0 && p === "openrouter") {
+                console.log("[ai-analyzer] Auto-correcting provider openrouter → anthropic (key is sk-ant-*)");
+                p = "anthropic";
+            } else if (key.indexOf("sk-or-") === 0 && p === "anthropic") {
+                console.log("[ai-analyzer] Auto-correcting provider anthropic → openrouter (key is sk-or-*)");
+                p = "openrouter";
+            }
+        }
+
+        // Model format normalization
+        if (p === "anthropic" && m && m.indexOf("/") !== -1) {
+            var mapped = _ANTHROPIC_MODEL_MAP[m];
+            if (mapped) {
+                console.log("[ai-analyzer] Model remap: " + m + " → " + mapped);
+                m = mapped;
+            } else {
+                m = m.replace(/^anthropic\//, "");
+            }
+        } else if (p === "openrouter" && m && m.indexOf("/") === -1) {
+            var rev = _REVERSE_ANTHROPIC_MAP[m];
+            if (rev) {
+                console.log("[ai-analyzer] Model remap: " + m + " → " + rev);
+                m = rev;
+            }
+        }
+
+        return { provider: p, model: m };
+    };
+
     AIAnalyzer.prototype._send = function(systemMsg, userPrompt, callback, images) {
         var self = this;
         self._aborted = false;
+
+        // Auto-correct provider/model before sending
+        var resolved = self._resolveProviderModel();
+        var savedProvider = self.provider;
+        var savedModel = self.model;
+        self.provider = resolved.provider;
+        self.model = resolved.model;
+
         var timeoutMs = self.requestTimeoutMs || 900000;
         var sendFinished = false;
         self._activeTimeoutId = null;
@@ -273,6 +328,9 @@
                 var resLen = result ? JSON.stringify(result).length : 0;
                 if (window.EPLogger) EPLogger.log("ai-analyzer", "api-response", "ok responseLen=" + resLen + " (" + elapsed + "s)");
             }
+            // Restore original provider/model (auto-correct is per-request only)
+            self.provider = savedProvider;
+            self.model = savedModel;
             callback(result);
         };
         var body;
