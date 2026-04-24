@@ -1310,7 +1310,8 @@
         batchClose: es2BatchClose,
         batchNavPrev: es2BatchNavPrev,
         batchNavNext: es2BatchNavNext,
-        batchNavBack: es2BatchNavBack
+        batchNavBack: es2BatchNavBack,
+        isBatchActive: function() { return _es2BatchRunning || _es2BatchCurrentNav >= 0; }
     };
 
 })(window);

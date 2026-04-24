@@ -445,6 +445,14 @@
     var _lastSeqName = "";
     var _seqSwitchInProgress = false; // Guard against polling race condition
 
+    function _isAnyBatchActive() {
+        var EP = window.EditorProUI;
+        if (!EP) return false;
+        if (EP.supertexts && EP.supertexts.isBatchActive && EP.supertexts.isBatchActive()) return true;
+        if (EP.editSuggestions && EP.editSuggestions.isBatchActive && EP.editSuggestions.isBatchActive()) return true;
+        return false;
+    }
+
     function _seqCacheTouch(name) {
         var idx = _seqCacheOrder.indexOf(name);
         if (idx !== -1) _seqCacheOrder.splice(idx, 1);
@@ -482,8 +490,7 @@
                 if (data.markerCount > 0) meta.push(data.markerCount + " markers");
                 document.getElementById("seq-meta").textContent = meta.join(" · ");
 
-                var _batchActive = window.EditorProUI && window.EditorProUI.supertexts && window.EditorProUI.supertexts.isBatchActive && window.EditorProUI.supertexts.isBatchActive();
-                if (changed && !_batchActive) {
+                if (changed && !_isAnyBatchActive()) {
                     restoreSequenceState(newSeqName);
                     mpSwitchToSequence();
                 } else if (isFirstLoad) {
@@ -526,8 +533,7 @@
                         var meta = [];
                         if (data.markerCount > 0) meta.push(data.markerCount + " markers");
                         document.getElementById("seq-meta").textContent = meta.join(" · ");
-                        var _pollBatchActive = window.EditorProUI && window.EditorProUI.supertexts && window.EditorProUI.supertexts.isBatchActive && window.EditorProUI.supertexts.isBatchActive();
-                        if (_pollBatchActive) return;
+                        if (_isAnyBatchActive()) return;
                         restoreSequenceState(data.name);
                         mpSwitchToSequence();
                         // Refresh transcribe folder for new sequence
