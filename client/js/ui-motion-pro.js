@@ -321,6 +321,20 @@
     function mpShowStep(num) {
         var el = document.getElementById(num === 2 ? "mp-proposals-section" : num === 3 ? "mp-control-section" : null);
         if (el) el.style.display = "";
+
+        // Accordion: collapse all other mp-step bodies, open this one
+        document.querySelectorAll("[id^='mp-step-body-']").forEach(function(b) {
+            var bNum = b.id.replace("mp-step-body-", "");
+            if (bNum == num) {
+                b.classList.remove("hidden");
+                var arrow = b.previousElementSibling ? b.previousElementSibling.querySelector(".rec-step-arrow") : null;
+                if (arrow) arrow.textContent = "▾";
+            } else {
+                b.classList.add("hidden");
+                var arrow2 = b.previousElementSibling ? b.previousElementSibling.querySelector(".rec-step-arrow") : null;
+                if (arrow2) arrow2.textContent = "▸";
+            }
+        });
     }
 
     // ─── Style Import Initialization ─────────────────────────────
