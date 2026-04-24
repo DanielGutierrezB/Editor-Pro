@@ -2963,6 +2963,16 @@
     window._epGetTakeAnalysisPromptContext = getTakeAnalysisPromptContext;
     window._epToggleSettings = toggleSettings;
 
+    // Allow batch navigators to update _lastSeqName and block polling
+    window._epNotifyBatchSeqSwitch = function(seqName) {
+        if (_lastSeqName && seqName !== _lastSeqName) {
+            saveCurrentSequenceState();
+        }
+        _lastSeqName = seqName;
+        state.sequenceName = seqName;
+        document.getElementById("seq-name").textContent = seqName;
+    };
+
     // ─── Auto-update on reload ───────────────────────────────────
     var _updateAvailable = false;
     var _originalReloadHTML = "";

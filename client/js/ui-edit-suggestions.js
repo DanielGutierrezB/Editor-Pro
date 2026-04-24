@@ -1232,6 +1232,8 @@
         var analyzed = _es2BatchGetAnalyzedNames();
         _es2BatchCurrentNav = analyzed.indexOf(seqName);
 
+        // Notify main.js to update _lastSeqName BEFORE opening (prevents polling race)
+        if (window._epNotifyBatchSeqSwitch) window._epNotifyBatchSeqSwitch(seqName);
         csInterface.evalScript('openSequenceById("' + r.seqId.replace(/"/g, '\\"') + '")', function() {});
 
         state.es2Highlights = r.result.highlights || [];

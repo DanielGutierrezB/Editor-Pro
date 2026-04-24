@@ -755,6 +755,8 @@
         var analyzed = _st2BatchGetAnalyzedNames();
         _st2BatchCurrentNav = analyzed.indexOf(seqName);
 
+        // Notify main.js to update _lastSeqName BEFORE opening (prevents polling race)
+        if (window._epNotifyBatchSeqSwitch) window._epNotifyBatchSeqSwitch(seqName);
         // Activate sequence in Premiere
         csInterface.evalScript('openSequenceById("' + r.seqId.replace(/"/g, '\\"') + '")', function() {});
 
