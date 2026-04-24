@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 
 const generateRoute = require('./routes/generate');
+const proposeRoute = require('./routes/propose');
 const renderRoute = require('./routes/render');
 const feedbackRoute = require('./routes/feedback');
 const studioRoute = require('./routes/studio');
@@ -182,6 +183,7 @@ They should complement — not clash with — the video's visual style.`;
 
 app.use('/docs', express.static(path.join(__dirname, 'public')));
 
+app.use('/api/generate/propose', proposeRoute);
 app.use('/api/generate', generateRoute);
 app.use('/api/render', renderRoute);
 app.use('/api/feedback', feedbackRoute);

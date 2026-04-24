@@ -381,6 +381,46 @@
         if (savedTimeout) MP_PIPELINE_TIMEOUT_MS = parseInt(savedTimeout, 10) || MP_PIPELINE_TIMEOUT_MS;
     } catch(_e) {}
 
+    // ─── Visual Proposal: generate a detailed layout description via LLM ────
+
+    MotionPro.prototype.proposeVisual = function(proposal, transcriptSegment, aiConfig, callback) {
+        var self = this;
+
+        var body = {
+            proposal: {
+                id: proposal.id,
+                type: proposal.type,
+                description: proposal.description,
+                startTime: proposal.startTime,
+                endTime: proposal.endTime
+            },
+            transcriptSegment: transcriptSegment,
+            provider: aiConfig.provider,
+            model: aiConfig.model,
+            apiKey: aiConfig.apiKey
+        };
+
+        self._post("/api/generate/propose", body, function(err, result) {
+            if (err) return callback(err);
+            if (result.error) return callback(new Error(result.error));
+
+            // Store visualProposal on the proposal object in self.proposals
+            for (var i = 0; i < self.proposals.length; i++) {
+                if (self.proposals[i].id === proposal.id) {
+                    self.proposals[i].visualProposal = {
+                        description: result.visualDescription || "",
+                        layout: result.layout || "",
+                        elements: result.elements || [],
+                        colorNotes: result.colorNotes || ""
+                    };
+                    break;
+                }
+            }
+
+            callback(null, result);
+        });
+    };
+
     // ─── Preview Flow: Generate template → render still (PNG) ───
 
     MotionPro.prototype.generatePreview = function(proposal, transcriptSegment, aiConfig, callback, outputDir) {
@@ -414,6 +454,11 @@
             brandfetchKey: aiConfig.brandfetchKey || "",
             customPalette: self.customPalette || null
         };
+
+        // If the proposal has a pre-approved visual description, use free-form generation
+        if (proposal.visualProposal && proposal.visualProposal.description) {
+            body.visualDescription = proposal.visualProposal.description;
+        }
 
         // Health check before starting
         self._healthCheckOrRestart(function(healthOk) {

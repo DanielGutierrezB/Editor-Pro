@@ -200,7 +200,7 @@ router.post('/preview', (req, res) => {
   const tsx = manager.getCompositionTsx(compositionId);
   if (!tsx) return res.status(404).json({ error: `Composition ${compositionId} not found` });
 
-  const previewFrame = frame || 30;
+  const previewFrame = frame || 0; // frame 0 is fine — staticPreview mode renders everything at full opacity
 
   // Determine output path: persist to session's previews/ folder if outputDir given
   let previewDir;
@@ -219,7 +219,8 @@ router.post('/preview', (req, res) => {
   try {
     const npxPath = execSync('which npx', { encoding: 'utf8' }).trim();
     const entryPoint = path.join(req.app.locals.renderProject, 'src', 'index.ts');
-    execSync(`"${npxPath}" remotion still "${entryPoint}" ${compositionId} "${outPath}" --frame=${previewFrame} --image-format=png`, {
+    const staticProps = JSON.stringify({staticPreview: true});
+    execSync(`"${npxPath}" remotion still "${entryPoint}" ${compositionId} "${outPath}" --frame=${previewFrame} --image-format=png --props='${staticProps}'`, {
       cwd: req.app.locals.renderProject,
       stdio: 'ignore',
       timeout: 30000,

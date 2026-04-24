@@ -76,22 +76,77 @@ router.post('/', (req, res) => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Template-based generation — AI fills content values only, template handles layout
+// Template-based generation — AI fills content values only, template handles layout.
+// When visualDescription is provided, falls back to free-form TSX generation guided
+// by the pre-approved visual layout description.
 // ──────────────────────────────────────────────────────────────────────────────
 router.post('/template', (req, res) => {
-  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette } = req.body;
+  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, visualDescription } = req.body;
   if (customPalette) console.log('[generate/template] Custom palette received:', customPalette.bg, customPalette.accent);
   else console.log("[generate/template] No custom palette");
-  console.log("[generate/template] provider=" + provider + " model=" + model);
+  console.log("[generate/template] provider=" + provider + " model=" + model + (visualDescription ? " [free-form from visualDescription]" : " [template]"));
 
   if (!proposal || !transcriptSegment) {
     return res.status(400).json({ error: 'Missing proposal or transcriptSegment' });
   }
 
-  const templateManager = new TemplateManager();
   const compositionId = (proposal.id + '-v' + (proposal.version || 1)).replace(/_/g, '-');
   const durationSecs = (proposal.endTime || 0) - (proposal.startTime || 0);
   const durationFrames = Math.max(90, Math.round(durationSecs * 30) + 6);
+
+  // When visualDescription is present, use free-form generation guided by it
+  if (visualDescription) {
+    const { systemMsg, userMsg } = getGenerationPrompt({
+      transcriptSegment,
+      type: proposal.type,
+      description: proposal.description,
+      durationFrames,
+      compositionId,
+      brandfetchKey: '',
+      visualDescription,
+    });
+
+    sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {
+      if (err) return res.status(500).json({ error: 'LLM error: ' + err.message });
+
+      if (!rawCode || rawCode.trim().length === 0) {
+        return res.status(500).json({ error: 'LLM returned empty response — check API key and model' });
+      }
+
+      let tsxCode = rawCode;
+      const codeMatch = rawCode.match(/```(?:tsx?|jsx?|react)?\s*\n([\s\S]*?)```/);
+      if (codeMatch) tsxCode = codeMatch[1].trim();
+
+      try {
+        const manager = new RemotionManager(req.app.locals.renderProject);
+        if (sessionDir) manager.syncFromSession(sessionDir);
+        const result = manager.writeComposition(compositionId, tsxCode, durationFrames);
+
+        if (result && result.syntaxError) {
+          return res.status(500).json({
+            error: 'Syntax error in generated TSX: ' + (result.errors || []).join('; '),
+            compositionId,
+          });
+        }
+
+        if (sessionDir) manager.saveToSession(compositionId, sessionDir);
+
+        res.json({
+          compositionId,
+          tsxPath: typeof result === 'string' ? result : (result && result.filePath) || '',
+          durationFrames,
+          status: 'generated',
+          method: 'free-form',
+        });
+      } catch (writeErr) {
+        res.status(500).json({ error: 'Write error: ' + writeErr.message });
+      }
+    });
+    return;
+  }
+
+  // Default: template-based generation
+  const templateManager = new TemplateManager();
 
   const { systemMsg, userMsg } = getTemplateFillingPrompt(
     proposal.type, transcriptSegment, proposal.description, durationFrames

@@ -1294,11 +1294,40 @@
 
                 var typeInfo = MotionPro.TYPES[p.type] || { label: p.type, color: "#818cf8" };
                 var priorityClass = p.priority === "alta" ? "mp-priority-high" : p.priority === "baja" ? "mp-priority-low" : "mp-priority-med";
+                var hasVisual = !!(p.visualProposal && p.visualProposal.description);
 
                 var card = document.createElement("div");
-                card.className = "mp-proposal-card mp-grouped-card";
+                card.className = "mp-proposal-card mp-grouped-card" + (hasVisual ? " mp-has-visual" : "");
                 card.setAttribute("data-mp-idx", origIdx);
                 card.setAttribute("data-mp-group", grpName);
+
+                var visualHtml = '';
+                if (hasVisual) {
+                    var colorNotesHtml = p.visualProposal.colorNotes
+                        ? '<div class="mp-visual-color-notes">' + esc(p.visualProposal.colorNotes) + '</div>'
+                        : '';
+                    visualHtml =
+                        '<div class="mp-visual-proposal">' +
+                            '<div class="mp-visual-proposal-header">' +
+                                '<span class="mp-visual-badge">🎨 Propuesta Visual</span>' +
+                                '<button class="btn btn-sm btn-ghost mp-btn-repropose" data-mp-idx="' + origIdx + '" title="Generar nueva descripción visual">🔄</button>' +
+                                '<button class="btn btn-sm btn-ghost mp-btn-edit-visual" data-mp-idx="' + origIdx + '" title="Editar descripción visual">✏️</button>' +
+                            '</div>' +
+                            '<div class="mp-visual-desc-text">' + esc(p.visualProposal.description) + '</div>' +
+                            colorNotesHtml +
+                            '<textarea class="mp-visual-edit-area hidden" rows="4" data-mp-idx="' + origIdx + '">' + escAttr(p.visualProposal.description) + '</textarea>' +
+                            '<div class="mp-visual-edit-actions hidden">' +
+                                '<button class="btn btn-sm btn-ghost mp-btn-save-visual" data-mp-idx="' + origIdx + '">Guardar</button>' +
+                                '<button class="btn btn-sm btn-ghost mp-btn-cancel-edit" data-mp-idx="' + origIdx + '">Cancelar</button>' +
+                            '</div>' +
+                        '</div>';
+                } else {
+                    visualHtml =
+                        '<div class="mp-visual-proposal mp-visual-empty">' +
+                            '<button class="btn btn-sm btn-ghost mp-btn-propose" data-mp-idx="' + origIdx + '">💡 Proponer</button>' +
+                        '</div>';
+                }
+
                 card.innerHTML =
                     '<label class="mp-proposal-check">' +
                         '<input type="checkbox" ' + (p.selected ? 'checked' : '') + ' data-mp-idx="' + origIdx + '">' +
@@ -1312,6 +1341,7 @@
                             '<span class="' + priorityClass + '">' + esc(p.priority) + '</span>' +
                         '</div>' +
                         '<div class="mp-proposal-desc">' + esc(p.description) + '</div>' +
+                        visualHtml +
                     '</div>';
 
                 // Hide generated items from selection
@@ -1324,17 +1354,91 @@
                     cb.addEventListener("change", function() {
                         motionPro.proposals[idx].selected = this.checked;
                         mpUpdateSelectionCount();
+                        mpUpdateGenerateButton();
                         motionPro.saveState();
                     });
                     var infoEl = card.querySelector(".mp-proposal-info");
                     if (infoEl) {
                         infoEl.style.cursor = "pointer";
-                        infoEl.addEventListener("click", function() {
+                        infoEl.addEventListener("click", function(e) {
+                            // Don't trigger playhead if clicking on visual proposal buttons/textarea
+                            if (e.target.closest(".mp-visual-proposal")) return;
                             document.querySelectorAll(".mp-proposal-card.mp-card-active").forEach(function(c) {
                                 c.classList.remove("mp-card-active");
                             });
                             infoEl.closest(".mp-proposal-card").classList.add("mp-card-active");
                             mpMovePlayhead(startTime);
+                        });
+                    }
+
+                    // "💡 Proponer" button — generate visual description for this proposal
+                    var proposeBtn = card.querySelector(".mp-btn-propose");
+                    if (proposeBtn) {
+                        proposeBtn.addEventListener("click", function(e) {
+                            e.stopPropagation();
+                            _mpProposeOne(idx);
+                        });
+                    }
+
+                    // "🔄 Re-proponer" button
+                    var reproposeBtn = card.querySelector(".mp-btn-repropose");
+                    if (reproposeBtn) {
+                        reproposeBtn.addEventListener("click", function(e) {
+                            e.stopPropagation();
+                            _mpProposeOne(idx);
+                        });
+                    }
+
+                    // "✏️ Editar" button — toggle textarea for editing visual description
+                    var editBtn = card.querySelector(".mp-btn-edit-visual");
+                    if (editBtn) {
+                        editBtn.addEventListener("click", function(e) {
+                            e.stopPropagation();
+                            var descText = card.querySelector(".mp-visual-desc-text");
+                            var editArea = card.querySelector(".mp-visual-edit-area");
+                            var editActions = card.querySelector(".mp-visual-edit-actions");
+                            if (!descText || !editArea || !editActions) return;
+                            var editing = !editArea.classList.contains("hidden");
+                            if (editing) {
+                                descText.classList.remove("hidden");
+                                editArea.classList.add("hidden");
+                                editActions.classList.add("hidden");
+                            } else {
+                                descText.classList.add("hidden");
+                                editArea.classList.remove("hidden");
+                                editActions.classList.remove("hidden");
+                                editArea.focus();
+                            }
+                        });
+                    }
+
+                    // "Guardar" button in edit mode
+                    var saveBtn = card.querySelector(".mp-btn-save-visual");
+                    if (saveBtn) {
+                        saveBtn.addEventListener("click", function(e) {
+                            e.stopPropagation();
+                            var editArea = card.querySelector(".mp-visual-edit-area");
+                            if (!editArea) return;
+                            var newDesc = editArea.value.trim();
+                            if (newDesc && motionPro.proposals[idx] && motionPro.proposals[idx].visualProposal) {
+                                motionPro.proposals[idx].visualProposal.description = newDesc;
+                                motionPro.saveState();
+                            }
+                            mpRenderProposals();
+                        });
+                    }
+
+                    // "Cancelar" button in edit mode
+                    var cancelEditBtn = card.querySelector(".mp-btn-cancel-edit");
+                    if (cancelEditBtn) {
+                        cancelEditBtn.addEventListener("click", function(e) {
+                            e.stopPropagation();
+                            var descText = card.querySelector(".mp-visual-desc-text");
+                            var editArea = card.querySelector(".mp-visual-edit-area");
+                            var editActions = card.querySelector(".mp-visual-edit-actions");
+                            if (descText) descText.classList.remove("hidden");
+                            if (editArea) editArea.classList.add("hidden");
+                            if (editActions) editActions.classList.add("hidden");
                         });
                     }
                 })(origIdx, p.startTime);
@@ -1347,6 +1451,7 @@
         var countEl = document.getElementById("mp-proposal-count");
         if (countEl) countEl.textContent = proposals.length;
         mpUpdateSelectionCount();
+        mpUpdateGenerateButton();
         mpUpdateMotionProEmptyState();
     }
 
@@ -1367,6 +1472,63 @@
         if (el) el.textContent = count;
         var btn = document.getElementById("btn-mp-generate");
         if (btn) btn.classList.toggle("btn-disabled", count === 0);
+        mpUpdateGenerateButton();
+    }
+
+    function mpUpdateGenerateButton() {
+        var btn = document.getElementById("btn-mp-generate");
+        if (!btn || !motionPro) return;
+        var textEl = btn.querySelector(".btn-analyze-text");
+        if (!textEl) return;
+        // Check if any selected proposal is missing a visual proposal
+        var anyMissingVisual = false;
+        for (var i = 0; i < motionPro.proposals.length; i++) {
+            var p = motionPro.proposals[i];
+            if (p.selected && !p.generated && !(p.visualProposal && p.visualProposal.description)) {
+                anyMissingVisual = true;
+                break;
+            }
+        }
+        if (anyMissingVisual) {
+            textEl.textContent = "💡 Proponer Seleccionados";
+        } else {
+            textEl.textContent = "🎬 Generar Seleccionados";
+        }
+    }
+
+    /** Run visual proposal for a single proposal by index, then re-render */
+    function _mpProposeOne(idx) {
+        var proposal = motionPro.proposals[idx];
+        if (!proposal) return;
+        if (!motionPro.serverRunning) {
+            showToast("Inicia el servidor Motion-Pro primero", "error");
+            return;
+        }
+        var aiConfig = {
+            provider: state.settings.aiProvider,
+            model: state.settings.aiModel,
+            apiKey: aiAnalyzer.getActiveKey()
+        };
+        var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
+
+        // Update UI: show spinner on the card
+        var card = document.querySelector(".mp-proposal-card[data-mp-idx='" + idx + "']");
+        var visualArea = card && card.querySelector(".mp-visual-proposal");
+        if (visualArea) {
+            visualArea.innerHTML = '<span class="mp-visual-proposing">💭 Generando propuesta visual…</span>';
+        }
+
+        motionPro.proposeVisual(proposal, segment, aiConfig, function(err, result) {
+            if (err) {
+                showToast("Error generando propuesta visual: " + err.message, "error");
+                mpRenderProposals();
+                return;
+            }
+            motionPro.saveState();
+            mpRenderProposals();
+            mpUpdateGenerateButton();
+            showToast("Propuesta visual generada para Clip" + (idx + 1), "success");
+        });
     }
 
     function mpToggleSelectAll() {
@@ -1571,6 +1733,66 @@
             brandfetchKey: mpGetBrandfetchKey()
         };
 
+        // Pre-pass: generate visual descriptions for selected proposals that don't have one yet
+        var needsPropose = selected.filter(function(p) {
+            return !p.generated && !(p.visualProposal && p.visualProposal.description);
+        });
+
+        if (needsPropose.length > 0) {
+            mpSetProgress("mp-generate", 2, "Generando propuestas visuales (" + needsPropose.length + " clips)…");
+            var proposeIdx = 0;
+
+            function runNextPropose() {
+                if (state.mpGenerateCancelRequested) {
+                    _finishGenerationWithCancel();
+                    return;
+                }
+                if (proposeIdx >= needsPropose.length) {
+                    // All proposals done — proceed to actual generation
+                    _startActualGeneration();
+                    return;
+                }
+                var proposal = needsPropose[proposeIdx++];
+                var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
+                mpSetProgress("mp-generate", Math.round((proposeIdx / needsPropose.length) * 15),
+                    "Proponiendo visual " + proposeIdx + "/" + needsPropose.length + "…");
+
+                motionPro.proposeVisual(proposal, segment, aiConfig, function(err) {
+                    if (err) {
+                        if (window.EPLogger) EPLogger.error("motion-pro", "propose-visual", proposal.id + ": " + err.message);
+                        // Non-fatal: continue without visual proposal for this one
+                        showToast("⚠️ Sin propuesta visual para " + proposal.id + " — usando template estándar", "warning");
+                    }
+                    motionPro.saveState();
+                    runNextPropose();
+                });
+            }
+            runNextPropose();
+            return; // _startActualGeneration() continues after propose pre-pass
+        }
+
+        _startActualGeneration();
+
+        function _finishGenerationWithCancel() {
+            state.mpGenerateCancelRequested = false;
+            state.mpGenerating = false;
+            var genBtnCancel = document.getElementById("btn-mp-generate");
+            if (genBtnCancel) {
+                genBtnCancel.innerHTML = genBtnCancel._originalHTML || '<span class="btn-analyze-text">🎬 Generar Seleccionados</span>';
+                genBtnCancel.className = genBtnCancel._originalClass || "btn-analyze btn-analyze-alt";
+                genBtnCancel.disabled = false;
+                genBtnCancel.onclick = null;
+            }
+            var step2WrapCancel = document.getElementById("mp-step2-progress");
+            if (step2WrapCancel) step2WrapCancel.classList.add("hidden");
+            refreshMPHeaderProgressVisibility();
+            motionPro.saveState();
+            mpRenderControlPanel();
+            showToast("Generación detenida durante propuestas visuales.", "info");
+        }
+
+        function _startActualGeneration() {
+
         var total = selected.length;
         var done = 0;
         var errors = [];
@@ -1734,6 +1956,7 @@
         for (var w = 0; w < Math.min(CONCURRENCY, total); w++) {
             launchWorker();
         }
+        } // end _startActualGeneration
     }
 
     function mpExtractSegment(startTime, endTime) {

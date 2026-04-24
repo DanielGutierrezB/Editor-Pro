@@ -611,7 +611,62 @@ const TYPE_INSTRUCTIONS = {
 - Use AnimatedText mode='word'. Background radial gradient glow. AccentSeparator above and below.`,
 };
 
-function getGenerationPrompt({ transcriptSegment, type, description, durationFrames, compositionId, brandfetchKey }) {
+// ──────────────────────────────────────────────────────────────────────────────
+// Visual Proposal Prompt — generates a detailed visual layout description
+// ──────────────────────────────────────────────────────────────────────────────
+
+function getVisualProposalPrompt({ transcriptSegment, type, description, durationFrames }) {
+  const typeGuide = TYPE_INSTRUCTIONS[type] || TYPE_INSTRUCTIONS.title;
+  const durationSecs = (durationFrames / 30).toFixed(1);
+
+  const systemMsg = `You are a motion graphics art director for an educational video production company.
+Your job is to write concise, actionable visual layout descriptions that will be used by an AI to generate Remotion (React/TSX) animation code.
+
+The design system uses:
+- Dark background: #1a1d23
+- Card background: #2d323a
+- Accent/primary: #0ae98d (green)
+- Secondary colors: orange #fb923c, purple #a78bfa, red #f87171
+- Font: DM Sans (400, 700 weights only)
+- Safe area: 1600×740px inside a 1920×1080 canvas (160px left/right margins, 180px top, 160px bottom)
+- Icons from lucide-react (geometric SVG icons)
+- Components available: GlowCard (dark card with glow), AnimatedText (word-by-word reveal), AccentSeparator (accent line), CascadeItem (stagger blur), ProgressDots (step indicator), AnimatedLine (SVG line draw), OdometerDigit (count-up number)
+
+Your description must be:
+- Specific enough to generate code from (include sizes, colors, layout direction)
+- Written in the SAME LANGUAGE as the transcript
+- Under 200 words
+- Focused on WHAT to show, not HOW to animate (the animator will handle that)
+
+Return ONLY a JSON object with these exact keys:
+{
+  "visualDescription": "Detailed description of what to show and how to lay it out",
+  "layout": "centered-vertical | centered-horizontal | split-horizontal | split-vertical | grid-2x2 | flow-left-right",
+  "elements": ["element1", "element2", ...],
+  "colorNotes": "Which colors to emphasize for this content"
+}`;
+
+  const userMsg = `Animation type: ${type}
+Concept: ${description}
+Duration: ${durationSecs}s (${durationFrames} frames)
+
+Type-specific visual rules:
+${typeGuide}
+
+Transcript segment:
+${transcriptSegment}
+
+Describe the ideal visual layout for this motion graphic. Be specific about:
+- Element sizes (px or %)
+- Layout arrangement
+- Icon choices (use lucide-react icon names)
+- Which accent colors to use for which elements
+- Text content (actual labels/titles from the transcript)`;
+
+  return { systemMsg, userMsg };
+}
+
+function getGenerationPrompt({ transcriptSegment, type, description, durationFrames, compositionId, brandfetchKey, visualDescription }) {
   const systemMsg = buildSystemPrompt(type);
 
   const typeGuide = TYPE_INSTRUCTIONS[type] || TYPE_INSTRUCTIONS.title;
@@ -635,7 +690,18 @@ DO NOT load images from external CDNs or URLs.`;
 
 
 
-  const userMsg = `Generate a Remotion composition. You MUST start from this exact template and fill in the sections:
+  const visualDescriptionBlock = visualDescription ? `## VISUAL DESCRIPTION (FOLLOW THIS EXACTLY)
+This layout was pre-approved by the art director. Do NOT use a template — create the layout from scratch based on this description:
+
+${visualDescription}
+
+Your composition MUST match this description precisely. Override any type-specific defaults if needed to match the visual description.
+
+---
+
+` : '';
+
+  const userMsg = `${visualDescriptionBlock}Generate a Remotion composition. You MUST start from this exact template and fill in the sections:
 
 \`\`\`tsx
 import "@fontsource/dm-sans/400.css";
@@ -829,4 +895,4 @@ function getTypeInstructions() {
   return Object.entries(TYPE_INSTRUCTIONS).map(([key, val]) => `### ${key}\n${val}`).join('\n\n');
 }
 
-module.exports = { getGenerationPrompt, getFeedbackPrompt, getTypeInstructions };
+module.exports = { getGenerationPrompt, getFeedbackPrompt, getTypeInstructions, getVisualProposalPrompt };

@@ -7,8 +7,10 @@ import "@fontsource/dm-sans/500.css";
 import "@fontsource/dm-sans/600.css";
 import "@fontsource/dm-sans/700.css";
 import React from 'react';
-import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, delayRender, continueRender, spring, Sequence, Img, Easing} from 'remotion';
+import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, delayRender, continueRender, spring, Sequence, Img, Easing, getInputProps} from 'remotion';
 import * as LucideIcons from 'lucide-react';
+
+const _static = (getInputProps() as any).staticPreview === true;
 
 const C = {
   bg:'#1a1d23', card:'#2d323a', accent:'#0ae98d', green:'#0ae98d',
@@ -23,6 +25,7 @@ const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({c
 
 const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CSSProperties}> = ({d,children,from='up',style}) => {
   const frame = useCurrentFrame();
+  if (_static) return <div style={{opacity:1,...style}}>{children}</div>;
   const progress = interpolate(frame-d, [0, 30], [0, 1], {
     easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft:'clamp', extrapolateRight:'clamp',
   });
@@ -34,6 +37,7 @@ const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CS
 
 const Fd:React.FC<{children:React.ReactNode;fi?:number;fo?:number;dur:number}> = ({children,fi=10,fo=10,dur}) => {
   const frame = useCurrentFrame();
+  if (_static) return <div style={{opacity:1,position:'absolute',inset:0}}>{children}</div>;
   const _fi = Math.max(1, fi);
   const _fo = Math.max(1, fo);
   const _end = Math.max(_fi + 1, dur - _fo);
@@ -52,6 +56,7 @@ const AnimatedText:React.FC<{
 }> = ({text, d, fontSize=36, fontWeight=700, color=C.text, align='center', mode='word', framesPerWord=4}) => {
   const frame = useCurrentFrame();
   const words = text.split(' ');
+  if (_static) return <div style={{fontSize, fontWeight, color, textAlign:align}}>{text}</div>;
   if (mode === 'fade') {
     const progress = interpolate(frame - d, [0, 25], [0, 1], {
       easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp',

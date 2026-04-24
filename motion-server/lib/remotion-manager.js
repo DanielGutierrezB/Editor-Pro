@@ -30,6 +30,9 @@ class RemotionManager {
     // Strip TransitionSeries with fade — replace with plain Sequence blocks
     tsxCode = this._stripFadeTransitions(tsxCode);
 
+    // Inject staticPreview support so stills render without animations
+    tsxCode = this._injectStaticPreview(tsxCode);
+
     // Replace lucide icons with brand SVG logos when applicable
     tsxCode = this._replaceBrandIcons(tsxCode);
 
@@ -152,6 +155,78 @@ class RemotionManager {
   }
 
   /**
+   * Inject staticPreview support into AI-generated compositions.
+   * Templates already have this, but AI-generated compositions define E/Fd inline
+   * without checking the staticPreview prop. This patches them so stills render
+   * with all elements at full opacity (no mid-animation frames).
+   */
+  _injectStaticPreview(tsxCode) {
+    // Skip if already has staticPreview support
+    if (/\b_static\b/.test(tsxCode) && /getInputProps/.test(tsxCode)) return tsxCode;
+
+    console.log('[RemotionManager] Injecting staticPreview support');
+
+    // Step 1: Add getInputProps to the remotion import
+    const remotionImportRe = /(import\s*\{)([^}]*)(}\s*from\s*['"]remotion['"])/;
+    const remotionMatch = tsxCode.match(remotionImportRe);
+    if (remotionMatch && !remotionMatch[2].includes('getInputProps')) {
+      tsxCode = tsxCode.replace(remotionImportRe, (m, p1, p2, p3) => {
+        return p1 + p2.trimEnd() + ', getInputProps' + p3;
+      });
+    }
+
+    // Step 2: Add _static variable right after the last import line
+    // Find the position after all imports
+    const lines = tsxCode.split('\n');
+    let lastImportIdx = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*import\s/.test(lines[i])) lastImportIdx = i;
+    }
+    if (lastImportIdx >= 0) {
+      lines.splice(lastImportIdx + 1, 0, '',
+        "const _static = (getInputProps() as any).staticPreview === true;");
+      tsxCode = lines.join('\n');
+    }
+
+    // Step 3: Patch E component — add early return when _static
+    // Match the E component definition and inject _static check after the opening {
+    // Pattern: E:React.FC<...> = ({d,children,...}) => { ... spring/interpolate ... return <div style={{transform:...opacity:...
+    // We need to add: if (_static) return <div style={{opacity:1,...style}}>{children}</div>;
+    const eCompRe = /(const E:React\.FC<[^>]*>\s*=\s*\(\{[^}]*\}\)\s*=>\s*\{)\s*\n/;
+    if (eCompRe.test(tsxCode)) {
+      tsxCode = tsxCode.replace(eCompRe, (match, prefix) => {
+        return prefix + '\n  if (_static) return <div style={{opacity:1,...style}}>{children}</div>;\n';
+      });
+    } else {
+      // Try alternate pattern: function-body-level patch
+      // Look for the E component with a slightly different format
+      const eAltRe = /(const E:React\.FC<[^>]*>\s*=\s*\(\{.*?children.*?\}\)\s*=>\s*\{)/s;
+      if (eAltRe.test(tsxCode)) {
+        tsxCode = tsxCode.replace(eAltRe, (match, prefix) => {
+          return prefix + '\n  if (_static) return <div style={{opacity:1,...(style||{})}}>{children}</div>;';
+        });
+      }
+    }
+
+    // Step 4: Patch Fd component — add early return when _static
+    const fdCompRe = /(const Fd:React\.FC<[^>]*>\s*=\s*\(\{[^}]*\}\)\s*=>\s*\{)\s*\n/;
+    if (fdCompRe.test(tsxCode)) {
+      tsxCode = tsxCode.replace(fdCompRe, (match, prefix) => {
+        return prefix + '\n  if (_static) return <div style={{opacity:1,position:\'absolute\',inset:0}}>{children}</div>;\n';
+      });
+    } else {
+      const fdAltRe = /(const Fd:React\.FC<[^>]*>\s*=\s*\(\{.*?children.*?\}\)\s*=>\s*\{)/s;
+      if (fdAltRe.test(tsxCode)) {
+        tsxCode = tsxCode.replace(fdAltRe, (match, prefix) => {
+          return prefix + '\n  if (_static) return <div style={{opacity:1,position:\'absolute\',inset:0}}>{children}</div>;';
+        });
+      }
+    }
+
+    return tsxCode;
+  }
+
+  /**
    * Replace lucide-react icons used for known brands with local SVG logos.
    * The AI often uses Globe, Facebook, Camera etc. instead of actual brand logos.
    */
@@ -240,7 +315,7 @@ class RemotionManager {
    */
   _validateImports(tsxCode) {
     const ALLOWED_PACKAGES = {
-      'remotion': ['AbsoluteFill', 'useCurrentFrame', 'useVideoConfig', 'interpolate', 'spring', 'Sequence', 'Img', 'Audio', 'Easing', 'random', 'continueRender', 'delayRender', 'staticFile'],
+      'remotion': ['AbsoluteFill', 'useCurrentFrame', 'useVideoConfig', 'interpolate', 'spring', 'Sequence', 'Img', 'Audio', 'Easing', 'random', 'continueRender', 'delayRender', 'staticFile', 'getInputProps'],
       'react': null, // allow all
       'lucide-react': null, // allow all icons
       '@remotion/transitions': ['TransitionSeries', 'linearTiming'],
@@ -549,7 +624,10 @@ class RemotionManager {
           } catch(_e) {}
           return; // skip this file
         }
-        fs.copyFileSync(path.join(srcFolder, f), path.join(this.compositionsDir, f));
+        // Copy file and inject staticPreview support if missing
+        const destPath = path.join(this.compositionsDir, f);
+        let patchedContent = this._injectStaticPreview(content);
+        fs.writeFileSync(destPath, patchedContent, 'utf8');
         // Also copy duration metadata if it exists
         const durationFile = f.replace('.tsx', '.duration');
         const durationPath = path.join(srcFolder, durationFile);
