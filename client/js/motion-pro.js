@@ -15,7 +15,7 @@
     try { fs = require("fs"); } catch(e) { fs = null; }
 
     var SERVER_PORT = 3847;
-    var SERVER_URL = "http://localhost:" + SERVER_PORT;
+    var SERVER_URL = "http://127.0.0.1:" + SERVER_PORT;
 
     var MP_TYPES = {
         title:       { label: "Título",      color: "#818cf8" },

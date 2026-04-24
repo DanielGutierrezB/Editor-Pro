@@ -1467,24 +1467,37 @@
             return;
         }
         
-        // Real health check before starting generation
+        // Real health check before starting generation (with retry)
         motionPro.checkServer(function(running) {
-            if (!running) {
-                showToast("Servidor no disponible — reiniciando...", "error");
-                if (window.EPLogger) EPLogger.error("motion-pro", "generate-server-down", "server not responding, attempting restart");
-                var ext = csInterface.getSystemPath(SystemPath.EXTENSION);
-                motionPro.stopServer();
-                motionPro.startServer(ext, function(err) {
-                    mpUpdateServerUI();
-                    if (err) {
-                        showToast("No se pudo iniciar el servidor: " + err.message, "error");
-                    } else {
-                        showToast("Servidor reiniciado — intenta generar de nuevo", "success");
-                    }
-                });
+            if (running) {
+                _mpDoGenerate();
                 return;
             }
-            _mpDoGenerate();
+            // First check failed — retry once after 1s (transient network/timing issue)
+            if (window.EPLogger) EPLogger.log("motion-pro", "generate-health-retry", "first check failed, retrying in 1s");
+            setTimeout(function() {
+                motionPro.checkServer(function(running2) {
+                    if (running2) {
+                        if (window.EPLogger) EPLogger.log("motion-pro", "generate-health-retry-ok", "retry succeeded");
+                        _mpDoGenerate();
+                        return;
+                    }
+                    // Still down — restart and auto-continue
+                    showToast("Servidor no disponible — reiniciando...", "error");
+                    if (window.EPLogger) EPLogger.error("motion-pro", "generate-server-down", "server not responding after retry, restarting");
+                    var ext = csInterface.getSystemPath(SystemPath.EXTENSION);
+                    motionPro.stopServer();
+                    motionPro.startServer(ext, function(err) {
+                        mpUpdateServerUI();
+                        if (err) {
+                            showToast("No se pudo iniciar el servidor: " + err.message, "error");
+                        } else {
+                            showToast("Servidor reiniciado — generando...", "success");
+                            _mpDoGenerate();
+                        }
+                    });
+                });
+            }, 1000);
         });
     }
     
