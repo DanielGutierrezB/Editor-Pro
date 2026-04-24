@@ -2983,3 +2983,179 @@ function replaceMotionOnTrack(jsonPath) {
         return JSON.stringify({ error: "replaceMotionOnTrack error: " + e.message });
     }
 }
+
+// ─── Motion-Pro Preview → Animar: Clip duration + overlay insertion ──────
+
+/**
+ * Get the duration (in seconds) and position of a clip in the active sequence by name pattern.
+ * Searches all video tracks for a clip whose name contains the given pattern.
+ * Returns: { found, trackIndex, clipIndex, startSecs, endSecs, durationSecs, clipName }
+ */
+function getClipInfoByName(namePattern) {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: "No hay secuencia activa." });
+
+        for (var t = seq.videoTracks.numTracks - 1; t >= 0; t--) {
+            var track = seq.videoTracks[t];
+            for (var c = 0; c < track.clips.numItems; c++) {
+                var clip = track.clips[c];
+                if (clip.name && clip.name.indexOf(namePattern) !== -1) {
+                    var startSecs = parseFloat(clip.start.seconds);
+                    var endSecs = parseFloat(clip.end.seconds);
+                    return JSON.stringify({
+                        found: true,
+                        trackIndex: t,
+                        clipIndex: c,
+                        startSecs: startSecs,
+                        endSecs: endSecs,
+                        durationSecs: endSecs - startSecs,
+                        clipName: clip.name
+                    });
+                }
+            }
+        }
+        return JSON.stringify({ found: false, error: "Clip not found: " + namePattern });
+    } catch(e) {
+        return JSON.stringify({ error: "getClipInfoByName error: " + e.message });
+    }
+}
+
+/**
+ * Import a clip and place it directly above an existing clip (same in-point, track+1).
+ * Used by "Animar" to replace a PNG preview with the rendered video.
+ * jsonPath: { mp4Path, targetClipName, clipName, labelColor, durationSecs }
+ */
+function importAndPlaceAbove(jsonPath) {
+    try {
+        var f = new File(jsonPath);
+        if (!f.exists) return JSON.stringify({ error: "JSON file not found: " + jsonPath });
+        f.encoding = "UTF-8";
+        f.open("r");
+        var raw = f.read();
+        f.close();
+
+        var data = JSON.parse(raw);
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: "No hay secuencia activa." });
+
+        // Find the target clip (the PNG preview) in the timeline
+        var targetTrack = -1;
+        var targetClip = null;
+        var targetStartSecs = 0;
+
+        for (var t = seq.videoTracks.numTracks - 1; t >= 0; t--) {
+            var track = seq.videoTracks[t];
+            for (var c = 0; c < track.clips.numItems; c++) {
+                var clip = track.clips[c];
+                if (clip.name && clip.name.indexOf(data.targetClipName) !== -1) {
+                    targetTrack = t;
+                    targetClip = clip;
+                    targetStartSecs = parseFloat(clip.start.seconds);
+                    break;
+                }
+            }
+            if (targetClip) break;
+        }
+
+        if (!targetClip) {
+            return JSON.stringify({ error: "Target clip not found: " + data.targetClipName });
+        }
+
+        // Determine the track above (targetTrack + 1)
+        var aboveTrack = targetTrack + 1;
+        if (aboveTrack >= seq.videoTracks.numTracks) {
+            // Need to create a new track
+            try {
+                app.enableQE();
+                var qeSeq = qe.project.getActiveSequence();
+                qeSeq.addTracks(1, seq.videoTracks.numTracks, 0);
+                $.sleep(500);
+            } catch(eQE) {}
+            aboveTrack = seq.videoTracks.numTracks - 1;
+        }
+
+        // Import the MP4
+        var mp4File = new File(data.mp4Path);
+        if (!mp4File.exists) return JSON.stringify({ error: "MP4 not found: " + data.mp4Path });
+
+        var bin = _getOrCreateMotionBin();
+        if (!bin) return JSON.stringify({ error: "No se pudo crear bin Motion-Pro." });
+
+        var countBefore = bin.children ? bin.children.numItems : 0;
+        app.project.importFiles([mp4File.fsName], true, bin, false);
+
+        var item = null;
+        for (var w = 0; w < 25; w++) {
+            $.sleep(250);
+            if (bin.children && bin.children.numItems > countBefore) {
+                item = bin.children[bin.children.numItems - 1];
+            }
+            if (!item) item = _findProjectItemByPath(mp4File.fsName, bin);
+            if (item) break;
+        }
+        if (!item) return JSON.stringify({ error: "Imported but could not find item (timeout)." });
+
+        try { item.name = data.clipName || "MP_anim"; } catch(e) {}
+        try {
+            if (data.labelColor !== undefined && data.labelColor >= 0) {
+                item.setColorLabel(data.labelColor);
+            }
+        } catch(eLabel) {}
+
+        // Place on track above at same start position
+        var startTicks = String(Math.round(targetStartSecs * TICKS_PER_SECOND));
+        var aboveTrackObj = seq.videoTracks[aboveTrack];
+        if (!aboveTrackObj) return JSON.stringify({ error: "Track " + aboveTrack + " not available." });
+
+        var placed = false;
+        try {
+            aboveTrackObj.overwriteClip(item, startTicks);
+            placed = true;
+        } catch(eOw) {
+            try {
+                aboveTrackObj.insertClip(item, startTicks, aboveTrack, 0);
+                placed = true;
+            } catch(e4) {
+                try {
+                    aboveTrackObj.insertClip(item, startTicks);
+                    placed = true;
+                } catch(e2) {
+                    return JSON.stringify({ error: "Place error: " + eOw.message + " | " + e4.message + " | " + e2.message });
+                }
+            }
+        }
+
+        // Set clip duration if specified
+        if (placed && data.durationSecs && parseFloat(data.durationSecs) > 0) {
+            $.sleep(300);
+            try {
+                var durationSecs = parseFloat(data.durationSecs);
+                for (var ci = aboveTrackObj.clips.numItems - 1; ci >= 0; ci--) {
+                    var tc = aboveTrackObj.clips[ci];
+                    if (Math.abs(parseFloat(tc.start.seconds) - targetStartSecs) < 1.0) {
+                        tc.end = String(Math.round((targetStartSecs + durationSecs) * TICKS_PER_SECOND));
+                        break;
+                    }
+                }
+            } catch(eDur) {}
+        }
+
+        // Remove the PNG preview clip from the original track
+        try {
+            targetClip.remove(true, true);
+        } catch(eRm) {
+            // Some Premiere versions don't support remove — leave it
+        }
+
+        return JSON.stringify({
+            success: true,
+            trackIndex: aboveTrack,
+            videoTrackNumber: aboveTrack + 1,
+            clipName: data.clipName,
+            startSecs: targetStartSecs
+        });
+    } catch(e) {
+        return JSON.stringify({ error: "importAndPlaceAbove error: " + e.message });
+    }
+}
