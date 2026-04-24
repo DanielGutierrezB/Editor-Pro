@@ -33,21 +33,77 @@ const PROVIDERS = {
   },
 };
 
-function sendLLM({ provider, model, apiKey, systemMsg, userMsg }, callback) {
-  const cfg = PROVIDERS[provider];
-  if (!cfg) return callback(new Error('Unknown provider: ' + provider));
+// ── Auto-correct provider/model mismatches ──────────────────────────────────
+// Detects when API key doesn't match the selected provider and fixes the route.
+// Also normalizes model names between OpenRouter (anthropic/claude-*) and
+// Anthropic direct (claude-*-YYYYMMDD) formats.
+const ANTHROPIC_MODEL_MAP = {
+  'anthropic/claude-sonnet-4':  'claude-sonnet-4-20250514',
+  'anthropic/claude-opus-4':    'claude-opus-4-20250514',
+  'anthropic/claude-haiku-4':   'claude-haiku-4-20250514',
+};
+const REVERSE_ANTHROPIC_MODEL_MAP = Object.fromEntries(
+  Object.entries(ANTHROPIC_MODEL_MAP).map(([k, v]) => [v, k])
+);
 
-  if (provider === 'ollama') {
-    return _sendOllama(cfg, model, systemMsg, userMsg, callback);
+function _resolveProviderModel(provider, model, apiKey) {
+  let p = provider;
+  let m = model;
+
+  // Key-based auto-detect: key type overrides declared provider when they conflict
+  if (apiKey) {
+    if (apiKey.startsWith('sk-ant-') && p === 'openrouter') {
+      console.log('[llm] Auto-correcting provider openrouter → anthropic (key is sk-ant-*)');
+      p = 'anthropic';
+    } else if (apiKey.startsWith('sk-or-') && p === 'anthropic') {
+      console.log('[llm] Auto-correcting provider anthropic → openrouter (key is sk-or-*)');
+      p = 'openrouter';
+    }
   }
-  if (provider === 'google') {
-    return _sendGoogle(model, apiKey, systemMsg, userMsg, callback);
+
+  // Model format normalization
+  if (p === 'anthropic' && m && m.includes('/')) {
+    // OpenRouter format → Anthropic direct format
+    const mapped = ANTHROPIC_MODEL_MAP[m];
+    if (mapped) {
+      console.log('[llm] Model remap for anthropic: ' + m + ' → ' + mapped);
+      m = mapped;
+    } else {
+      // Generic strip: "anthropic/claude-xxx" → "claude-xxx"
+      const stripped = m.replace(/^anthropic\//, '');
+      console.log('[llm] Model strip prefix for anthropic: ' + m + ' → ' + stripped);
+      m = stripped;
+    }
+  } else if (p === 'openrouter' && m && !m.includes('/')) {
+    // Anthropic direct format → OpenRouter format
+    const mapped = REVERSE_ANTHROPIC_MODEL_MAP[m];
+    if (mapped) {
+      console.log('[llm] Model remap for openrouter: ' + m + ' → ' + mapped);
+      m = mapped;
+    }
   }
-  if (provider === 'anthropic') {
-    return _sendAnthropic(cfg, model, apiKey, systemMsg, userMsg, callback);
+
+  return { provider: p, model: m };
+}
+
+function sendLLM({ provider, model, apiKey, systemMsg, userMsg }, callback) {
+  const resolved = _resolveProviderModel(provider, model, apiKey);
+  const p = resolved.provider;
+  const m = resolved.model;
+  const cfg = PROVIDERS[p];
+  if (!cfg) return callback(new Error('Unknown provider: ' + p));
+
+  if (p === 'ollama') {
+    return _sendOllama(cfg, m, systemMsg, userMsg, callback);
+  }
+  if (p === 'google') {
+    return _sendGoogle(m, apiKey, systemMsg, userMsg, callback);
+  }
+  if (p === 'anthropic') {
+    return _sendAnthropic(cfg, m, apiKey, systemMsg, userMsg, callback);
   }
   // openai + openrouter share the same format
-  return _sendOpenAI(cfg, model, apiKey, systemMsg, userMsg, callback);
+  return _sendOpenAI(cfg, m, apiKey, systemMsg, userMsg, callback);
 }
 
 function _sendOllama(cfg, model, systemMsg, userMsg, callback) {
@@ -209,22 +265,25 @@ function _sendOpenAI(cfg, model, apiKey, systemMsg, userMsg, callback) {
  * Supports OpenRouter, OpenAI, Anthropic, Google, and Ollama vision models.
  */
 function sendLLMWithVision({ provider, model, apiKey, systemMsg, userMsg, imageBase64 }, callback) {
-  const cfg = PROVIDERS[provider];
-  if (!cfg) return callback(new Error('Unknown provider: ' + provider));
+  const resolved = _resolveProviderModel(provider, model, apiKey);
+  const p = resolved.provider;
+  const m = resolved.model;
+  const cfg = PROVIDERS[p];
+  if (!cfg) return callback(new Error('Unknown provider: ' + p));
 
   const dataUri = 'data:image/png;base64,' + imageBase64;
 
-  if (provider === 'anthropic') {
-    return _sendAnthropicVision(cfg, model, apiKey, systemMsg, userMsg, imageBase64, callback);
+  if (p === 'anthropic') {
+    return _sendAnthropicVision(cfg, m, apiKey, systemMsg, userMsg, imageBase64, callback);
   }
-  if (provider === 'google') {
-    return _sendGoogleVision(model, apiKey, systemMsg, userMsg, imageBase64, callback);
+  if (p === 'google') {
+    return _sendGoogleVision(m, apiKey, systemMsg, userMsg, imageBase64, callback);
   }
-  if (provider === 'ollama') {
-    return _sendOllamaVision(cfg, model, systemMsg, userMsg, imageBase64, callback);
+  if (p === 'ollama') {
+    return _sendOllamaVision(cfg, m, systemMsg, userMsg, imageBase64, callback);
   }
   // openai + openrouter share the same OpenAI-compatible vision format
-  return _sendOpenAIVision(cfg, model, apiKey, systemMsg, userMsg, dataUri, callback);
+  return _sendOpenAIVision(cfg, m, apiKey, systemMsg, userMsg, dataUri, callback);
 }
 
 function _sendAnthropicVision(cfg, model, apiKey, systemMsg, userMsg, imageBase64, callback) {
