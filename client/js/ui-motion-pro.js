@@ -1459,7 +1459,13 @@
     }
 
     function mpStartGeneration() {
-        if (state.mpGenerating) return;
+        if (state.mpGenerating) {
+            console.warn("[Motion-Pro] mpStartGeneration blocked: state.mpGenerating is true. Resetting...");
+            if (window.EPLogger) EPLogger.log("motion-pro", "generate-blocked-reset", "mpGenerating was stuck true, resetting");
+            showToast("⚠️ Estado bloqueado detectado — reiniciando. Intenta de nuevo.", "warning");
+            state.mpGenerating = false;
+            return;
+        }
         
         // Real health check before starting generation
         motionPro.checkServer(function(running) {
