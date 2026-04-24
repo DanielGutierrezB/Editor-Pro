@@ -1478,8 +1478,8 @@
         if (genBtn) {
             genBtn._originalHTML = genBtn.innerHTML;
             genBtn._originalClass = genBtn.className;
-            genBtn.innerHTML = "🛑 Detener";
-            genBtn.className = "btn btn-sm btn-danger";
+            genBtn.innerHTML = '<span class="btn-analyze-text">🛑 Detener</span>';
+            genBtn.className = "btn-analyze btn-analyze-cancel";
             genBtn.onclick = function() {
                 if (confirm("¿Estás seguro que deseas detener la generación?")) {
                     state.mpGenerateCancelRequested = true;
@@ -1538,8 +1538,8 @@
             // Restore Generate button
             var genBtn = document.getElementById("btn-mp-generate");
             if (genBtn) {
-                genBtn.innerHTML = genBtn._originalHTML || "🎬 Generar Seleccionados";
-                genBtn.className = genBtn._originalClass || "btn btn-sm btn-success";
+                genBtn.innerHTML = genBtn._originalHTML || '<span class="btn-analyze-text">🎬 Generar Seleccionados</span>';
+                genBtn.className = genBtn._originalClass || "btn-analyze btn-analyze-alt";
                 genBtn.disabled = false;
                 genBtn.onclick = null; // remove stop handler
             }
@@ -1581,8 +1581,8 @@
                     // Restore Generate button on cancel
                     var genBtnCancel = document.getElementById("btn-mp-generate");
                     if (genBtnCancel) {
-                        genBtnCancel.innerHTML = genBtnCancel._originalHTML || "🎬 Generar Seleccionados";
-                        genBtnCancel.className = genBtnCancel._originalClass || "btn btn-sm btn-success";
+                        genBtnCancel.innerHTML = genBtnCancel._originalHTML || '<span class="btn-analyze-text">🎬 Generar Seleccionados</span>';
+                        genBtnCancel.className = genBtnCancel._originalClass || "btn-analyze btn-analyze-alt";
                         genBtnCancel.disabled = false;
                         genBtnCancel.onclick = null;
                     }

@@ -291,6 +291,19 @@
 
         initPromptEditor();
 
+        // Edit Suggestions — Batch
+        on("btn-es2-batch", "click", es2BatchOpen);
+        on("btn-es2-batch-analyze", "click", es2BatchAnalyzeAll);
+        on("btn-es2-batch-cancel", "click", es2BatchClose);
+        on("btn-es2-bnav-prev", "click", es2BatchNavPrev);
+        on("btn-es2-bnav-next", "click", es2BatchNavNext);
+        on("btn-es2-bnav-back", "click", es2BatchNavBack);
+        var es2BSelAll = document.getElementById("es2-batch-select-all");
+        if (es2BSelAll) es2BSelAll.addEventListener("change", function() {
+            var checked = this.checked;
+            document.querySelectorAll(".es2b-check").forEach(function(cb) { cb.checked = checked; });
+        });
+
         // Edit Suggestions
         on("btn-editsuggestions2", "click", startEditSuggestions2);
         on("btn-es2-export", "click", exportEditSuggestions2);
@@ -430,6 +443,15 @@
     var _seqCacheOrder = []; // LRU order tracking
     var _SEQ_CACHE_MAX = 20;
     var _lastSeqName = "";
+    var _seqSwitchInProgress = false; // Guard against polling race condition
+
+    function _isAnyBatchActive() {
+        var EP = window.EditorProUI;
+        if (!EP) return false;
+        if (EP.supertexts && EP.supertexts.isBatchActive && EP.supertexts.isBatchActive()) return true;
+        if (EP.editSuggestions && EP.editSuggestions.isBatchActive && EP.editSuggestions.isBatchActive()) return true;
+        return false;
+    }
 
     function _seqCacheTouch(name) {
         var idx = _seqCacheOrder.indexOf(name);
@@ -468,8 +490,7 @@
                 if (data.markerCount > 0) meta.push(data.markerCount + " markers");
                 document.getElementById("seq-meta").textContent = meta.join(" · ");
 
-                var _batchActive = window.EditorProUI && window.EditorProUI.supertexts && window.EditorProUI.supertexts.isBatchActive && window.EditorProUI.supertexts.isBatchActive();
-                if (changed && !_batchActive) {
+                if (changed && !_isAnyBatchActive()) {
                     restoreSequenceState(newSeqName);
                     mpSwitchToSequence();
                 } else if (isFirstLoad) {
@@ -495,7 +516,9 @@
 
     function startSequencePolling() {
         setInterval(function() {
+            if (_seqSwitchInProgress) return; // Skip while dropdown switch is in progress
             csInterface.evalScript("getActiveSequenceInfo()", function(result) {
+                if (_seqSwitchInProgress) return; // Re-check in callback (async guard)
                 try {
                     var data = JSON.parse(result);
                     if (data.error || !data.name) return;
@@ -510,8 +533,7 @@
                         var meta = [];
                         if (data.markerCount > 0) meta.push(data.markerCount + " markers");
                         document.getElementById("seq-meta").textContent = meta.join(" · ");
-                        var _pollBatchActive = window.EditorProUI && window.EditorProUI.supertexts && window.EditorProUI.supertexts.isBatchActive && window.EditorProUI.supertexts.isBatchActive();
-                        if (_pollBatchActive) return;
+                        if (_isAnyBatchActive()) return;
                         restoreSequenceState(data.name);
                         mpSwitchToSequence();
                         // Refresh transcribe folder for new sequence
@@ -635,12 +657,14 @@
     function openSequenceByName(seqName) {
         if (seqName === _lastSeqName) return;
         saveCurrentSequenceState();
+        _seqSwitchInProgress = true; // Block polling during switch
 
         var safeName = seqName.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
         csInterface.evalScript('findAndOpenSequenceByName("' + safeName + '")', function(result) {
             try {
                 var res = JSON.parse(result);
                 if (res.error) {
+                    _seqSwitchInProgress = false;
                     showToast("Error: " + res.error, "error");
                     return;
                 }
@@ -651,6 +675,7 @@
             } catch(e) {
                 showToast("Error al abrir secuencia", "error");
             }
+            _seqSwitchInProgress = false;
         });
     }
 
@@ -2789,6 +2814,12 @@
     function st2BatchNavPrev() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchNavPrev(); }
     function st2BatchNavNext() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchNavNext(); }
     function st2BatchNavBack() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchNavBack(); }
+    function es2BatchOpen() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchOpen(); }
+    function es2BatchAnalyzeAll() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchAnalyzeAll(); }
+    function es2BatchClose() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchClose(); }
+    function es2BatchNavPrev() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchNavPrev(); }
+    function es2BatchNavNext() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchNavNext(); }
+    function es2BatchNavBack() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchNavBack(); }
     function renderES2Results(r) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.render(r); }
     function renderReelResults(r) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.renderReelResults(r); }
     function startEditSuggestions2() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.start(); }
@@ -2931,6 +2962,16 @@
     window._epShowTranscriptExportInstructions = showTranscriptExportInstructions;
     window._epGetTakeAnalysisPromptContext = getTakeAnalysisPromptContext;
     window._epToggleSettings = toggleSettings;
+
+    // Allow batch navigators to update _lastSeqName and block polling
+    window._epNotifyBatchSeqSwitch = function(seqName) {
+        if (_lastSeqName && seqName !== _lastSeqName) {
+            saveCurrentSequenceState();
+        }
+        _lastSeqName = seqName;
+        state.sequenceName = seqName;
+        document.getElementById("seq-name").textContent = seqName;
+    };
 
     // ─── Auto-update on reload ───────────────────────────────────
     var _updateAvailable = false;

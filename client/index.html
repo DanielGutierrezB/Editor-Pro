@@ -560,16 +560,49 @@
                         <button id="btn-es2-prompt-reset" class="btn btn-sm btn-ghost">↩ Restaurar Original</button>
                     </div>
                 </div>
-                <div class="action-bar">
-                    <button id="btn-editsuggestions2" class="btn-analyze btn-analyze-warn" title="Analiza edición con detección de errores">
+                <div class="btn-row" style="margin-bottom:8px">
+                    <button id="btn-editsuggestions2" class="btn-analyze btn-analyze-warn" style="flex:1" title="Analiza edición con detección de errores">
                         <span class="btn-analyze-text">Analizar Edición</span>
                     </button>
+                    <button id="btn-es2-batch" class="btn-analyze btn-es2-batch" title="Analizar edición en múltiples secuencias">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="1" y="7" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="1" y="12" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>
+                        <span>Batch</span>
+                    </button>
+                </div>
+                <!-- ES2 Batch Panel -->
+                <div id="es2-batch-panel" class="hidden" style="margin-top:8px">
+                    <div class="batch-header">
+                        <span class="batch-title">Secuencias abiertas con transcript</span>
+                        <span id="es2-batch-count" style="font-size:10px;color:var(--text-muted)">0</span>
+                    </div>
+                    <div class="batch-select-all">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--text-secondary)">
+                            <input type="checkbox" id="es2-batch-select-all" checked>
+                            Seleccionar todas
+                        </label>
+                    </div>
+                    <div id="es2-batch-list" class="batch-list" style="max-height:350px"></div>
+                    <div id="es2-batch-progress" class="progress-bar hidden" style="margin-bottom:6px">
+                        <div class="progress-track"><div id="es2-batch-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                        <span id="es2-batch-progress-text" class="progress-text">Preparando...</span>
+                    </div>
+                    <div class="btn-row" style="margin-top:6px">
+                        <button id="btn-es2-batch-analyze" class="btn-analyze btn-analyze-warn" style="flex:1">
+                            <span>Analizar Todas</span>
+                        </button>
+                    </div>
+                    <button id="btn-es2-batch-cancel" class="btn-back-nav" style="margin-top:6px;background:rgba(255,255,255,0.04);border-color:var(--border);color:var(--text-secondary)">Cerrar Batch</button>
                 </div>
                 <div id="es2-progress" class="progress-bar hidden">
                     <div class="progress-track"><div id="es2-progress-fill" class="progress-fill" style="width:0%"></div></div>
                     <span id="es2-progress-text" class="progress-text">Analizando contenido...</span>
                 </div>
                 <div id="es2-results" class="hidden">
+                    <div id="es2-batch-nav" class="es2-batch-nav hidden">
+                        <button id="btn-es2-bnav-prev" class="btn-batch-nav" title="Secuencia anterior">&#8592;</button>
+                        <button id="btn-es2-bnav-back" class="btn-back-nav">Volver a Batch</button>
+                        <button id="btn-es2-bnav-next" class="btn-batch-nav" title="Siguiente secuencia">&#8594;</button>
+                    </div>
                     <div id="es2-summary" class="result-summary"></div>
                     <div class="result-actions">
                         <button id="btn-es2-export" class="btn btn-sm btn-ghost" title="Copiar al portapapeles">📋 Copiar</button>
@@ -1089,7 +1122,9 @@
                             </div>
                         </div>
                         <div class="result-actions" style="margin-bottom:6px">
-                            <button id="btn-mp-generate" class="btn btn-sm btn-success btn-disabled" title="Genera motion graphics para las propuestas seleccionadas">🎬 Generar Seleccionados</button>
+                            <button id="btn-mp-generate" class="btn-analyze btn-analyze-alt btn-disabled" title="Genera motion graphics para las propuestas seleccionadas">
+                                <span class="btn-analyze-text">🎬 Generar Seleccionados</span>
+                            </button>
                         </div>
                         <div id="mp-proposal-list" class="mp-proposal-list"></div>
                     </div>

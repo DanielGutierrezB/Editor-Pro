@@ -13,6 +13,7 @@
     var on, clearContainer, safeCallback, showToast, showElement, hideElement;
     var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress;
     var checkAIReady, expandSection, formatTime, formatTimeFull, navigateToTime;
+    var parseTranscriptJson, _getTranscriptFolders;
     var refreshSequenceInfo, buildTimedTranscript, copyToClipboard;
     var getPromptContext, togglePromptEditorById, savePromptById, resetPromptById;
     var normalizeSupertextNewlines, normalizeSt2Fields, escSupertextHtml;
@@ -80,6 +81,8 @@
         renderTranscriptFromSegments = global._epRenderTranscriptFromSegments;
         bindCollapsibles         = global._epBindCollapsibles;
         MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0.35;
+        parseTranscriptJson      = global._epParseTranscriptJson;
+        _getTranscriptFolders    = global._epGetTranscriptFolders;
     }
 
     function getEditColor(type) {
@@ -446,13 +449,16 @@
     function placeES2ErrorMarkers() {
         var markers = [];
         state.es2Errors.forEach(function(err, errIdx) {
-            if (!err.occurrences || err.occurrences.length < 2) return;
+            if (!err.occurrences || err.occurrences.length === 0) return;
             err.occurrences.forEach(function(occ, occIdx) {
                 var isKeep = occIdx === err.keepIndex;
+                var label = err.occurrences.length >= 2
+                    ? (isKeep ? "✓ CONSERVAR" : "✗ ELIMINAR")
+                    : "⚠ " + (err.type || "ERROR").toUpperCase();
                 markers.push({
                     time: occ.time,
                     endTime: occ.endTime || occ.time + 5,
-                    name: "[ER" + (errIdx + 1) + "] " + (isKeep ? "✓ CONSERVAR" : "✗ ELIMINAR") + " — " + err.title,
+                    name: "[ER" + (errIdx + 1) + "] " + label + " — " + err.title,
                     comment: err.type.toUpperCase() + ": " + (occ.text || err.description || ""),
                     color: isKeep ? 5 : 1
                 });
@@ -463,17 +469,20 @@
 
     function placeES2SingleErrorMarkers(errIdx) {
         var err = state.es2Errors[errIdx];
-        if (!err || !err.occurrences || err.occurrences.length < 2) {
-            showToast("Este error no tiene suficientes ocurrencias", "info");
+        if (!err || !err.occurrences || err.occurrences.length === 0) {
+            showToast("Este error no tiene ocurrencias para marcar", "info");
             return;
         }
         var markers = [];
         err.occurrences.forEach(function(occ, occIdx) {
             var isKeep = occIdx === err.keepIndex;
+            var label = err.occurrences.length >= 2
+                ? (isKeep ? "✓ CONSERVAR" : "✗ ELIMINAR")
+                : "⚠ " + (err.type || "ERROR").toUpperCase();
             markers.push({
                 time: occ.time,
                 endTime: occ.endTime || occ.time + 5,
-                name: "[ER" + (errIdx + 1) + "] " + (isKeep ? "✓ CONSERVAR" : "✗ ELIMINAR") + " — " + err.title,
+                name: "[ER" + (errIdx + 1) + "] " + label + " — " + err.title,
                 comment: err.type.toUpperCase() + ": " + (occ.text || err.description || ""),
                 color: isKeep ? 5 : 1
             });
@@ -835,6 +844,452 @@
 
 
 
+    // ═══════════════════════════════════════════════════════════════
+    // EDIT SUGGESTIONS — BATCH MODE
+    // ═══════════════════════════════════════════════════════════════
+
+    var _es2BatchResults = {};
+    var _es2BatchQueue = [];
+    var _es2BatchCancelled = false;
+    var _es2BatchCurrentNav = -1;
+    var _es2BatchRunning = false;
+    var ES2_BATCH_CONCURRENCY = 3;
+
+    function es2BatchOpen() {
+        if (!checkAIReady()) return;
+        _es2BatchResults = {};
+        _es2BatchQueue = [];
+        _es2BatchCancelled = false;
+        _es2BatchCurrentNav = -1;
+        hideElement("es2-batch-progress");
+        hideElement("es2-results");
+        hideElement("es2-batch-nav");
+        showElement("es2-batch-panel");
+
+        var listEl = document.getElementById("es2-batch-list");
+        listEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:12px;text-align:center">Buscando secuencias...</div>';
+
+        var cache = (state && state.transcriptCache) ? state.transcriptCache : {};
+        csInterface.evalScript("getAllProjectSequences()", function(res) {
+            try {
+                var data = JSON.parse(res);
+                var seqs = data.sequences || [];
+                var withTranscript = [];
+
+                for (var si = 0; si < seqs.length; si++) {
+                    if (!seqs[si].isOpen) continue;
+                    var sname = seqs[si].name;
+                    var hasT = cache[sname] || _es2BatchFindTranscript(_getTranscriptFolders(), sname);
+                    if (hasT) {
+                        withTranscript.push({ name: sname, id: seqs[si].sequenceID, transcriptPath: hasT });
+                    }
+                }
+
+                withTranscript.sort(function(a, b) { return a.name.localeCompare(b.name); });
+                _es2BatchQueue = withTranscript;
+
+                var countEl = document.getElementById("es2-batch-count");
+                if (countEl) countEl.textContent = withTranscript.length + " encontradas";
+
+                if (withTranscript.length === 0) {
+                    listEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:12px;text-align:center">No se encontraron secuencias abiertas con transcript. Importa al menos un transcript primero.</div>';
+                    return;
+                }
+
+                _es2BatchRenderCards();
+            } catch(e) {
+                listEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:12px">Error: ' + e.message + '</div>';
+            }
+        });
+    }
+
+    function _es2BatchFindTranscript(folders, seqName) {
+        if (!seqName || !fs || !path) return null;
+        var baseName = seqName.replace(/[\/\\:*?"<>|]/g, "_");
+        for (var fi = 0; fi < folders.length; fi++) {
+            var folder = folders[fi];
+            var jp = path.join(folder, baseName + ".json");
+            if (fs.existsSync(jp)) return jp;
+            var sp = path.join(folder, baseName + ".srt");
+            if (fs.existsSync(sp)) return sp;
+        }
+        return null;
+    }
+
+    function _es2BatchLoadTranscript(filePath) {
+        if (!filePath || !fs) return null;
+        try {
+            var segments = null;
+
+            if (filePath.toLowerCase().endsWith(".json")) {
+                var parsed = parseTranscriptJson(filePath);
+                if (parsed && parsed.words && parsed.words.length > 5) {
+                    var srt = sttResultToSRT(parsed);
+                    segments = parseSRT(srt);
+                }
+                if (!segments || segments.length < 3) {
+                    var raw = fs.readFileSync(filePath, "utf8");
+                    var jsonData = JSON.parse(raw);
+                    if (jsonData.segments && jsonData.segments.length > 0 && jsonData.segments[0].words) {
+                        segments = [];
+                        for (var si = 0; si < jsonData.segments.length; si++) {
+                            var seg = jsonData.segments[si];
+                            var words = seg.words || [];
+                            var text = words.map(function(w) { return w.text || ""; }).join(" ").trim();
+                            if (text) {
+                                segments.push({
+                                    startTime: seg.start || 0,
+                                    endTime: (seg.start || 0) + (seg.duration || 5),
+                                    text: text
+                                });
+                            }
+                        }
+                    }
+                }
+            } else {
+                var content = fs.readFileSync(filePath, "utf8");
+                segments = parseSRT(content);
+            }
+
+            if (segments && segments.length > 3) {
+                return segments.map(function(s) {
+                    return "[" + s.startTime.toFixed(1) + "s - " + s.endTime.toFixed(1) + "s] " + s.text;
+                }).join("\n");
+            }
+            return null;
+        } catch(_e) { return null; }
+    }
+
+    function _es2BatchRenderCards() {
+        var listEl = document.getElementById("es2-batch-list");
+        listEl.innerHTML = "";
+
+        for (var wi = 0; wi < _es2BatchQueue.length; wi++) {
+            var s = _es2BatchQueue[wi];
+            var r = _es2BatchResults[s.name];
+
+            var item = document.createElement("div");
+            item.className = "batch-seq-item" + (r && r.result ? " es2-done" : "");
+            item.dataset.seqName = s.name;
+
+            var cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.className = "batch-seq-checkbox es2b-check";
+            cb.checked = true;
+            cb.dataset.seqName = s.name;
+            cb.dataset.seqId = s.id;
+            cb.dataset.transcript = s.transcriptPath;
+            cb.addEventListener("click", function(e) { e.stopPropagation(); });
+
+            var info = document.createElement("div");
+            info.className = "batch-seq-info";
+
+            var nameEl = document.createElement("div");
+            nameEl.className = "batch-seq-name";
+            nameEl.textContent = s.name;
+            info.appendChild(nameEl);
+
+            var meta = document.createElement("div");
+            meta.className = "batch-seq-meta";
+            meta.dataset.seqName = s.name;
+            info.appendChild(meta);
+
+            var stats = document.createElement("div");
+            stats.className = "batch-seq-stats";
+            stats.dataset.seqName = s.name;
+
+            if (r && r.result) {
+                _es2BatchFillCardPills(stats, meta, r);
+            } else if (r && r.error) {
+                var errPill = document.createElement("span");
+                errPill.className = "batch-stat-pill es2-error";
+                errPill.textContent = "Error";
+                stats.appendChild(errPill);
+                meta.textContent = r.error.substring(0, 50);
+            } else {
+                var pendPill = document.createElement("span");
+                pendPill.className = "batch-stat-pill es2-pending";
+                pendPill.textContent = "Pendiente";
+                stats.appendChild(pendPill);
+                meta.textContent = path.basename(s.transcriptPath);
+            }
+
+            item.appendChild(cb);
+            item.appendChild(info);
+            item.appendChild(stats);
+
+            if (r && r.result) {
+                (function(seqName) {
+                    item.addEventListener("click", function(e) {
+                        if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") return;
+                        _es2BatchNavigateTo(seqName);
+                    });
+                })(s.name);
+            }
+
+            listEl.appendChild(item);
+        }
+    }
+
+    function _es2BatchFillCardPills(statsEl, metaEl, r) {
+        var res = r.result;
+        var nErr = (res.errors || []).length;
+        var nSug = (res.suggestions || []).length;
+        var nHl = (res.highlights || []).length;
+        var nTotal = nErr + nSug + nHl;
+
+        var totalPill = document.createElement("span");
+        totalPill.className = "batch-stat-pill es2-total";
+        totalPill.textContent = nTotal;
+        statsEl.appendChild(totalPill);
+
+        if (nErr > 0) {
+            var ep = document.createElement("span");
+            ep.className = "batch-stat-pill es2-errors";
+            ep.textContent = nErr + " error" + (nErr > 1 ? "es" : "");
+            statsEl.appendChild(ep);
+        }
+        if (nSug > 0) {
+            var sp = document.createElement("span");
+            sp.className = "batch-stat-pill es2-suggestions";
+            sp.textContent = nSug + " sugerencia" + (nSug > 1 ? "s" : "");
+            statsEl.appendChild(sp);
+        }
+        if (nHl > 0) {
+            var hp = document.createElement("span");
+            hp.className = "batch-stat-pill es2-highlights";
+            hp.textContent = nHl + " highlight" + (nHl > 1 ? "s" : "");
+            statsEl.appendChild(hp);
+        }
+
+        metaEl.textContent = nTotal + " observaciones";
+    }
+
+    function _es2BatchSetProgress(pct, text) {
+        var fill = document.getElementById("es2-batch-progress-fill");
+        var label = document.getElementById("es2-batch-progress-text");
+        if (fill) fill.style.width = Math.min(pct, 100) + "%";
+        if (label) label.textContent = text || "";
+    }
+
+    function _es2BatchUpdateCardStatus(seqName, pillClass, pillText) {
+        var card = document.querySelector('.batch-seq-item[data-seq-name="' + seqName.replace(/"/g, '\\"') + '"]');
+        if (!card) return;
+        var stats = card.querySelector(".batch-seq-stats");
+        if (stats) {
+            stats.innerHTML = "";
+            var r = _es2BatchResults[seqName];
+            if (r && r.result) {
+                var meta = card.querySelector(".batch-seq-meta");
+                _es2BatchFillCardPills(stats, meta, r);
+            } else {
+                var pill = document.createElement("span");
+                pill.className = "batch-stat-pill " + pillClass;
+                pill.textContent = pillText;
+                stats.appendChild(pill);
+            }
+        }
+
+        var r2 = _es2BatchResults[seqName];
+        if (r2 && r2.result && !card.classList.contains("es2-done")) {
+            card.classList.add("es2-done");
+            (function(sn) {
+                card.addEventListener("click", function(e) {
+                    if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") return;
+                    _es2BatchNavigateTo(sn);
+                });
+            })(seqName);
+        }
+    }
+
+    function _es2BatchSetCancelBtn(running) {
+        var btn = document.getElementById("btn-es2-batch-cancel");
+        if (!btn) return;
+        if (running) {
+            btn.textContent = "Detener";
+            btn.style.borderColor = "rgba(248,113,113,0.4)";
+            btn.style.color = "#f87171";
+        } else {
+            btn.textContent = "Cerrar Batch";
+            btn.style.borderColor = "";
+            btn.style.color = "";
+        }
+    }
+
+    function es2BatchClose() {
+        if (_es2BatchRunning) {
+            _es2BatchCancelled = true;
+            _es2BatchRunning = false;
+            _es2BatchSetCancelBtn(false);
+            showToast("Proceso detenido", "info");
+            hideElement("es2-batch-progress");
+            enableBtn("btn-es2-batch-analyze");
+            return;
+        }
+        _es2BatchCancelled = true;
+        _es2BatchCurrentNav = -1;
+        hideElement("es2-batch-panel");
+        hideElement("es2-batch-nav");
+    }
+
+    function es2BatchAnalyzeAll() {
+        var checks = document.querySelectorAll(".es2b-check:checked");
+        if (checks.length === 0) { showToast("Selecciona al menos una secuencia", "info"); return; }
+        if (!checkAIReady()) return;
+
+        _es2BatchCancelled = false;
+        _es2BatchRunning = true;
+        _es2BatchSetCancelBtn(true);
+        disableBtn("btn-es2-batch-analyze");
+        showElement("es2-batch-progress");
+
+        var queue = [];
+        checks.forEach(function(cb) {
+            queue.push({ name: cb.dataset.seqName, id: cb.dataset.seqId, transcript: cb.dataset.transcript });
+        });
+
+        var total = queue.length;
+        var completed = 0;
+        var nextIdx = 0;
+
+        function onItemDone() {
+            completed++;
+            var pct = Math.round((completed / total) * 100);
+            _es2BatchSetProgress(pct, completed + "/" + total + " analizadas");
+
+            if (_es2BatchCancelled || completed >= total) {
+                _es2BatchRunning = false;
+                _es2BatchSetCancelBtn(false);
+                hideElement("es2-batch-progress");
+                enableBtn("btn-es2-batch-analyze");
+                _es2BatchRenderCards();
+                var totalObs = 0;
+                for (var k in _es2BatchResults) {
+                    var br = _es2BatchResults[k];
+                    if (br && br.result) {
+                        totalObs += (br.result.errors || []).length + (br.result.suggestions || []).length + (br.result.highlights || []).length;
+                    }
+                }
+                showToast(completed + " secuencias analizadas — " + totalObs + " observaciones", "success");
+                return;
+            }
+            launchNext();
+        }
+
+        function launchNext() {
+            while (nextIdx < total && (nextIdx - completed) < ES2_BATCH_CONCURRENCY) {
+                launchOne(nextIdx);
+                nextIdx++;
+            }
+        }
+
+        function launchOne(idx) {
+            if (_es2BatchCancelled) return;
+            var item = queue[idx];
+            _es2BatchUpdateCardStatus(item.name, "es2-analyzing", "Analizando...");
+
+            var timedTranscript = _es2BatchLoadTranscript(item.transcript);
+            if (!timedTranscript) {
+                _es2BatchUpdateCardStatus(item.name, "es2-error", "Sin transcript");
+                _es2BatchResults[item.name] = { error: "No transcript", seqId: item.id };
+                onItemDone();
+                return;
+            }
+
+            aiAnalyzer.analyzeEditSuggestions2(timedTranscript, getPromptContext("es2"), function(result) {
+                if (_es2BatchCancelled) return;
+                if (result.error) {
+                    _es2BatchUpdateCardStatus(item.name, "es2-error", "Error");
+                    _es2BatchResults[item.name] = { error: result.error, seqId: item.id };
+                } else {
+                    result.errors = postProcessES2Errors(result.errors || []);
+                    _es2BatchResults[item.name] = { result: result, seqId: item.id, transcript: item.transcript };
+                    var nObs = (result.errors || []).length + (result.suggestions || []).length + (result.highlights || []).length;
+                    _es2BatchUpdateCardStatus(item.name, "es2-total", nObs + " observaciones");
+                }
+                onItemDone();
+            });
+        }
+
+        launchNext();
+    }
+
+    function _es2BatchGetAnalyzedNames() {
+        var names = [];
+        for (var qi = 0; qi < _es2BatchQueue.length; qi++) {
+            var n = _es2BatchQueue[qi].name;
+            if (_es2BatchResults[n] && _es2BatchResults[n].result) names.push(n);
+        }
+        return names;
+    }
+
+    function _es2BatchNavigateTo(seqName) {
+        var r = _es2BatchResults[seqName];
+        if (!r || !r.result) return;
+
+        _es2BatchSaveCurrentEdits();
+
+        var analyzed = _es2BatchGetAnalyzedNames();
+        _es2BatchCurrentNav = analyzed.indexOf(seqName);
+
+        // Notify main.js to update _lastSeqName BEFORE opening (prevents polling race)
+        if (window._epNotifyBatchSeqSwitch) window._epNotifyBatchSeqSwitch(seqName);
+        csInterface.evalScript('openSequenceById("' + r.seqId.replace(/"/g, '\\"') + '")', function() {});
+
+        state.es2Highlights = r.result.highlights || [];
+        state.es2Suggestions = r.result.suggestions || [];
+        state.es2Errors = r.result.errors || [];
+        renderES2Results(r.result);
+
+        hideElement("es2-batch-panel");
+        hideElement("es2-empty");
+        showElement("es2-results");
+        _es2BatchUpdateNav();
+        showElement("es2-batch-nav");
+    }
+
+    function _es2BatchSaveCurrentEdits() {
+        if (_es2BatchCurrentNav < 0) return;
+        var analyzed = _es2BatchGetAnalyzedNames();
+        var name = analyzed[_es2BatchCurrentNav];
+        if (name && _es2BatchResults[name] && _es2BatchResults[name].result) {
+            _es2BatchResults[name].result.highlights = state.es2Highlights;
+            _es2BatchResults[name].result.suggestions = state.es2Suggestions;
+            _es2BatchResults[name].result.errors = state.es2Errors;
+        }
+    }
+
+    function _es2BatchUpdateNav() {
+        var analyzed = _es2BatchGetAnalyzedNames();
+        var prevBtn = document.getElementById("btn-es2-bnav-prev");
+        var nextBtn = document.getElementById("btn-es2-bnav-next");
+        if (prevBtn) prevBtn.className = "btn-batch-nav" + (_es2BatchCurrentNav <= 0 ? " disabled" : "");
+        if (nextBtn) nextBtn.className = "btn-batch-nav" + (_es2BatchCurrentNav >= analyzed.length - 1 ? " disabled" : "");
+    }
+
+    function es2BatchNavPrev() {
+        var analyzed = _es2BatchGetAnalyzedNames();
+        if (_es2BatchCurrentNav > 0) {
+            _es2BatchNavigateTo(analyzed[_es2BatchCurrentNav - 1]);
+        }
+    }
+
+    function es2BatchNavNext() {
+        var analyzed = _es2BatchGetAnalyzedNames();
+        if (_es2BatchCurrentNav < analyzed.length - 1) {
+            _es2BatchNavigateTo(analyzed[_es2BatchCurrentNav + 1]);
+        }
+    }
+
+    function es2BatchNavBack() {
+        _es2BatchSaveCurrentEdits();
+        _es2BatchCurrentNav = -1;
+        hideElement("es2-batch-nav");
+        hideElement("es2-results");
+        _es2BatchRenderCards();
+        showElement("es2-batch-panel");
+    }
+
     // ─── Expose to EditorProUI namespace ───────────────────────
     EP.editSuggestions = {
         init: _initRefs,
@@ -851,7 +1306,14 @@
         renderReelResults: renderReelResults,
         exportReelProposals: exportReelProposals,
         setRPProgress: setRPProgress,
-        refreshRPHeaderProgressVisibility: refreshRPHeaderProgressVisibility
+        refreshRPHeaderProgressVisibility: refreshRPHeaderProgressVisibility,
+        batchOpen: es2BatchOpen,
+        batchAnalyzeAll: es2BatchAnalyzeAll,
+        batchClose: es2BatchClose,
+        batchNavPrev: es2BatchNavPrev,
+        batchNavNext: es2BatchNavNext,
+        batchNavBack: es2BatchNavBack,
+        isBatchActive: function() { return _es2BatchRunning || _es2BatchCurrentNav >= 0; }
     };
 
 })(window);
