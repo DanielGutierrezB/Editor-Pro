@@ -26,21 +26,13 @@ function _loadDoc(centralName, localFallback) {
 
 const SYSTEM_PROMPT_DOC = _loadDoc('system.md', 'SYSTEM_PROMPT.md');
 const AVAILABLE_PACKAGES = _loadDoc('available-packages.md', '');
+const DESIGN_SYSTEM = _loadDoc('DESIGN.md', '');
 const QUALITY_RULES = _loadDoc('quality-rules.md', '');
-
-// Load templates
-function _loadTemplates() {
-  const templatesDir = path.join(PROMPTS_DIR, 'templates');
-  if (!fs.existsSync(templatesDir)) return '';
-  const files = fs.readdirSync(templatesDir).filter(f => f.endsWith('.md')).sort();
-  return files.map(f => fs.readFileSync(path.join(templatesDir, f), 'utf8')).join('\n\n---\n\n');
-}
-const TEMPLATES = _loadTemplates();
 
 const FULL_SYSTEM_PROMPT = [
   SYSTEM_PROMPT_DOC,
   AVAILABLE_PACKAGES ? '\n\n---\n\n# AVAILABLE PACKAGES (USE THESE)\n\n' + AVAILABLE_PACKAGES : '',
-  TEMPLATES ? '\n\n---\n\n# REFERENCE TEMPLATES (follow these patterns)\n\n' + TEMPLATES : '',
+  DESIGN_SYSTEM ? '\n\n---\n\n# DESIGN SYSTEM (YOUR VISUAL IDENTITY)\n\n' + DESIGN_SYSTEM : '',
   QUALITY_RULES ? '\n\n---\n\n# QUALITY RULES (MUST FOLLOW)\n\n' + QUALITY_RULES : '',
 ].join('');
 
@@ -632,16 +624,17 @@ The design system uses:
 - Icons from lucide-react (geometric SVG icons)
 - Components available: GlowCard (dark card with glow), AnimatedText (word-by-word reveal), AccentSeparator (accent line), CascadeItem (stagger blur), ProgressDots (step indicator), AnimatedLine (SVG line draw), OdometerDigit (count-up number)
 
-Your description must be:
+${DESIGN_SYSTEM ? '## Design Philosophy\n' + DESIGN_SYSTEM + '\n\n' : ''}Your description must be:
 - Specific enough to generate code from (include sizes, colors, layout direction)
+- Bold and expressive — no generic centered grids. Apply the design philosophy above.
 - Written in the SAME LANGUAGE as the transcript
 - Under 200 words
-- Focused on WHAT to show, not HOW to animate (the animator will handle that)
+- Focused on WHAT to show and HOW to arrange it (layout, hierarchy, scale contrasts)
 
 Return ONLY a JSON object with these exact keys:
 {
   "visualDescription": "Detailed description of what to show and how to lay it out",
-  "layout": "centered-vertical | centered-horizontal | split-horizontal | split-vertical | grid-2x2 | flow-left-right",
+  "layout": "centered-vertical | centered-horizontal | split-horizontal | split-vertical | grid-2x2 | flow-left-right | asymmetric | hero-number | editorial",
   "elements": ["element1", "element2", ...],
   "colorNotes": "Which colors to emphasize for this content"
 }`;
