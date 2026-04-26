@@ -49,7 +49,15 @@
         };
         try {
             var saved = localStorage.getItem(SETTINGS_KEY);
-            if (saved) return Object.assign({}, defaults, JSON.parse(saved));
+            if (saved) {
+                var parsed = JSON.parse(saved);
+                // Migrate removed providers to comfyui
+                if (parsed.imageProvider === "flux_local") {
+                    parsed.imageProvider = "comfyui";
+                    parsed.imageEndpointUrl = "http://localhost:8188";
+                }
+                return Object.assign({}, defaults, parsed);
+            }
         } catch(e) {}
         return defaults;
     };
