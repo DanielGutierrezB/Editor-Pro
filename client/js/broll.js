@@ -538,6 +538,10 @@
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
+    BRoll.prototype.setOutputDir = function(dir) {
+        this._settings.outputDir = dir;
+    };
+
     BRoll.prototype._findProposal = function(id) {
         for (var i = 0; i < this.proposals.length; i++) {
             if (this.proposals[i].id === id) return this.proposals[i];

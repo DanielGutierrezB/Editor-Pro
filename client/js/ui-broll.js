@@ -260,6 +260,27 @@
         _updateSelectedCount();
     }
 
+    // ── Output dir: "BRoll Generation" next to .prproj ───────────────────────
+
+    function _resolveBrollOutputDir(callback) {
+        if (!csInterface) return callback();
+        csInterface.evalScript("getActiveSequenceInfo()", function(res) {
+            try {
+                var info = JSON.parse(res);
+                if (info.projectPath) {
+                    var projDir = require("path").dirname(info.projectPath);
+                    var brollDir = require("path").join(projDir, "BRoll Generation");
+                    if (!require("fs").existsSync(brollDir)) {
+                        require("fs").mkdirSync(brollDir, { recursive: true });
+                    }
+                    broll.setOutputDir(brollDir);
+                    if (window.EPLogger) EPLogger.log("broll", "output-dir", brollDir);
+                }
+            } catch(e) {}
+            callback();
+        });
+    }
+
     // ── Step 2: Generate images ────────────────────────────────────────────────
 
     function startGeneration() {
@@ -273,6 +294,8 @@
 
         if (window.EPLogger) EPLogger.log("broll", "generate-start", selected.length + " proposals, provider=" + (broll.getSettings().imageProvider || "?"));
 
+        // Resolve output dir: "BRoll Generation" folder next to .prproj
+        _resolveBrollOutputDir(function() {
         broll.checkServer(function(ok) {
             if (!ok) {
                 if (window.EPLogger) EPLogger.error("broll", "generate-error", "server not running");
@@ -309,6 +332,7 @@
                 _renderClips();
             });
         });
+        }); // _resolveBrollOutputDir
     }
 
     function _generateNext(ids, idx, done) {
