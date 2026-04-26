@@ -397,7 +397,9 @@
             transcriptSegment: transcriptSegment,
             provider: aiConfig.provider,
             model: aiConfig.model,
-            apiKey: aiConfig.apiKey
+            apiKey: aiConfig.apiKey,
+            customPalette: self.customPalette || null,
+            paletteCategory: self.paletteCategory || null
         };
 
         self._post("/api/generate/propose", body, function(err, result) {
@@ -452,7 +454,8 @@
             apiKey: aiConfig.apiKey,
             sessionDir: outputDir || "",
             brandfetchKey: aiConfig.brandfetchKey || "",
-            customPalette: self.customPalette || null
+            customPalette: self.customPalette || null,
+            paletteCategory: self.paletteCategory || null
         };
 
         // If the proposal has a pre-approved visual description, use free-form generation
@@ -628,7 +631,8 @@
             apiKey: aiConfig.apiKey,
             sessionDir: outputDir || "",
             brandfetchKey: aiConfig.brandfetchKey || "",
-            customPalette: self.customPalette || null
+            customPalette: self.customPalette || null,
+            paletteCategory: self.paletteCategory || null
         };
 
         // Health check before starting the pipeline

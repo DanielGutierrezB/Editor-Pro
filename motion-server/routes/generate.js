@@ -13,6 +13,8 @@ router.post('/', (req, res) => {
     apiKey,
     sessionDir,
     brandfetchKey,
+    customPalette,
+    paletteCategory,
   } = req.body;
 
   if (!proposal || !transcriptSegment) {
@@ -33,6 +35,8 @@ router.post('/', (req, res) => {
     durationFrames,
     compositionId,
     brandfetchKey: brandfetchKey || '',
+    customPalette: customPalette || null,
+    paletteCategory: paletteCategory || null,
   });
 
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {
@@ -78,8 +82,8 @@ router.post('/', (req, res) => {
 // context that guides the art direction when provided.
 // ──────────────────────────────────────────────────────────────────────────────
 router.post('/template', (req, res) => {
-  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, visualDescription } = req.body;
-  console.log('[generate/template] provider=' + provider + ' model=' + model + (visualDescription ? ' [guided by visualDescription]' : ' [free-form]'));
+  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, visualDescription, customPalette, paletteCategory } = req.body;
+  console.log('[generate/template] provider=' + provider + ' model=' + model + (visualDescription ? ' [guided by visualDescription]' : ' [free-form]') + (customPalette ? ' [custom palette]' : ''));
 
   if (!proposal || !transcriptSegment) {
     return res.status(400).json({ error: 'Missing proposal or transcriptSegment' });
@@ -97,6 +101,8 @@ router.post('/template', (req, res) => {
     compositionId,
     brandfetchKey: '',
     visualDescription: visualDescription || null,
+    customPalette: customPalette || null,
+    paletteCategory: paletteCategory || null,
   });
 
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {

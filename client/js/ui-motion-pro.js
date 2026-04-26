@@ -198,14 +198,264 @@
         });
     }
 
-    /** Apply palette to state, motionPro, localStorage, and UI swatches */
-    function _applyPalette(palette) {
+    /** Apply palette to state, motionPro, localStorage, UI swatches, and history */
+    function _applyPalette(palette, skipHistory) {
         state.customPalette = palette;
         if (motionPro) motionPro.customPalette = palette;
         localStorage.setItem("mp_custom_palette", JSON.stringify(palette));
         _mpUpdateStyleSwatches(palette);
+        if (!skipHistory) _addPaletteToHistory(palette);
         showToast("Paleta aplicada", "success");
         if (window.EPLogger) EPLogger.log("motion-pro", "style-applied", "bg=" + palette.bg + " accent=" + palette.accent);
+        // Show regen button if references exist
+        var regenBtn = document.getElementById("btn-mp-regen-palette");
+        if (regenBtn) regenBtn.style.display = _referenceImages.length > 0 ? "" : "none";
+    }
+
+    // ─── Palette Category ─────────────────────────────────────────
+
+    function _initPaletteCategory() {
+        var sel = document.getElementById("mp-palette-category");
+        if (!sel) return;
+        var saved = localStorage.getItem("mp_palette_category");
+        if (saved) {
+            sel.value = saved;
+            state.paletteCategory = saved;
+            if (motionPro) motionPro.paletteCategory = saved;
+        }
+        sel.addEventListener("change", function() {
+            var cat = sel.value;
+            state.paletteCategory = cat;
+            if (motionPro) motionPro.paletteCategory = cat;
+            localStorage.setItem("mp_palette_category", cat);
+            // For non-auto categories without refs, enable "Analizar" to generate from category defaults
+            var analyzeBtn = document.getElementById("btn-mp-analyze-palette");
+            if (analyzeBtn && cat !== "auto") {
+                analyzeBtn.style.opacity = "1";
+                analyzeBtn.style.pointerEvents = "auto";
+            } else if (analyzeBtn && cat === "auto" && _referenceImages.length === 0) {
+                analyzeBtn.style.opacity = "0.4";
+                analyzeBtn.style.pointerEvents = "none";
+            }
+        });
+    }
+
+    // ─── Palette Presets ──────────────────────────────────────────
+
+    var MP_MAX_PRESETS = 20;
+
+    function _loadPresets() {
+        try {
+            var raw = localStorage.getItem("mp_palette_presets");
+            return raw ? JSON.parse(raw) : [];
+        } catch(e) { return []; }
+    }
+
+    function _savePresets(presets) {
+        localStorage.setItem("mp_palette_presets", JSON.stringify(presets));
+    }
+
+    function _refreshPresetsDropdown() {
+        var sel = document.getElementById("mp-palette-presets");
+        if (!sel) return;
+        var presets = _loadPresets();
+        // Clear all except placeholder
+        while (sel.options.length > 1) sel.remove(1);
+        presets.forEach(function(p, i) {
+            var opt = document.createElement("option");
+            opt.value = String(i);
+            opt.textContent = p.name;
+            sel.appendChild(opt);
+        });
+        sel.selectedIndex = 0;
+        var delBtn = document.getElementById("btn-mp-delete-preset");
+        if (delBtn) delBtn.style.display = "none";
+    }
+
+    function _initPresets() {
+        _refreshPresetsDropdown();
+        var sel = document.getElementById("mp-palette-presets");
+        var saveBtn = document.getElementById("btn-mp-save-preset");
+        var delBtn = document.getElementById("btn-mp-delete-preset");
+
+        if (sel) {
+            sel.addEventListener("change", function() {
+                var idx = parseInt(sel.value);
+                if (isNaN(idx)) return;
+                var presets = _loadPresets();
+                if (presets[idx] && presets[idx].palette) {
+                    _applyPalette(presets[idx].palette);
+                    if (presets[idx].category) {
+                        var catSel = document.getElementById("mp-palette-category");
+                        if (catSel) {
+                            catSel.value = presets[idx].category;
+                            state.paletteCategory = presets[idx].category;
+                            if (motionPro) motionPro.paletteCategory = presets[idx].category;
+                            localStorage.setItem("mp_palette_category", presets[idx].category);
+                        }
+                    }
+                    if (delBtn) delBtn.style.display = "";
+                }
+            });
+        }
+
+        if (saveBtn) {
+            saveBtn.addEventListener("click", function() {
+                if (!state.customPalette) {
+                    showToast("No hay paleta personalizada para guardar", "error");
+                    return;
+                }
+                var name = prompt("Nombre del preset:");
+                if (!name || !name.trim()) return;
+                var presets = _loadPresets();
+                presets.unshift({
+                    name: name.trim(),
+                    palette: JSON.parse(JSON.stringify(state.customPalette)),
+                    category: state.paletteCategory || "auto",
+                    createdAt: Date.now()
+                });
+                if (presets.length > MP_MAX_PRESETS) presets = presets.slice(0, MP_MAX_PRESETS);
+                _savePresets(presets);
+                _refreshPresetsDropdown();
+                showToast("Preset '" + name.trim() + "' guardado", "success");
+            });
+        }
+
+        if (delBtn) {
+            delBtn.addEventListener("click", function() {
+                var selEl = document.getElementById("mp-palette-presets");
+                if (!selEl) return;
+                var idx = parseInt(selEl.value);
+                if (isNaN(idx)) return;
+                var presets = _loadPresets();
+                if (!presets[idx]) return;
+                var removed = presets.splice(idx, 1);
+                _savePresets(presets);
+                _refreshPresetsDropdown();
+                showToast("Preset '" + (removed[0] && removed[0].name || "") + "' eliminado", "info");
+            });
+        }
+    }
+
+    // ─── Palette History ──────────────────────────────────────────
+
+    var MP_MAX_HISTORY = 5;
+
+    function _loadHistory() {
+        try {
+            var raw = localStorage.getItem("mp_palette_history");
+            return raw ? JSON.parse(raw) : [];
+        } catch(e) { return []; }
+    }
+
+    function _saveHistory(history) {
+        localStorage.setItem("mp_palette_history", JSON.stringify(history));
+    }
+
+    function _addPaletteToHistory(palette) {
+        if (!palette || !palette.bg) return;
+        var history = _loadHistory();
+        // Don't add duplicate (same bg+accent combo)
+        if (history.length > 0 && history[0].bg === palette.bg && history[0].accent === palette.accent) return;
+        history.unshift(JSON.parse(JSON.stringify(palette)));
+        if (history.length > MP_MAX_HISTORY) history = history.slice(0, MP_MAX_HISTORY);
+        _saveHistory(history);
+        _renderHistoryStrips();
+    }
+
+    function _renderHistoryStrips() {
+        var container = document.getElementById("mp-palette-history");
+        var strips = document.getElementById("mp-history-strips");
+        if (!container || !strips) return;
+        var history = _loadHistory();
+        if (history.length === 0) {
+            container.style.display = "none";
+            return;
+        }
+        container.style.display = "";
+        strips.innerHTML = "";
+        history.forEach(function(pal, i) {
+            var strip = document.createElement("div");
+            strip.style.cssText = "display:flex; gap:2px; cursor:pointer; padding:2px; border-radius:3px; border:1px solid transparent;";
+            strip.title = "bg:" + pal.bg + " accent:" + pal.accent;
+            strip.addEventListener("mouseenter", function() { strip.style.borderColor = "rgba(255,255,255,0.2)"; });
+            strip.addEventListener("mouseleave", function() { strip.style.borderColor = "transparent"; });
+            strip.addEventListener("click", function() { _applyPalette(pal, true); });
+            var keys = ["bg", "accent", "card", "orange"];
+            keys.forEach(function(k) {
+                var dot = document.createElement("div");
+                dot.style.cssText = "width:10px; height:10px; border-radius:50%; border:1px solid rgba(255,255,255,0.15);";
+                dot.style.background = pal[k] || "#000";
+                strip.appendChild(dot);
+            });
+            strips.appendChild(strip);
+        });
+    }
+
+    function _initHistory() {
+        _renderHistoryStrips();
+        var clearBtn = document.getElementById("btn-mp-clear-history");
+        if (clearBtn) {
+            clearBtn.addEventListener("click", function() {
+                localStorage.removeItem("mp_palette_history");
+                _renderHistoryStrips();
+                showToast("Historial de paletas limpiado", "info");
+            });
+        }
+    }
+
+    // ─── Regenerate Palette ──────────────────────────────────────
+
+    function _initRegenPalette() {
+        var regenBtn = document.getElementById("btn-mp-regen-palette");
+        if (!regenBtn) return;
+        regenBtn.addEventListener("click", function() {
+            if (_referenceImages.length === 0) {
+                showToast("No hay imágenes de referencia para regenerar", "error");
+                return;
+            }
+            regenBtn.textContent = "⏳";
+            regenBtn.disabled = true;
+
+            var currentPalette = state.customPalette || {};
+            var avoidColors = "bg:" + (currentPalette.bg || "") + " accent:" + (currentPalette.accent || "") + " card:" + (currentPalette.card || "");
+            var catSel = document.getElementById("mp-palette-category");
+            var category = catSel ? catSel.value : "auto";
+
+            var callback = function(err, palette, reasoning) {
+                regenBtn.textContent = "🔄";
+                regenBtn.disabled = false;
+                if (err) {
+                    showToast("Error al regenerar: " + err.message, "error");
+                    return;
+                }
+                _applyPalette(palette);
+                if (reasoning) showToast("🎨 " + reasoning.substring(0, 100), "info");
+            };
+
+            // Send with "avoid" instruction
+            if (!motionPro || !aiAnalyzer || !aiAnalyzer.isConfigured()) {
+                showToast("IA no configurada", "error");
+                regenBtn.textContent = "🔄";
+                regenBtn.disabled = false;
+                return;
+            }
+
+            var body = {
+                images: _referenceImages,
+                provider: state.settings.aiProvider,
+                model: state.settings.aiModel,
+                apiKey: aiAnalyzer.getActiveKey(),
+                category: category,
+                avoidColors: avoidColors
+            };
+            motionPro._post("/api/palette", body, function(err, result) {
+                if (err || !result || !result.palette) {
+                    return callback(new Error(err ? err.message : (result && result.error) || "Sin respuesta"));
+                }
+                callback(null, result.palette, result.reasoning || "");
+            });
+        });
     }
 
     function _avgColor(colors) {
@@ -264,6 +514,10 @@
         mpUpdateAnalyzeButton();
         mpBindStepHeaders();
         mpInitStyleImport();
+        _initPaletteCategory();
+        _initPresets();
+        _initHistory();
+        _initRegenPalette();
 
         // On init, restart server to ensure clean state
         if (motionPro) {
@@ -556,15 +810,20 @@
         var analyzeBtn = document.getElementById("btn-mp-analyze-palette");
         if (analyzeBtn) {
             analyzeBtn.addEventListener("click", function() {
-                if (_referenceImages.length === 0) {
+                var catSel = document.getElementById("mp-palette-category");
+                var category = catSel ? catSel.value : "auto";
+
+                // For non-auto categories without refs, generate from category via server
+                if (_referenceImages.length === 0 && category === "auto") {
                     showToast("Primero captura un frame o importa imágenes de referencia", "error");
                     return;
                 }
-                analyzeBtn.textContent = "🎨 Analizando...";
+
+                analyzeBtn.textContent = "⏳...";
                 analyzeBtn.disabled = true;
 
                 var callback = function(err, palette, reasoning) {
-                    analyzeBtn.textContent = "🎨 Analizar Paleta";
+                    analyzeBtn.textContent = "🎨 Analizar";
                     analyzeBtn.disabled = false;
                     if (err) {
                         showToast("Error al analizar: " + err.message, "error");
@@ -575,15 +834,61 @@
                     if (window.EPLogger) EPLogger.log("motion-pro", "palette-analyzed", "bg=" + palette.bg + " accent=" + palette.accent);
                 };
 
-                if (_referenceImages.length === 1) {
-                    _extractPaletteAI(_referenceImages[0].base64, callback);
+                if (_referenceImages.length === 0 && category !== "auto") {
+                    // No refs but category selected — request from server (returns category default or AI-generated)
+                    if (!motionPro) {
+                        analyzeBtn.textContent = "🎨 Analizar";
+                        analyzeBtn.disabled = false;
+                        return showToast("Servidor no conectado", "error");
+                    }
+                    motionPro._post("/api/palette", {
+                        category: category,
+                        provider: state.settings.aiProvider,
+                        model: state.settings.aiModel,
+                        apiKey: aiAnalyzer ? aiAnalyzer.getActiveKey() : ""
+                    }, function(err, result) {
+                        if (err || !result || !result.palette) {
+                            return callback(new Error(err ? err.message : (result && result.error) || "Sin respuesta"));
+                        }
+                        callback(null, result.palette, result.reasoning || "");
+                    });
+                } else if (_referenceImages.length === 1) {
+                    // Single ref — send with category
+                    motionPro._post("/api/palette", {
+                        imageBase64: _referenceImages[0].base64,
+                        provider: state.settings.aiProvider,
+                        model: state.settings.aiModel,
+                        apiKey: aiAnalyzer ? aiAnalyzer.getActiveKey() : "",
+                        category: category
+                    }, function(err, result) {
+                        if (err || !result || !result.palette) {
+                            return callback(new Error(err ? err.message : (result && result.error) || "Sin respuesta"));
+                        }
+                        callback(null, result.palette, result.reasoning || "");
+                    });
                 } else {
-                    _extractPaletteAIMultiple(_referenceImages, callback);
+                    // Multiple refs — send with category
+                    motionPro._post("/api/palette", {
+                        images: _referenceImages,
+                        provider: state.settings.aiProvider,
+                        model: state.settings.aiModel,
+                        apiKey: aiAnalyzer ? aiAnalyzer.getActiveKey() : "",
+                        category: category
+                    }, function(err, result) {
+                        if (err || !result || !result.palette) {
+                            return callback(new Error(err ? err.message : (result && result.error) || "Sin respuesta"));
+                        }
+                        callback(null, result.palette, result.reasoning || "");
+                    });
                 }
             });
 
-            // Show analyze button if references already loaded
-            if (_referenceImages.length > 0) analyzeBtn.style.display = "";
+            // Enable analyze button based on refs or category
+            var catSel2 = document.getElementById("mp-palette-category");
+            if (_referenceImages.length > 0 || (catSel2 && catSel2.value !== "auto")) {
+                analyzeBtn.style.opacity = "1";
+                analyzeBtn.style.pointerEvents = "auto";
+            }
         }
 
         // Load saved palette on init
@@ -595,6 +900,13 @@
                 if (motionPro) motionPro.customPalette = palette;
                 _mpUpdateStyleSwatches(palette);
             } catch (e) { /* ignore corrupt data */ }
+        }
+
+        // Load saved category on init
+        var savedCat = localStorage.getItem("mp_palette_category");
+        if (savedCat && motionPro) {
+            state.paletteCategory = savedCat;
+            motionPro.paletteCategory = savedCat;
         }
     }
 

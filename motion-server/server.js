@@ -99,9 +99,17 @@ app.post('/api/prompts', (req, res) => {
 
 // AI Vision Palette — sends a frame to an LLM with vision to propose a color palette
 app.post('/api/palette', (req, res) => {
-  const { imageBase64, images, provider, model, apiKey } = req.body;
+  const { imageBase64, images, provider, model, apiKey, category, avoidColors } = req.body;
 
-  if (!imageBase64 && (!images || !images.length)) return res.status(400).json({ error: 'Missing imageBase64 or images' });
+  // If no reference images but a category was provided, return the category default palette directly
+  if (!imageBase64 && (!images || !images.length)) {
+    if (category && category !== 'auto') {
+      const { getCategoryPalette } = require('./lib/color-extractor');
+      const catPalette = getCategoryPalette(category);
+      if (catPalette) return res.json({ palette: catPalette, reasoning: 'Paleta predeterminada para categoría: ' + category });
+    }
+    return res.status(400).json({ error: 'Missing imageBase64 or images' });
+  }
 
   const { sendLLMWithVision } = require('./lib/llm');
 
@@ -135,11 +143,11 @@ Return ONLY a JSON object with these EXACT keys:
 }`;
 
   // Build user message with image labels for multiple references
+  const categoryHint = (category && category !== 'auto') ? `\n\nVisual style mood requested: "${category}". Generate a palette that matches this aesthetic while still being grounded in the video's visual identity.` : '';
+  const avoidHint = avoidColors ? `\n\nIMPORTANT: Generate a DIFFERENT palette than the current one (${avoidColors}). Try a contrasting or complementary approach — different hues, different mood.` : '';
   let userMsg, effectiveBase64;
 
   if (images && Array.isArray(images) && images.length > 1) {
-    // Multiple images: concatenate descriptions and use the first image for vision
-    // (LLM vision APIs typically accept one image; we label them in the prompt)
     const imageLabels = images.map((img, i) => `Reference ${i + 1}: "${img.name || 'image'}"`).join('\n');
     userMsg = `Analyze these ${images.length} reference frames from an educational video course and propose a unified professional color palette for motion graphics overlays.
 The motion graphics will be full-screen animations (titles, charts, diagrams, lists) that appear while the professor speaks.
@@ -148,13 +156,12 @@ They should complement — not clash with — the video's visual style.
 Reference images provided:
 ${imageLabels}
 
-Create a palette that works across ALL these references — find the common visual thread.`;
-    // Use the first image for vision (most LLM vision APIs support one image)
+Create a palette that works across ALL these references — find the common visual thread.${categoryHint}${avoidHint}`;
     effectiveBase64 = images[0].base64;
   } else {
     userMsg = `Analyze this frame from an educational video course and propose a professional color palette for motion graphics overlays.
 The motion graphics will be full-screen animations (titles, charts, diagrams, lists) that appear while the professor speaks.
-They should complement — not clash with — the video's visual style.`;
+They should complement — not clash with — the video's visual style.${categoryHint}${avoidHint}`;
     effectiveBase64 = imageBase64 || (images && images[0] && images[0].base64);
   }
 

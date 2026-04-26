@@ -1,10 +1,11 @@
 /**
  * Prompts for Motion-Pro LLM generation
- * v1.0.33 — Dynamic prompt: only sends relevant components per animation type
+ * v1.1.0 — Custom palette + category support + gradient encouragement
  * Loads from centralized Prompts/MotionPro/ folder, falls back to local lib/
  */
 const fs = require('fs');
 const path = require('path');
+const { DEFAULT_PALETTE, validatePalette, getCategoryDescription } = require('./color-extractor');
 
 const LIB_DIR = __dirname;
 const PROMPTS_DIR = path.resolve(__dirname, '..', '..', 'Prompts', 'MotionPro');
@@ -51,6 +52,42 @@ function buildSystemPrompt(type) {
     /### 1\.13 Advanced Animation Techniques[\s\S]*?(?=\n---\n\n## SECTION 2)/,
     ''
   );
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Palette helpers
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Build the `const C = {...}` TSX code block using a custom palette or defaults.
+ * Returns the exact code string for the template.
+ */
+function _buildPaletteCode(customPalette) {
+  const p = customPalette ? (validatePalette(customPalette) || DEFAULT_PALETTE) : DEFAULT_PALETTE;
+  return `const C = {\n`
+    + `  bg:'${p.bg}', card:'${p.card}', accent:'${p.accent}', green:'${p.green}',\n`
+    + `  orange:'${p.orange}', purple:'${p.purple}', red:'${p.red}', text:'${p.text}',\n`
+    + `  dim:'${p.dim}', border:'${p.border}',\n`
+    + `  glow:'${p.glow}',\n`
+    + `};`;
+}
+
+/**
+ * Build a short description of the active palette for prompt context.
+ */
+function _paletteContextNote(customPalette, paletteCategory) {
+  const parts = [];
+  if (paletteCategory && paletteCategory !== 'auto') {
+    const desc = getCategoryDescription(paletteCategory);
+    if (desc) parts.push(`Visual style category: ${desc}`);
+  }
+  if (customPalette) {
+    const p = validatePalette(customPalette);
+    if (p) {
+      parts.push(`Custom palette active — bg: ${p.bg}, accent: ${p.accent}, card: ${p.card}, text: ${p.text}. These colors are from the course's visual identity — use them consistently.`);
+    }
+  }
+  return parts.length > 0 ? '\n\n## ACTIVE COLOR PALETTE\n' + parts.join('\n') : '';
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -607,22 +644,28 @@ const TYPE_INSTRUCTIONS = {
 // Visual Proposal Prompt — generates a detailed visual layout description
 // ──────────────────────────────────────────────────────────────────────────────
 
-function getVisualProposalPrompt({ transcriptSegment, type, description, durationFrames }) {
+function getVisualProposalPrompt({ transcriptSegment, type, description, durationFrames, customPalette, paletteCategory }) {
   const typeGuide = TYPE_INSTRUCTIONS[type] || TYPE_INSTRUCTIONS.title;
   const durationSecs = (durationFrames / 30).toFixed(1);
+
+  // Resolve palette colors for the prompt description
+  const p = customPalette ? (validatePalette(customPalette) || DEFAULT_PALETTE) : DEFAULT_PALETTE;
+  const paletteNote = _paletteContextNote(customPalette, paletteCategory);
 
   const systemMsg = `You are a motion graphics art director for an educational video production company.
 Your job is to write concise, actionable visual layout descriptions that will be used by an AI to generate Remotion (React/TSX) animation code.
 
 The design system uses:
-- Dark background: #1a1d23
-- Card background: #2d323a
-- Accent/primary: #0ae98d (green)
-- Secondary colors: orange #fb923c, purple #a78bfa, red #f87171
+- Background: ${p.bg}
+- Card background: ${p.card}
+- Accent/primary: ${p.accent}
+- Secondary colors: orange ${p.orange}, purple ${p.purple}, red ${p.red}
+- Text: ${p.text}, dim: ${p.dim}
 - Font: DM Sans (400, 700 weights only)
 - Safe area: 1600×740px inside a 1920×1080 canvas (160px left/right margins, 180px top, 160px bottom)
 - Icons from lucide-react (geometric SVG icons)
 - Components available: GlowCard (dark card with glow), AnimatedText (word-by-word reveal), AccentSeparator (accent line), CascadeItem (stagger blur), ProgressDots (step indicator), AnimatedLine (SVG line draw), OdometerDigit (count-up number)
+${paletteNote}
 
 ${DESIGN_SYSTEM ? '## Design Philosophy\n' + DESIGN_SYSTEM + '\n\n' : ''}Your description must be:
 - Specific enough to generate code from (include sizes, colors, layout direction)
@@ -659,7 +702,7 @@ Describe the ideal visual layout for this motion graphic. Be specific about:
   return { systemMsg, userMsg };
 }
 
-function getGenerationPrompt({ transcriptSegment, type, description, durationFrames, compositionId, brandfetchKey, visualDescription }) {
+function getGenerationPrompt({ transcriptSegment, type, description, durationFrames, compositionId, brandfetchKey, visualDescription, customPalette, paletteCategory }) {
   const systemMsg = buildSystemPrompt(type);
 
   const typeGuide = TYPE_INSTRUCTIONS[type] || TYPE_INSTRUCTIONS.title;
@@ -709,12 +752,7 @@ import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequ
 // import { TransitionSeries, linearTiming } from '@remotion/transitions';
 // import { fade } from '@remotion/transitions/fade';
 
-const C = {
-  bg:'#1a1d23', card:'#2d323a', accent:'#0ae98d', green:'#0ae98d',
-  orange:'#fb923c', purple:'#a78bfa', red:'#f87171', text:'#ffffff',
-  dim:'rgba(255,255,255,0.55)', border:'rgba(255,255,255,0.08)',
-  glow:'rgba(10,233,141,0.08)',
-};
+${_buildPaletteCode(customPalette)}
 
 const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({children,style}) => (
   <div style={{position:'absolute',left:160,top:180,right:160,bottom:160,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',...style}}>{children}</div>
@@ -755,6 +793,16 @@ export const ${compName}:React.FC = () => {
   );
 };
 \`\`\`
+${_paletteContextNote(customPalette, paletteCategory)}
+
+## GRADIENTS (ENCOURAGED)
+Use CSS linear-gradient and radial-gradient freely to add depth and sophistication:
+- Card backgrounds: \`background: 'linear-gradient(135deg, \${C.card}, \${C.bg})'\`
+- Accent elements: \`background: 'linear-gradient(90deg, \${C.accent}, \${C.purple})'\`
+- Glow effects: \`background: 'radial-gradient(circle, \${C.accent}15, transparent 70%)'\`
+- Progress bars: \`background: 'linear-gradient(90deg, \${C.accent}, \${C.orange})'\`
+Use gradients especially for hero sections, card headers, progress bars, and background accent areas.
+NEVER use gradients that reduce text readability. Text contrast must remain high.
 
 ## Composition Details
 - Export name: ${compName}

@@ -5,7 +5,7 @@ const { getVisualProposalPrompt } = require('../lib/prompts');
 
 // POST /api/generate/propose — generate a visual layout description for a proposal
 router.post('/', (req, res) => {
-  const { proposal, transcriptSegment, provider, model, apiKey } = req.body;
+  const { proposal, transcriptSegment, provider, model, apiKey, customPalette, paletteCategory } = req.body;
 
   if (!proposal || !transcriptSegment) {
     return res.status(400).json({ error: 'Missing proposal or transcriptSegment' });
@@ -19,6 +19,8 @@ router.post('/', (req, res) => {
     type: proposal.type,
     description: proposal.description,
     durationFrames,
+    customPalette: customPalette || null,
+    paletteCategory: paletteCategory || null,
   });
 
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawResponse) => {
