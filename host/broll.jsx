@@ -9,7 +9,12 @@
 
 function importAndPlaceBroll(jsonPath) {
     try {
-        var raw = readFileUTF8(jsonPath);
+        var f = new File(jsonPath);
+        if (!f.exists) return JSON.stringify({ error: "JSON file not found: " + jsonPath });
+        f.encoding = "UTF-8";
+        f.open("r");
+        var raw = f.read();
+        f.close();
         var payload = JSON.parse(raw);
         var clips = payload.clips;
         if (!clips || clips.length === 0) return JSON.stringify({ success: true, placed: 0 });
@@ -102,7 +107,12 @@ function importAndPlaceBroll(jsonPath) {
 
 function replaceBrollClip(jsonPath) {
     try {
-        var raw = readFileUTF8(jsonPath);
+        var f = new File(jsonPath);
+        if (!f.exists) return JSON.stringify({ error: "JSON file not found: " + jsonPath });
+        f.encoding = "UTF-8";
+        f.open("r");
+        var raw = f.read();
+        f.close();
         var payload = JSON.parse(raw);
         if (!payload.filePath) return JSON.stringify({ error: "filePath required" });
 
