@@ -125,9 +125,13 @@
             }
             broll.saveState(_sessionKey);
             _renderProposals(proposals);
-            // Reveal step 2
+            // Reveal and expand step 2
             var step2 = _el("br-proposals-section");
             if (step2) step2.style.display = "";
+            var step2Body = _el("br-step-body-2");
+            if (step2Body) step2Body.classList.remove("hidden");
+            var step2Arrow = step2 ? step2.querySelector(".rec-step-arrow") : null;
+            if (step2Arrow) step2Arrow.textContent = "▾";
             _el("br-step-hint-1") && (_el("br-step-hint-1").textContent = proposals.length + " momentos");
             showToast("Se encontraron " + proposals.length + " momentos de B-roll", "success");
         });
@@ -572,6 +576,25 @@
         if (imgProv) imgProv.addEventListener("change", _refreshSettingsVisibility);
         var vidProv = _el("br-vid-provider");
         if (vidProv) vidProv.addEventListener("change", _refreshSettingsVisibility);
+
+        // Step headers: expand/collapse
+        var stepHeaders = document.querySelectorAll("[data-br-step]");
+        stepHeaders.forEach(function(hdr) {
+            if (!hdr.classList.contains("rec-step-header")) return;
+            hdr.addEventListener("click", function() {
+                var stepNum = hdr.getAttribute("data-br-step");
+                var body = _el("br-step-body-" + stepNum);
+                if (!body) return;
+                var arrow = hdr.querySelector(".rec-step-arrow");
+                if (body.classList.contains("hidden")) {
+                    body.classList.remove("hidden");
+                    if (arrow) arrow.textContent = "▾";
+                } else {
+                    body.classList.add("hidden");
+                    if (arrow) arrow.textContent = "▸";
+                }
+            });
+        });
 
         // Settings toggle
         on("br-settings-toggle", "click", function() {
