@@ -116,27 +116,62 @@ router.post('/', (req, res) => {
 
   const manager = new RemotionManager(req.app.locals.renderProject);
 
-  // Sync session to ensure we have the right compositions
-  if (sessionDir) manager.syncFromSession(sessionDir);
-
-  const currentTsx = manager.getCompositionTsx(compositionId);
+  // Read current TSX directly from session folder (single source of truth).
+  // Do NOT use syncFromSession here — it wipes the compositions dir which causes
+  // race conditions when multiple feedbacks run in parallel.
+  let currentTsx = null;
+  if (sessionDir) {
+    const sessionSrc = path.join(sessionDir, 'src');
+    const sessionTsxPath = path.join(sessionSrc, compositionId + '.tsx');
+    if (fs.existsSync(sessionTsxPath)) {
+      currentTsx = fs.readFileSync(sessionTsxPath, 'utf8');
+    }
+    // Fallback: try legacy path
+    if (!currentTsx) {
+      const legacyPath = path.join(sessionDir, 'compositions', compositionId + '.tsx');
+      if (fs.existsSync(legacyPath)) {
+        currentTsx = fs.readFileSync(legacyPath, 'utf8');
+      }
+    }
+  }
+  // Last fallback: check Remotion compositions dir (may be populated from a recent render)
+  if (!currentTsx) {
+    currentTsx = manager.getCompositionTsx(compositionId);
+  }
 
   if (!currentTsx) {
-    return res.status(404).json({ error: `Composition ${compositionId} not found` });
+    return res.status(404).json({ error: `Composition ${compositionId} not found in session or compositions dir` });
   }
 
   const baseId = compositionId.replace(/[-_]v\d+$/, '');
   const newCompositionId = (baseId + '-v' + (newVersion || 2)).replace(/_/g, '-');
 
-  // Get duration from Root.tsx registration, not from TSX content
-  // (TSX has durationInFrames on Sequence blocks which are shorter than total)
+  // Get duration: try .duration file from session first, then calculate from TSX
   var durationFrames = 300;
-  try {
-    var rootContent = require('fs').readFileSync(manager.rootTsxPath, 'utf8');
-    var regStr = 'id="' + compositionId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"[^>]*durationInFrames=\\{(\\d+)\\}';
-    var rootMatch = rootContent.match(new RegExp(regStr));
-    if (rootMatch) durationFrames = parseInt(rootMatch[1]);
-  } catch(_e) {}
+  if (sessionDir) {
+    try {
+      var durationPath = path.join(sessionDir, 'src', compositionId + '.duration');
+      if (fs.existsSync(durationPath)) {
+        var saved = parseInt(fs.readFileSync(durationPath, 'utf8').trim(), 10);
+        if (saved > 0) durationFrames = saved;
+      }
+    } catch(_e) {}
+  }
+  if (durationFrames === 300) {
+    // Fallback: calculate from TSX Sequence blocks
+    try {
+      var maxEnd = 0;
+      var seqMatches = currentTsx.match(/<Sequence[\s\S]*?from=\{(\d+)\}[\s\S]*?durationInFrames=\{(\d+)\}/g) || [];
+      seqMatches.forEach(function(m) {
+        var parts = m.match(/from=\{(\d+)\}[\s\S]*?durationInFrames=\{(\d+)\}/);
+        if (parts) {
+          var end = parseInt(parts[1]) + parseInt(parts[2]);
+          if (end > maxEnd) maxEnd = end;
+        }
+      });
+      if (maxEnd > 0) durationFrames = maxEnd + 6;
+    } catch(_e) {}
+  }
 
   const { systemMsg, userMsg } = getFeedbackPrompt({
     currentTsx,

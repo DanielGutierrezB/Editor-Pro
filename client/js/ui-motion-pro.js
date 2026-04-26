@@ -2337,17 +2337,16 @@
         var mediaPath = mpNormalizeMediaPath(v.pngPath);
         var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1);
 
-        // Version > 1 (feedback/regen): place on track ABOVE existing clip
+        // Version > 1 (feedback/regen): replace on SAME track as original clip
         var isNewVersion = v.version > 1 && motion.placedInTimeline && motion.baseTrackIndex >= 0;
 
         if (isNewVersion) {
-            // Use replaceMotionOnTrack to stack on track above
-            var newTrackIdx = motion.baseTrackIndex + v.version - 1;
+            // Replace on same track — overwrite the old clip at the same position
             var payload = {
                 mp4Path: mediaPath,
                 startTimeSecs: mpStart,
                 durationSecs: mpDuration,
-                newTrackIndex: newTrackIdx,
+                newTrackIndex: motion.baseTrackIndex,
                 clipName: clipName + "_v" + v.version,
                 labelColor: _mpLabelColorForType(motion.type)
             };
