@@ -315,6 +315,37 @@ function replaceMotionOnTrack(jsonPath) {
 
         var bin = _getOrCreateMotionBin();
 
+        // Find or create sequence subfolder inside Motion-Pro bin (same logic as importAndPlaceMotions)
+        var seqBin = bin;
+        try {
+            var clipName = data.clipName || "";
+            if (clipName) {
+                var seqMatch = clipName.match(/^([^_]+)/);
+                if (seqMatch) {
+                    var seqFolderName = seqMatch[1];
+                    var found = false;
+                    if (bin.children) {
+                        for (var sf = 0; sf < bin.children.numItems; sf++) {
+                            if (bin.children[sf].name === seqFolderName && bin.children[sf].type === 2) {
+                                seqBin = bin.children[sf];
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!found) {
+                        bin.createBin(seqFolderName);
+                        for (var sf2 = 0; sf2 < bin.children.numItems; sf2++) {
+                            if (bin.children[sf2].name === seqFolderName && bin.children[sf2].type === 2) {
+                                seqBin = bin.children[sf2];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch(eBin) {}
+
         // For version stacking: add a new track above baseTrack
         var newTrackIdx = data.newTrackIndex || 0;
         if (newTrackIdx >= seq.videoTracks.numTracks) {
@@ -330,13 +361,13 @@ function replaceMotionOnTrack(jsonPath) {
         var mp4File = new File(data.mp4Path);
         if (!mp4File.exists) return JSON.stringify({ error: "MP4 not found: " + data.mp4Path });
 
-        app.project.importFiles([mp4File.fsName], true, bin, false);
+        app.project.importFiles([mp4File.fsName], true, seqBin, false);
 
         var item = null;
         var w;
         for (w = 0; w < 25; w++) {
             $.sleep(250);
-            item = _findProjectItemByPath(mp4File.fsName, bin);
+            item = _findProjectItemByPath(mp4File.fsName, seqBin);
             if (item) break;
         }
         if (!item) return JSON.stringify({ error: "Could not find imported item (timeout)." });

@@ -90,6 +90,11 @@ class TsxSanitizer {
   /**
    * Inject staticPreview support into AI-generated compositions so stills
    * render with all elements at full opacity (no mid-animation frames).
+   *
+   * Strategy: wrap useCurrentFrame() so it returns a very high frame number
+   * (9999) in static mode. This forces ALL spring/interpolate animations to
+   * their completed state — works regardless of whether the AI used E/Fd
+   * or custom animation code.
    */
   injectStaticPreview(tsxCode) {
     if (/\b_static\b/.test(tsxCode) && /getInputProps/.test(tsxCode)) return tsxCode;
@@ -105,19 +110,50 @@ class TsxSanitizer {
       });
     }
 
-    // Add _static variable after all imports
+    // Rename all useCurrentFrame() calls to _useRawFrame()
+    // then inject a wrapper that returns 9999 when static
+    const hasUseCurrentFrame = /useCurrentFrame\s*\(/.test(tsxCode);
+
+    // Add _static variable + useCurrentFrame override after all imports
     const lines = tsxCode.split('\n');
     let lastImportIdx = -1;
     for (let i = 0; i < lines.length; i++) {
       if (/^\s*import\s/.test(lines[i])) lastImportIdx = i;
     }
     if (lastImportIdx >= 0) {
-      lines.splice(lastImportIdx + 1, 0, '',
-        "const _static = (getInputProps() as any).staticPreview === true;");
-      tsxCode = lines.join('\n');
+      const injections = [
+        '',
+        'const _static = (getInputProps() as any).staticPreview === true;',
+      ];
+
+      if (hasUseCurrentFrame) {
+        // Rename the imported useCurrentFrame to _useRawFrame in the import
+        tsxCode = lines.join('\n');
+        tsxCode = tsxCode.replace(
+          /(import\s*\{[^}]*)\buseCurrentFrame\b([^}]*}\s*from\s*['"]remotion['"])/,
+          '$1useCurrentFrame as _useRawFrame$2'
+        );
+        // Re-split after import rename
+        const lines2 = tsxCode.split('\n');
+        let lastImportIdx2 = -1;
+        for (let i = 0; i < lines2.length; i++) {
+          if (/^\s*import\s/.test(lines2[i])) lastImportIdx2 = i;
+        }
+        if (lastImportIdx2 >= 0) {
+          lines2.splice(lastImportIdx2 + 1, 0,
+            '',
+            'const _static = (getInputProps() as any).staticPreview === true;',
+            'const useCurrentFrame = () => _static ? 9999 : _useRawFrame();',
+          );
+        }
+        tsxCode = lines2.join('\n');
+      } else {
+        lines.splice(lastImportIdx + 1, 0, ...injections);
+        tsxCode = lines.join('\n');
+      }
     }
 
-    // Patch E component
+    // Also patch E component if it exists (for explicit bypass without useCurrentFrame)
     const eCompRe = /(const E:React\.FC<[^>]*>\s*=\s*\(\{[^}]*\}\)\s*=>\s*\{)\s*\n/;
     if (eCompRe.test(tsxCode)) {
       tsxCode = tsxCode.replace(eCompRe, (match, prefix) => {
@@ -129,12 +165,10 @@ class TsxSanitizer {
         tsxCode = tsxCode.replace(eAltRe, (match, prefix) => {
           return prefix + '\n  if (_static) return <div style={{opacity:1,...(style||{})}}>{children}</div>;';
         });
-      } else {
-        console.warn('[TsxSanitizer] E component pattern not matched — static preview will not suppress E animations');
       }
     }
 
-    // Patch Fd component
+    // Patch Fd component if it exists
     const fdCompRe = /(const Fd:React\.FC<[^>]*>\s*=\s*\(\{[^}]*\}\)\s*=>\s*\{)\s*\n/;
     if (fdCompRe.test(tsxCode)) {
       tsxCode = tsxCode.replace(fdCompRe, (match, prefix) => {
@@ -146,8 +180,6 @@ class TsxSanitizer {
         tsxCode = tsxCode.replace(fdAltRe, (match, prefix) => {
           return prefix + '\n  if (_static) return <div style={{opacity:1,position:\'absolute\',inset:0}}>{children}</div>;';
         });
-      } else {
-        console.warn('[TsxSanitizer] Fd component pattern not matched — static preview will not suppress Fd fade animations');
       }
     }
 
