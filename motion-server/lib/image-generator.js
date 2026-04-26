@@ -209,6 +209,41 @@ function _generateComfyUI(description, endpointUrl, outputPath, callback) {
   const baseUrl = endpointUrl || 'http://127.0.0.1:8188';
   const clientId = 'editorpro_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
 
+  // Auto-detect model: look for flux schnell variants in ComfyUI checkpoints dir
+  _detectFluxModel(baseUrl, (modelName) => {
+    _runComfyUIWorkflow(baseUrl, clientId, description, modelName, outputPath, callback);
+  });
+}
+
+function _detectFluxModel(baseUrl, callback) {
+  const url = new URL(baseUrl);
+  const lib = url.protocol === 'https:' ? https : http;
+  const req = lib.get(`${baseUrl}/object_info/UNETLoader`, (res) => {
+    let data = '';
+    res.on('data', (c) => { data += c; });
+    res.on('end', () => {
+      try {
+        const info = JSON.parse(data);
+        const models = info.UNETLoader && info.UNETLoader.input && info.UNETLoader.input.required &&
+          info.UNETLoader.input.required.unet_name && info.UNETLoader.input.required.unet_name[0];
+        if (Array.isArray(models)) {
+          // Prefer flux1-schnell, then any flux model
+          const schnell = models.find(m => /flux.*schnell/i.test(m));
+          if (schnell) return callback(schnell);
+          const anyFlux = models.find(m => /flux/i.test(m));
+          if (anyFlux) return callback(anyFlux);
+        }
+      } catch (_e) {}
+      callback('flux1-schnell.safetensors'); // fallback
+    });
+  });
+  req.on('error', () => callback('flux1-schnell.safetensors'));
+  req.setTimeout(5000, () => { req.destroy(); callback('flux1-schnell.safetensors'); });
+}
+
+function _runComfyUIWorkflow(baseUrl, clientId, description, modelName, outputPath, callback) {
+  console.log('[ComfyUI] Using model:', modelName);
+
   // Flux Schnell workflow — minimal nodes for txt2img
   const workflow = {
     "6": {
@@ -249,7 +284,7 @@ function _generateComfyUI(description, endpointUrl, outputPath, callback) {
     "12": {
       "class_type": "UNETLoader",
       "inputs": {
-        "unet_name": "flux1-schnell.safetensors",
+        "unet_name": modelName,
         "weight_dtype": "default"
       }
     },
@@ -326,9 +361,11 @@ function _generateComfyUI(description, endpointUrl, outputPath, callback) {
 function _pollComfyUI(lib, url, promptId, clientId, outputPath, callback) {
   let polls = 0;
   const maxPolls = 120; // 120 × 2s = 4 min
+  let called = false;
+  function done(err, result) { if (called) return; called = true; callback(err, result); }
   function poll() {
     polls++;
-    if (polls > maxPolls) return callback(new Error('ComfyUI generation timeout'));
+    if (polls > maxPolls) return done(new Error('ComfyUI generation timeout'));
     const req = lib.request({
       hostname: url.hostname,
       port: url.port || 80,
@@ -343,7 +380,7 @@ function _pollComfyUI(lib, url, promptId, clientId, outputPath, callback) {
           const entry = history[promptId];
           if (!entry) { setTimeout(poll, 2000); return; }
           if (entry.status && entry.status.status_str === 'error') {
-            return callback(new Error('ComfyUI execution error: ' + JSON.stringify(entry.status)));
+            return done(new Error('ComfyUI execution error: ' + JSON.stringify(entry.status)));
           }
           if (entry.outputs) {
             // Find the SaveImage output
@@ -365,16 +402,16 @@ function _pollComfyUI(lib, url, promptId, clientId, outputPath, callback) {
                   dlRes.on('data', (c) => chunks.push(c));
                   dlRes.on('end', () => {
                     const imgBuf = Buffer.concat(chunks);
-                    fs.writeFile(outputPath, imgBuf, (err) => callback(err, outputPath));
+                    fs.writeFile(outputPath, imgBuf, (err) => done(err, outputPath));
                   });
                 });
-                dlReq.on('error', (e) => callback(new Error('ComfyUI download error: ' + e.message)));
-                dlReq.setTimeout(15000, () => { dlReq.destroy(); callback(new Error('ComfyUI download timeout')); });
+                dlReq.on('error', (e) => done(new Error('ComfyUI download error: ' + e.message)));
+                dlReq.setTimeout(15000, () => { dlReq.destroy(); done(new Error('ComfyUI download timeout')); });
                 dlReq.end();
                 return;
               }
             }
-            callback(new Error('ComfyUI: no images in output'));
+            done(new Error('ComfyUI: no images in output'));
           } else {
             setTimeout(poll, 2000);
           }

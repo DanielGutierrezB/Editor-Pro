@@ -243,6 +243,10 @@
 
             var step3 = _el("br-clips-section");
             if (step3) step3.style.display = "";
+            var step3Body = _el("br-step-body-3");
+            if (step3Body) step3Body.classList.remove("hidden");
+            var step3Arrow = step3 ? step3.querySelector(".rec-step-arrow") : null;
+            if (step3Arrow) step3Arrow.textContent = "▾";
 
             _generateNext(selected, 0, function() {
                 broll.generating = false;

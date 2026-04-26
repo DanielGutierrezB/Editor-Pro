@@ -66,11 +66,23 @@
     BRoll.prototype.saveState = function(sessionKey) {
         try {
             var key = STORAGE_KEY + (sessionKey ? "_" + sessionKey : "");
+            // Strip base64 data before saving — too large for localStorage (5-10MB limit)
+            var clipsClean = this.clips.map(function(clip) {
+                var c = Object.assign({}, clip);
+                c.versions = clip.versions.map(function(v) {
+                    var vc = Object.assign({}, v);
+                    delete vc.imageBase64; // ~5-8MB per image, don't persist
+                    return vc;
+                });
+                return c;
+            });
             localStorage.setItem(key, JSON.stringify({
                 proposals: this.proposals,
-                clips: this.clips
+                clips: clipsClean
             }));
-        } catch(e) {}
+        } catch(e) {
+            console.warn("[BRoll] saveState failed:", e.message);
+        }
     };
 
     BRoll.prototype.loadState = function(sessionKey) {
@@ -199,22 +211,28 @@
         '[{ "startTime": "HH:MM:SS.mmm", "endTime": "HH:MM:SS.mmm", "description": "...", "rationale": "..." }]'
     ].join("\n");
 
-    // Try to load from Prompts/BRoll/analysis.md if available
-    try {
-        var _promptPath = require("path").join(
-            require("path").dirname(require("path").dirname(__dirname)),
-            "Prompts", "BRoll", "analysis.md"
-        );
-        if (require("fs").existsSync(_promptPath)) {
-            BROLL_SYSTEM_PROMPT = require("fs").readFileSync(_promptPath, "utf8");
-        }
-    } catch(e) {}
+    var _brollPromptLoaded = false;
+    function _ensureBrollPrompt() {
+        if (_brollPromptLoaded) return;
+        _brollPromptLoaded = true;
+        try {
+            var csInterface = window._epCSInterface;
+            if (!csInterface) return;
+            var extPath = csInterface.getSystemPath("extension");
+            var promptPath = require("path").join(extPath, "Prompts", "BRoll", "analysis.md");
+            if (require("fs").existsSync(promptPath)) {
+                BROLL_SYSTEM_PROMPT = require("fs").readFileSync(promptPath, "utf8");
+            }
+        } catch(e) {}
+    }
 
     // ── Step 1: Analyze transcript → proposals (direct LLM, no server needed) ─
 
     BRoll.prototype.analyze = function(transcript, aiSettings, callback) {
         var self = this;
         if (self.analyzing) return callback(new Error("Ya se está analizando"));
+
+        _ensureBrollPrompt(); // lazy-load prompt from file on first analysis
 
         // Use ai-analyzer directly — no server dependency for analysis
         var analyzer = window._epAiAnalyzer;
@@ -418,16 +436,18 @@
         clip.description = enhancedDesc;
         // Temporarily update proposal description so generateImage picks up the enhanced description
         var existing = self._findProposal(clip.proposalId);
+        var savedDesc = originalDesc;
         if (!existing) {
-            self.proposals.push({ id: clip.proposalId, startTime: clip.startTime, endTime: clip.endTime, description: enhancedDesc });
+            existing = { id: clip.proposalId, startTime: clip.startTime, endTime: clip.endTime, description: enhancedDesc };
+            self.proposals.push(existing);
         } else {
-            var savedDesc = existing.description;
+            savedDesc = existing.description;
             existing.description = enhancedDesc;
         }
 
         self.generateImage(clip.proposalId, onProgress, function(err, updatedClip) {
             clip.description = originalDesc;
-            if (existing) existing.description = savedDesc || originalDesc;
+            existing.description = savedDesc;
             callback(err, updatedClip);
         });
     };
