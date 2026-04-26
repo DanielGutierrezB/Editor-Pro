@@ -381,12 +381,21 @@
                 if (err) {
                     if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "clip " + (idx + 1) + ": " + err.message);
                     showToast("Error generando " + (idx + 1) + ": " + err.message, "error");
+                    _generateNext(ids, idx + 1, done);
                 } else {
                     if (window.EPLogger) EPLogger.log("broll", "generate-image-ok", "clip " + (idx + 1) + "/" + ids.length);
-                    _renderClips(); // refresh to show new clip immediately
+                    _renderClips();
                     broll.saveState(_sessionKey);
+                    // Auto-place in timeline immediately after generation
+                    var clip = broll._findClip(proposalId);
+                    if (clip) {
+                        _placeClip(clip.id, function() {
+                            _generateNext(ids, idx + 1, done);
+                        });
+                    } else {
+                        _generateNext(ids, idx + 1, done);
+                    }
                 }
-                _generateNext(ids, idx + 1, done);
             }
         );
     }
@@ -520,15 +529,20 @@
         _renderClips();
     }
 
-    function _placeClip(clipId) {
-        if (!broll || !csInterface) return;
+    function _placeClip(clipId, callback) {
+        if (!broll || !csInterface) { if (callback) callback(); return; }
         var clip = broll._findClipById(clipId);
-        if (!clip) return;
+        if (!clip) { if (callback) callback(); return; }
         broll.placeInTimeline(clipId, csInterface, function(err) {
-            if (err) { if (window.EPLogger) EPLogger.error("broll", "place-error", err.message); showToast("Error al colocar: " + err.message, "error"); return; }
-            broll.saveState(_sessionKey);
-            showToast("B-roll colocado en timeline", "success");
-            _renderClips();
+            if (err) {
+                if (window.EPLogger) EPLogger.error("broll", "place-error", err.message);
+                showToast("Error al colocar: " + err.message, "error");
+            } else {
+                if (window.EPLogger) EPLogger.log("broll", "place-ok", clipId + " at " + clip.startTime);
+                broll.saveState(_sessionKey);
+                _renderClips();
+            }
+            if (callback) callback();
         });
     }
 
