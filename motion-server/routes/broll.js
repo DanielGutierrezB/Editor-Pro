@@ -156,6 +156,43 @@ router.get('/status/:jobId', (req, res) => {
   res.json(job);
 });
 
+// ── GET /api/broll/comfyui-debug?url=... ──────────────────────────────────────
+// Returns available node types to debug workflow validation errors
+
+router.get('/comfyui-debug', (req, res) => {
+  const comfyUrl = req.query.url || 'http://localhost:8188';
+  const http2 = comfyUrl.startsWith('https') ? require('https') : require('http');
+  
+  const nodesToCheck = ['CLIPTextEncode', 'VAEDecode', 'SaveImage', 'VAELoader', 
+    'DualCLIPLoader', 'UNETLoader', 'KSampler', 'EmptyLatentImage', 'EmptySD3LatentImage'];
+  
+  http2.get(comfyUrl + '/object_info', (checkRes) => {
+    let data = '';
+    checkRes.on('data', (c) => { data += c; });
+    checkRes.on('end', () => {
+      try {
+        const allNodes = JSON.parse(data);
+        const result = {};
+        nodesToCheck.forEach(n => { result[n] = !!allNodes[n]; });
+        // Also check what checkpoint models are available
+        if (allNodes.UNETLoader && allNodes.UNETLoader.input && allNodes.UNETLoader.input.required) {
+          result._unet_models = allNodes.UNETLoader.input.required.unet_name ? allNodes.UNETLoader.input.required.unet_name[0] : [];
+        }
+        if (allNodes.VAELoader && allNodes.VAELoader.input && allNodes.VAELoader.input.required) {
+          result._vae_models = allNodes.VAELoader.input.required.vae_name ? allNodes.VAELoader.input.required.vae_name[0] : [];
+        }
+        if (allNodes.DualCLIPLoader && allNodes.DualCLIPLoader.input && allNodes.DualCLIPLoader.input.required) {
+          result._clip_models = allNodes.DualCLIPLoader.input.required.clip_name1 ? allNodes.DualCLIPLoader.input.required.clip_name1[0] : [];
+          result._clip_types = allNodes.DualCLIPLoader.input.required.type ? allNodes.DualCLIPLoader.input.required.type[0] : [];
+        }
+        res.json(result);
+      } catch (e) {
+        res.json({ error: 'parse error: ' + e.message });
+      }
+    });
+  }).on('error', (e) => res.json({ error: e.message }));
+});
+
 // ── GET /api/broll/check-comfyui?url=... ─────────────────────────────────────
 // Proxy health check: panel can't connect to ComfyUI directly from CEP,
 // so motion-server checks on its behalf.
