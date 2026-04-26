@@ -1,9 +1,13 @@
 /**
- * Remotion Manager — writes TSX compositions and manages Root.tsx registry
+ * Remotion Manager — writes TSX compositions and manages Root.tsx registry.
+ * TSX sanitization delegated to tsx-sanitizer.js
+ * TSX validation delegated to tsx-validator.js
  */
 const fs = require('fs');
 const path = require('path');
 const { execSync, spawn } = require('child_process');
+const TsxSanitizer = require('./tsx-sanitizer');
+const TsxValidator = require('./tsx-validator');
 
 class RemotionManager {
   constructor(renderProjectPath) {
@@ -11,6 +15,8 @@ class RemotionManager {
     this.compositionsDir = path.join(renderProjectPath, 'src', 'compositions');
     this.rootTsxPath = path.join(renderProjectPath, 'src', 'Root.tsx');
     this.outputDir = path.join(renderProjectPath, 'out');
+    this.sanitizer = new TsxSanitizer(renderProjectPath);
+    this.validator = new TsxValidator();
 
     if (!fs.existsSync(this.compositionsDir)) {
       fs.mkdirSync(this.compositionsDir, { recursive: true });
@@ -21,37 +27,23 @@ class RemotionManager {
   }
 
   writeComposition(compositionId, tsxCode, durationFrames) {
-    // Sanitize: strip brandfetch URLs before any processing
-    tsxCode = this._stripBrandfetch(tsxCode);
+    // Sanitize: strip unsafe/broken patterns
+    tsxCode = this.sanitizer.sanitize(tsxCode);
 
-    // Strip @remotion/motion-blur Trail — it crashes renders when trailOpacity is missing
-    tsxCode = this._stripTrail(tsxCode);
-
-    // Strip TransitionSeries with fade — replace with plain Sequence blocks
-    tsxCode = this._stripFadeTransitions(tsxCode);
-
-    // Inject staticPreview support so stills render without animations
-    tsxCode = this._injectStaticPreview(tsxCode);
-
-    // Replace lucide icons with brand SVG logos when applicable
-    tsxCode = this._replaceBrandIcons(tsxCode);
-
-    // Pre-render validation: check imports against known packages
-    const validationResult = this._validateImports(tsxCode);
+    // Validate imports against known packages
+    const validationResult = this.validator.validateImports(tsxCode);
     if (validationResult.fixedCode) {
       tsxCode = validationResult.fixedCode;
     }
 
-    // Syntax pre-check: catch unterminated strings, brackets, etc.
-    const syntaxResult = this._validateSyntax(tsxCode);
+    // Syntax pre-check
+    const syntaxResult = this.validator.validateSyntax(tsxCode);
     if (!syntaxResult.valid) {
       console.error(`[RemotionManager] Syntax errors in ${compositionId}:`, syntaxResult.errors);
-      // Attempt auto-fix for common issues
-      tsxCode = this._autoFixSyntax(tsxCode);
-      const recheck = this._validateSyntax(tsxCode);
+      tsxCode = this.validator.autoFixSyntax(tsxCode);
+      const recheck = this.validator.validateSyntax(tsxCode);
       if (!recheck.valid) {
         console.error(`[RemotionManager] Could not auto-fix ${compositionId}, skipping registration`);
-        // Write the file but DON'T register in Root.tsx — this prevents it from breaking other renders
         const filePath = path.join(this.compositionsDir, `${compositionId}.tsx`);
         fs.writeFileSync(filePath, tsxCode, 'utf8');
         return { filePath, syntaxError: true, errors: recheck.errors };
@@ -61,429 +53,18 @@ class RemotionManager {
     const filePath = path.join(this.compositionsDir, `${compositionId}.tsx`);
     fs.writeFileSync(filePath, tsxCode, 'utf8');
 
-    // Use proposal duration directly (templates use durationInFrames from useVideoConfig)
-    this._registerInRoot(compositionId, durationFrames);
-    // Save duration metadata so _rebuildRoot can use the correct duration
+    const totalFrames = this._calculateDuration(tsxCode, durationFrames);
+
+    // Save duration metadata
     const metaPath = path.join(this.compositionsDir, `${compositionId}.duration`);
-    fs.writeFileSync(metaPath, String(durationFrames), 'utf8');
-    return filePath;
-  }
+    fs.writeFileSync(metaPath, String(totalFrames), 'utf8');
 
-  /**
-   * Strip brandfetch URLs and replace with lucide-react Globe icon.
-   * Prevents render failures from external CDN dependencies.
-   */
-  _stripBrandfetch(tsxCode) {
-    // Check if there are any brandfetch references
-    if (!/brandfetch/i.test(tsxCode)) return tsxCode;
-
-    console.log('[RemotionManager] Stripping brandfetch references from TSX');
-
-    // Replace <Img src="...brandfetch..." .../> or <Img src={"...brandfetch..."} .../> with Globe icon
-    tsxCode = tsxCode.replace(/<Img\s+[^>]*(?:src=\{?["'][^"']*brandfetch[^"']*["']\}?)[^>]*\/?>/gi,
-      '<Globe size={60} color={C.accent} />');
-
-    // Replace any remaining lines containing brandfetch URLs
-    tsxCode = tsxCode.replace(/.*https?:\/\/[^\s]*brandfetch[^\s]*.*$/gm, '// [REMOVED: brandfetch URL not available]');
-
-    // Ensure Globe is imported from lucide-react
-    if (tsxCode.includes('<Globe') && !/import\s*\{[^}]*Globe[^}]*\}\s*from\s*['"]lucide-react['"]/.test(tsxCode)) {
-      // Check if there's already a lucide-react import to extend
-      const lucideImportMatch = tsxCode.match(/^(import\s*\{)([^}]*)\}\s*from\s*['"]lucide-react['"]/m);
-      if (lucideImportMatch) {
-        const existingImports = lucideImportMatch[2].trim();
-        tsxCode = tsxCode.replace(lucideImportMatch[0],
-          `import { ${existingImports}, Globe } from 'lucide-react'`);
-      } else {
-        // Add new lucide-react import after the last import line
-        tsxCode = tsxCode.replace(/(^import\s+.*$(?![\s\S]*^import\s))/m,
-          "$1\nimport { Globe } from 'lucide-react';");
-      }
-    }
-
-    return tsxCode;
-  }
-
-  /**
-   * Strip @remotion/motion-blur Trail component — AI frequently omits required trailOpacity prop
-   * causing render crashes. Replace Trail wrappers with plain divs.
-   */
-  _stripTrail(tsxCode) {
-    if (!/Trail/i.test(tsxCode) || !/@remotion\/motion-blur/.test(tsxCode)) return tsxCode;
-    
-    console.log('[RemotionManager] Stripping Trail from TSX (crash prevention)');
-    
-    // Remove the import
-    tsxCode = tsxCode.replace(/^import\s*\{[^}]*Trail[^}]*\}\s*from\s*['"]@remotion\/motion-blur['"];?\s*$/gm, '// REMOVED: @remotion/motion-blur (crash prevention)');
-    
-    // Replace <Trail ...> with <div> and </Trail> with </div>
-    tsxCode = tsxCode.replace(/<Trail\b[^>]*>/g, '<div>');
-    tsxCode = tsxCode.replace(/<\/Trail>/g, '</div>');
-    
-    return tsxCode;
-  }
-
-  /**
-   * Strip TransitionSeries + fade() usage. The AI keeps using crossfade despite
-   * prompt prohibitions. Replace with plain <Sequence> blocks.
-   */
-  _stripFadeTransitions(tsxCode) {
-    if (!/TransitionSeries/.test(tsxCode)) return tsxCode;
-    
-    console.log('[RemotionManager] Stripping TransitionSeries/fade from TSX');
-    
-    // Remove fade import
-    tsxCode = tsxCode.replace(/^import\s*\{[^}]*fade[^}]*\}\s*from\s*['"]@remotion\/transitions\/fade['"];?\s*$/gm, 
-      '// REMOVED: fade transition (hard cuts enforced)');
-    
-    // Replace TransitionSeries.Sequence with Sequence
-    tsxCode = tsxCode.replace(/<TransitionSeries\.Sequence\b/g, '<Sequence');
-    tsxCode = tsxCode.replace(/<\/TransitionSeries\.Sequence>/g, '</Sequence>');
-    
-    // Remove TransitionSeries.Transition elements entirely
-    tsxCode = tsxCode.replace(/<TransitionSeries\.Transition[\s\S]*?\/>/g, '');
-    
-    // Replace TransitionSeries wrapper with fragment
-    tsxCode = tsxCode.replace(/<TransitionSeries\b[^>]*>/g, '<>');
-    tsxCode = tsxCode.replace(/<\/TransitionSeries>/g, '</>');
-    
-    // Remove TransitionSeries import
-    tsxCode = tsxCode.replace(/^import\s*\{[^}]*TransitionSeries[^}]*\}\s*from\s*['"]@remotion\/transitions['"];?\s*$/gm,
-      '// REMOVED: TransitionSeries (hard cuts enforced)');
-    
-    return tsxCode;
-  }
-
-  /**
-   * Inject staticPreview support into AI-generated compositions.
-   * Templates already have this, but AI-generated compositions define E/Fd inline
-   * without checking the staticPreview prop. This patches them so stills render
-   * with all elements at full opacity (no mid-animation frames).
-   */
-  _injectStaticPreview(tsxCode) {
-    // Skip if already has staticPreview support
-    if (/\b_static\b/.test(tsxCode) && /getInputProps/.test(tsxCode)) return tsxCode;
-
-    console.log('[RemotionManager] Injecting staticPreview support');
-
-    // Step 1: Add getInputProps to the remotion import
-    const remotionImportRe = /(import\s*\{)([^}]*)(}\s*from\s*['"]remotion['"])/;
-    const remotionMatch = tsxCode.match(remotionImportRe);
-    if (remotionMatch && !remotionMatch[2].includes('getInputProps')) {
-      tsxCode = tsxCode.replace(remotionImportRe, (m, p1, p2, p3) => {
-        return p1 + p2.trimEnd() + ', getInputProps' + p3;
-      });
-    }
-
-    // Step 2: Add _static variable right after the last import line
-    // Find the position after all imports
-    const lines = tsxCode.split('\n');
-    let lastImportIdx = -1;
-    for (let i = 0; i < lines.length; i++) {
-      if (/^\s*import\s/.test(lines[i])) lastImportIdx = i;
-    }
-    if (lastImportIdx >= 0) {
-      lines.splice(lastImportIdx + 1, 0, '',
-        "const _static = (getInputProps() as any).staticPreview === true;");
-      tsxCode = lines.join('\n');
-    }
-
-    // Step 3: Patch E component — add early return when _static
-    // Match the E component definition and inject _static check after the opening {
-    // Pattern: E:React.FC<...> = ({d,children,...}) => { ... spring/interpolate ... return <div style={{transform:...opacity:...
-    // We need to add: if (_static) return <div style={{opacity:1,...style}}>{children}</div>;
-    const eCompRe = /(const E:React\.FC<[^>]*>\s*=\s*\(\{[^}]*\}\)\s*=>\s*\{)\s*\n/;
-    if (eCompRe.test(tsxCode)) {
-      tsxCode = tsxCode.replace(eCompRe, (match, prefix) => {
-        return prefix + '\n  if (_static) return <div style={{opacity:1,...style}}>{children}</div>;\n';
-      });
-    } else {
-      const eAltRe = /(const E:React\.FC<[^>]*>\s*=\s*\(\{.*?children.*?\}\)\s*=>\s*\{)/s;
-      if (eAltRe.test(tsxCode)) {
-        tsxCode = tsxCode.replace(eAltRe, (match, prefix) => {
-          return prefix + '\n  if (_static) return <div style={{opacity:1,...(style||{})}}>{children}</div>;';
-        });
-      } else {
-        console.warn('[RemotionManager] _injectStaticPreview: E component pattern not matched — static preview will not suppress E animations');
-      }
-    }
-
-    // Step 4: Patch Fd component — add early return when _static
-    const fdCompRe = /(const Fd:React\.FC<[^>]*>\s*=\s*\(\{[^}]*\}\)\s*=>\s*\{)\s*\n/;
-    if (fdCompRe.test(tsxCode)) {
-      tsxCode = tsxCode.replace(fdCompRe, (match, prefix) => {
-        return prefix + '\n  if (_static) return <div style={{opacity:1,position:\'absolute\',inset:0}}>{children}</div>;\n';
-      });
-    } else {
-      const fdAltRe = /(const Fd:React\.FC<[^>]*>\s*=\s*\(\{.*?children.*?\}\)\s*=>\s*\{)/s;
-      if (fdAltRe.test(tsxCode)) {
-        tsxCode = tsxCode.replace(fdAltRe, (match, prefix) => {
-          return prefix + '\n  if (_static) return <div style={{opacity:1,position:\'absolute\',inset:0}}>{children}</div>;';
-        });
-      } else {
-        console.warn('[RemotionManager] _injectStaticPreview: Fd component pattern not matched — static preview will not suppress Fd fade animations');
-      }
-    }
-
-    return tsxCode;
-  }
-
-  /**
-   * Replace lucide-react icons used for known brands with local SVG logos.
-   * The AI often uses Globe, Facebook, Camera etc. instead of actual brand logos.
-   */
-  _replaceBrandIcons(tsxCode) {
-    // Ordered by specificity: brands with unique icon names first, generic ones last.
-    // This prevents ambiguous matches (e.g., Music matching TikTok before Spotify).
-    const brandOrder = [
-      // Brands with unique/specific icon names — process first
-      { brand: 'facebook',  icons: ['Facebook', 'ThumbsUp'], svg: 'facebook.svg' },
-      { brand: 'instagram', icons: ['Aperture'], svg: 'instagram.svg' },
-      { brand: 'linkedin',  icons: ['Linkedin'], svg: 'linkedin.svg' },
-      { brand: 'twitter',   icons: ['Twitter', 'Bird'], svg: 'twitter.svg' },
-      { brand: 'github',    icons: ['Github'], svg: 'github.svg' },
-      { brand: 'apple',     icons: ['Apple'], svg: 'apple.svg' },
-      { brand: 'google',    icons: ['Chrome'], svg: 'google.svg' },
-      { brand: 'youtube',   icons: ['PlayCircle'], svg: 'youtube.svg' },
-      { brand: 'slack',     icons: ['Hash'], svg: 'slack.svg' },
-      { brand: 'amazon',    icons: ['ShoppingCart', 'Package'], svg: 'amazon.svg' },
-      // Brands with ambiguous icons — only match if the brand name appears in the code
-      { brand: 'meta',      icons: ['Globe', 'Building', 'Layers'], svg: 'meta.svg', requireBrandName: true },
-      { brand: 'whatsapp',  icons: ['MessageCircle', 'Phone', 'MessageSquare'], svg: 'whatsapp.svg', requireBrandName: true },
-      { brand: 'tiktok',    icons: ['Music', 'Film'], svg: 'tiktok.svg', requireBrandName: true },
-      { brand: 'telegram',  icons: ['Send'], svg: 'telegram.svg', requireBrandName: true },
-      { brand: 'microsoft', icons: ['Monitor', 'Grid'], svg: 'microsoft.svg', requireBrandName: true },
-      { brand: 'netflix',   icons: ['Tv'], svg: 'netflix.svg', requireBrandName: true },
-      { brand: 'spotify',   icons: ['Headphones'], svg: 'spotify.svg', requireBrandName: true },
-    ];
-
-    let changed = false;
-    let logosDir;
-    try {
-      logosDir = path.join(this.projectPath, 'public', 'logos');
-    } catch(_e) { return tsxCode; }
-    if (!fs.existsSync(logosDir)) return tsxCode;
-    const availableLogos = fs.readdirSync(logosDir).filter(f => f.endsWith('.svg'));
-    // Track which icons have already been replaced to avoid double-replacement
-    const replacedIcons = new Set();
-
-    brandOrder.forEach(entry => {
-      const regex = new RegExp(entry.brand, 'i');
-      // For ambiguous brands, require the brand name to appear in TSX (e.g., "tiktok" in a comment or string)
-      if (entry.requireBrandName && !regex.test(tsxCode)) return;
-      // For specific brands, at least check presence
-      if (!entry.requireBrandName && !regex.test(tsxCode)) return;
-      
-      const svgFile = entry.svg;
-      if (!availableLogos.includes(svgFile)) return;
-      if (tsxCode.includes("staticFile('logos/" + svgFile + "')")) return;
-      
-      entry.icons.forEach(icon => {
-        if (replacedIcons.has(icon)) return; // Already claimed by a more specific brand
-        const iconRegex = new RegExp('<' + icon + '\\s+[^>]*\\/>', 'g');
-        const before = tsxCode;
-        tsxCode = tsxCode.replace(iconRegex, 
-          `<Img src={staticFile('logos/${svgFile}')} style={{width:60,height:60,objectFit:'contain'}} />`);
-        if (tsxCode !== before) {
-          console.log(`[RemotionManager] Replacing <${icon}/> with ${svgFile} for brand "${entry.brand}"`);
-          replacedIcons.add(icon);
-          changed = true;
-        }
-      });
-    });
-
-    if (changed) {
-      // Ensure staticFile and Img are imported
-      if (!/\bstaticFile\b/.test(tsxCode.match(/import\s*\{[^}]*\}\s*from\s*['"]remotion['"]/)?.[0] || '')) {
-        tsxCode = tsxCode.replace(
-          /(import\s*\{)([^}]*)(}\s*from\s*['"]remotion['"])/,
-          (m, p1, p2, p3) => {
-            let imports = p2;
-            if (!imports.includes('staticFile')) imports += ', staticFile';
-            if (!imports.includes('Img')) imports += ', Img';
-            return p1 + imports + p3;
-          }
-        );
-      }
-      console.log('[RemotionManager] Brand icons replaced with local SVGs');
-    }
-
-    return tsxCode;
-  }
-
-  /**
-   * Validate imports in TSX code against known safe packages.
-   * Returns { valid, errors[], fixedCode? }
-   */
-  _validateImports(tsxCode) {
-    const ALLOWED_PACKAGES = {
-      'remotion': ['AbsoluteFill', 'useCurrentFrame', 'useVideoConfig', 'interpolate', 'spring', 'Sequence', 'Img', 'Audio', 'Easing', 'random', 'continueRender', 'delayRender', 'staticFile', 'getInputProps'],
-      'react': null, // allow all
-      'lucide-react': null, // allow all icons
-      '@remotion/transitions': ['TransitionSeries', 'linearTiming'],
-      '@remotion/transitions/fade': ['fade'],
-      '@remotion/transitions/slide': ['slide'],
-      '@remotion/shapes': ['Rect', 'Circle', 'Triangle', 'Star', 'Pie'],
-      '@remotion/paths': ['evolvePath', 'getLength', 'getPointAtLength', 'parsePath', 'resetPath', 'scalePath', 'translatePath'],
-      '@remotion/noise': ['noise2D', 'noise3D'],
-      '@remotion/motion-blur': ['Trail'],
-      '@fontsource/dm-sans/400.css': null,
-      '@fontsource/dm-sans/500.css': null,
-      '@fontsource/dm-sans/600.css': null,
-      '@fontsource/dm-sans/700.css': null,
-    };
-
-    const errors = [];
-    let fixedCode = tsxCode;
-    // Match: import { ... } from 'package'; or import ... from 'package';
-    const importRegex = /^import\s+(?:(?:\{[^}]*\}|[^;{]*)\s+from\s+)?['"]([^'"]+)['"]/gm;
-    let match;
-    while ((match = importRegex.exec(tsxCode)) !== null) {
-      const pkg = match[1];
-      // Allow CSS imports
-      if (pkg.endsWith('.css')) {
-        if (!ALLOWED_PACKAGES[pkg]) {
-          // Only allow @fontsource/dm-sans CSS
-          if (!pkg.startsWith('@fontsource/dm-sans')) {
-            errors.push(`Unknown CSS import: ${pkg}`);
-            fixedCode = fixedCode.replace(match[0], '// REMOVED unknown import: ' + match[0]);
-          }
-        }
-        continue;
-      }
-      if (!ALLOWED_PACKAGES.hasOwnProperty(pkg)) {
-        errors.push(`Unknown package: ${pkg}`);
-        // Comment out the bad import instead of failing
-        fixedCode = fixedCode.replace(match[0], '// REMOVED unknown import: ' + match[0]);
-      }
-    }
-
-    // Clean up Img import from 'remotion' if no valid <Img usages remain
-    // (brandfetch stripping may have removed all <Img> uses)
-    if (/<Img\b/.test(fixedCode) === false) {
-      // Remove Img from remotion import: import { ..., Img, ... } from 'remotion'
-      fixedCode = fixedCode.replace(
-        /(import\s*\{[^}]*)(?:,\s*Img\b|\bImg\s*,\s*)([^}]*\}\s*from\s*['"]remotion['"])/,
-        '$1$2'
-      );
-    }
-
-    if (errors.length > 0) {
-      console.warn('[RemotionManager] Import validation warnings:', errors);
-      return { valid: false, errors, fixedCode };
-    }
-    return { valid: true, errors: [] };
-  }
-
-  /**
-   * Basic syntax validation — catch issues BEFORE bundling so one bad file
-   * doesn't take down the entire Remotion project.
-   */
-  _validateSyntax(tsxCode) {
-    const errors = [];
-
-    // STEP 1: String and bracket validation (TSX-safe, no JS parsing needed)
-    // Check all string types (single, double, backtick) balance
-    let inString = false;
-    let stringChar = '';
-    let stringStartLine = 0;
-
-    const lines = tsxCode.split('\n');
-    for (let i = 0; i < tsxCode.length; i++) {
-      const ch = tsxCode[i];
-      const prev = i > 0 ? tsxCode[i - 1] : '';
-
-      if (!inString && (ch === '"' || ch === "'" || ch === '`') && prev !== '\\') {
-        inString = true;
-        stringChar = ch;
-        stringStartLine = tsxCode.substring(0, i).split('\n').length;
-        continue;
-      }
-      if (inString && ch === stringChar && prev !== '\\') {
-        inString = false;
-        continue;
-      }
-      // For single/double quotes: they can't span lines in JS/TSX
-      if (inString && (stringChar === '"' || stringChar === "'") && ch === '\n') {
-        errors.push(`Line ${stringStartLine}: Unterminated ${stringChar === '"' ? 'double' : 'single'}-quoted string`);
-        inString = false; // reset to continue checking
-      }
-    }
-    if (inString) {
-      errors.push(`Unterminated ${stringChar === '`' ? 'template literal' : 'string'} starting at line ${stringStartLine}`);
-    }
-
-    // STEP 4: Bracket balance
-    inString = false;
-    stringChar = '';
-    const brackets = { '(': 0, '{': 0, '[': 0 };
-    const closers = { ')': '(', '}': '{', ']': '[' };
-
-    for (let i = 0; i < tsxCode.length; i++) {
-      const ch = tsxCode[i];
-      const prev = i > 0 ? tsxCode[i - 1] : '';
-
-      if (!inString && (ch === '"' || ch === "'" || ch === '`') && prev !== '\\') {
-        inString = true; stringChar = ch; continue;
-      }
-      if (inString && ch === stringChar && prev !== '\\') {
-        inString = false; continue;
-      }
-      if (inString) continue;
-      if (ch === '/' && tsxCode[i + 1] === '/') {
-        const nl = tsxCode.indexOf('\n', i);
-        i = nl === -1 ? tsxCode.length : nl;
-        continue;
-      }
-
-      if (brackets.hasOwnProperty(ch)) brackets[ch]++;
-      if (closers[ch]) brackets[closers[ch]]--;
-    }
-
-    if (brackets['('] !== 0) errors.push(`Unbalanced parentheses: ${brackets['(']} unclosed`);
-    if (brackets['{'] !== 0) errors.push(`Unbalanced braces: ${brackets['{']} unclosed`);
-    if (brackets['['] !== 0) errors.push(`Unbalanced brackets: ${brackets['[']} unclosed`);
-
-    return { valid: errors.length === 0, errors };
-  }
-
-  /**
-   * Attempt to auto-fix common syntax issues in AI-generated TSX.
-   */
-  _autoFixSyntax(tsxCode) {
-    const lines = tsxCode.split('\n');
-    const fixedLines = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      let line = lines[i];
-
-      // Fix unterminated string literals: if a line has an odd number of
-      // unescaped quotes and doesn't continue on the next line, close it
-      for (const q of ['"', "'"]) {
-        const stripped = line.replace(/\\./g, '__');
-        const count = (stripped.split(q).length - 1);
-        if (count % 2 !== 0 && !stripped.includes('`')) {
-          // Find the last occurrence of the quote and check if string is unclosed
-          const lastIdx = line.lastIndexOf(q);
-          // Check if this is a dangling open quote near end of line
-          const afterQuote = line.slice(lastIdx + 1).trim();
-          if (afterQuote === '' || afterQuote === '>' || afterQuote === '/>') {
-            // Insert closing quote right after the last opening quote
-            const trailing = line.slice(lastIdx + 1);
-            line = line.slice(0, lastIdx + 1) + q + trailing;
-            console.log(`[RemotionManager] Auto-fixed unterminated ${q} on line ${i + 1}`);
-          }
-        }
-      }
-
-      fixedLines.push(line);
-    }
-
-    return fixedLines.join('\n');
+    this._registerInRoot(compositionId, totalFrames);
+    console.log(`[RemotionManager] Wrote ${compositionId} (${totalFrames} frames) → ${filePath}`);
+    return { filePath, durationFrames: totalFrames };
   }
 
   _calculateDuration(tsxCode, fallback) {
-    // <Sequence from={X} durationInFrames={Y}> — max(from+dur), incl. saltos de línea entre atributos
     let maxEnd = 0;
     const reSeq = /<Sequence[\s\S]*?from=\{(\d+)\}[\s\S]*?durationInFrames=\{(\d+)\}/g;
     let m;
@@ -492,7 +73,6 @@ class RemotionManager {
       if (end > maxEnd) maxEnd = end;
     }
 
-    // Method 2: TransitionSeries — sum all durationInFrames (sequential)
     if (maxEnd === 0 && tsxCode.indexOf('TransitionSeries') !== -1) {
       const allDurs = tsxCode.match(/durationInFrames=\{(\d+)\}/g) || [];
       let sum = 0;
@@ -503,20 +83,14 @@ class RemotionManager {
       if (sum > 0) maxEnd = sum;
     }
 
-    // Use the larger of: calculated vs proposal duration
     const calculated = maxEnd > 0 ? maxEnd + 6 : 0;
     return Math.max(calculated, fallback || 300);
   }
 
-  /**
-   * Update an already-registered composition's durationInFrames in Root.tsx.
-   * Used by "Animar" to override duration to match the timeline clip length.
-   */
   updateCompositionDuration(compositionId, durationFrames) {
     if (!fs.existsSync(this.rootTsxPath)) return;
     let root = fs.readFileSync(this.rootTsxPath, 'utf8');
 
-    // Replace durationInFrames={OLD} for this specific composition
     const escapedId = compositionId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(
       `(<Composition\\s+id="${escapedId}"[^>]*durationInFrames=\\{)\\d+(\\})`
@@ -529,20 +103,17 @@ class RemotionManager {
       console.warn(`[RemotionManager] Could not find ${compositionId} in Root.tsx to update duration`);
     }
 
-    // Also update the .duration metadata file
     const metaPath = path.join(this.compositionsDir, `${compositionId}.duration`);
     fs.writeFileSync(metaPath, String(durationFrames), 'utf8');
   }
 
   _registerInRoot(compositionId, durationFrames) {
-    // Verify the TSX file actually exists before registering
     const tsxPath = path.join(this.compositionsDir, `${compositionId}.tsx`);
     if (!fs.existsSync(tsxPath)) {
       console.warn(`[RemotionManager] Skipping registration of ${compositionId} — TSX file not found`);
       return;
     }
 
-    // No lock needed — render queue serializes all renders sequentially
     let root = fs.readFileSync(this.rootTsxPath, 'utf8');
 
     const componentName = this._componentName(compositionId);
@@ -566,18 +137,13 @@ class RemotionManager {
     fs.writeFileSync(this.rootTsxPath, root, 'utf8');
   }
 
-  /**
-   * Remove a broken composition from Root.tsx so it doesn't poison other renders.
-   */
   _deregisterFromRoot(compositionId) {
     if (!fs.existsSync(this.rootTsxPath)) return;
     let root = fs.readFileSync(this.rootTsxPath, 'utf8');
 
     const componentName = this._componentName(compositionId);
-    // Remove import line
     const importRe = new RegExp(`^import\\s*\\{\\s*${componentName}\\s*\\}.*\\n?`, 'm');
     root = root.replace(importRe, '');
-    // Remove composition line
     const compRe = new RegExp(`^\\s*<Composition\\s+id="${compositionId.replace(/[-]/g, '\\-')}"[^>]*/>\\n?`, 'm');
     root = root.replace(compRe, '');
 
@@ -590,7 +156,6 @@ class RemotionManager {
       .split(/[-_]/)
       .map(s => s.charAt(0).toUpperCase() + s.slice(1))
       .join('');
-    // JS identifiers can't start with a digit — prefix with "M"
     if (/^\d/.test(name)) name = 'M' + name;
     return name;
   }
@@ -598,39 +163,32 @@ class RemotionManager {
   syncFromSession(sessionDir) {
     if (!sessionDir || !fs.existsSync(sessionDir)) return;
 
-    // Clear current compositions
     if (fs.existsSync(this.compositionsDir)) {
       const files = fs.readdirSync(this.compositionsDir).filter(f => f.endsWith('.tsx'));
       files.forEach(f => fs.unlinkSync(path.join(this.compositionsDir, f)));
     }
 
-    // Copy session TSX sources into Remotion project
-    // Check both 'src/' (new) and 'compositions/' (legacy) locations
     const sessionSrc = path.join(sessionDir, 'src');
     const sessionCompsLegacy = path.join(sessionDir, 'compositions');
     const srcFolder = fs.existsSync(sessionSrc) ? sessionSrc : fs.existsSync(sessionCompsLegacy) ? sessionCompsLegacy : null;
     if (srcFolder) {
       const files = fs.readdirSync(srcFolder).filter(f => f.endsWith('.tsx'));
       files.forEach(f => {
-        // Validate syntax BEFORE copying — don't let broken files from previous sessions poison the build
         const content = fs.readFileSync(path.join(srcFolder, f), 'utf8');
-        const syntaxCheck = this._validateSyntax(content);
+        const syntaxCheck = this.validator.validateSyntax(content);
         if (!syntaxCheck.valid) {
           console.warn(`[RemotionManager] Skipping broken session file ${f}:`, syntaxCheck.errors);
-          // Move broken file to .broken/ subfolder instead of deleting
           try {
             const brokenDir = path.join(srcFolder, '.broken');
             if (!fs.existsSync(brokenDir)) fs.mkdirSync(brokenDir, { recursive: true });
             fs.renameSync(path.join(srcFolder, f), path.join(brokenDir, f));
             console.warn(`[RemotionManager] Moved ${f} to .broken/`);
           } catch(_e) {}
-          return; // skip this file
+          return;
         }
-        // Copy file and inject staticPreview support if missing
         const destPath = path.join(this.compositionsDir, f);
-        let patchedContent = this._injectStaticPreview(content);
+        let patchedContent = this.sanitizer.injectStaticPreview(content);
         fs.writeFileSync(destPath, patchedContent, 'utf8');
-        // Also copy duration metadata if it exists
         const durationFile = f.replace('.tsx', '.duration');
         const durationPath = path.join(srcFolder, durationFile);
         if (fs.existsSync(durationPath)) {
@@ -639,7 +197,6 @@ class RemotionManager {
       });
     }
 
-    // Rebuild Root.tsx from scratch
     this._rebuildRoot();
   }
 
@@ -652,7 +209,6 @@ class RemotionManager {
     if (fs.existsSync(src)) {
       fs.copyFileSync(src, path.join(srcDir, `${compositionId}.tsx`));
     }
-    // Also copy duration metadata
     const metaSrc = path.join(this.compositionsDir, `${compositionId}.duration`);
     if (fs.existsSync(metaSrc)) {
       fs.copyFileSync(metaSrc, path.join(srcDir, `${compositionId}.duration`));
@@ -660,7 +216,6 @@ class RemotionManager {
   }
 
   _rebuildRoot() {
-    // Write a clean Root.tsx
     let root = [
       "import React from 'react';",
       "import { Composition } from 'remotion';",
@@ -679,27 +234,23 @@ class RemotionManager {
 
     fs.writeFileSync(this.rootTsxPath, root, 'utf8');
 
-    // Re-register all compositions currently in the dir (skip those with syntax errors)
     const files = fs.readdirSync(this.compositionsDir).filter(f => f.endsWith('.tsx'));
     files.forEach(f => {
       const id = f.replace('.tsx', '');
       const content = fs.readFileSync(path.join(this.compositionsDir, f), 'utf8');
 
-      // Validate syntax before registering — don't let a broken file poison Root.tsx
-      const syntaxCheck = this._validateSyntax(content);
+      const syntaxCheck = this.validator.validateSyntax(content);
       if (!syntaxCheck.valid) {
         console.warn(`[RemotionManager] Skipping ${id} during rebuild — syntax errors:`, syntaxCheck.errors);
-        return; // skip this file
+        return;
       }
 
-      // Read saved duration from metadata file (set during writeComposition)
       const metaPath = path.join(this.compositionsDir, `${id}.duration`);
       let totalFrames = 300;
       if (fs.existsSync(metaPath)) {
         const saved = parseInt(fs.readFileSync(metaPath, 'utf8').trim(), 10);
         if (saved > 0) totalFrames = saved;
       } else {
-        // Fallback: try to parse from TSX (for old compositions without metadata)
         let maxEnd = 0;
         const fromDur = content.match(/<Sequence\s+from=\{(\d+)\}\s+durationInFrames=\{(\d+)\}/g) || [];
         fromDur.forEach(m => {
@@ -717,12 +268,10 @@ class RemotionManager {
 
   render(compositionId, callback, customOutputDir) {
     const sessionDir = customOutputDir || this.outputDir;
-    // Renders go into renders/ subfolder
     const rendersDir = customOutputDir ? path.join(sessionDir, 'renders') : sessionDir;
     if (!fs.existsSync(rendersDir)) {
       fs.mkdirSync(rendersDir, { recursive: true });
     }
-    // H.264 + yuv420p: ProRes intra-frame: cada frame es independiente, elimina frame corruption de H.264 inter-frame.
     const outputPath = path.join(rendersDir, `${compositionId}.mp4`);
 
     let npxPath;
@@ -735,8 +284,6 @@ class RemotionManager {
       '--codec=h264',
       '--pixel-format=yuv420p',
       '--crf=15',
-      
-      
       '--muted',
       '--image-format=jpeg',
       '--jpeg-quality=100',
@@ -765,7 +312,6 @@ class RemotionManager {
           ? altPath
           : null;
       if (code === 0 && finalPath) {
-        // Write README in session root if this is a project folder
         if (customOutputDir) {
           const readmePath = path.join(sessionDir, 'README.txt');
           if (!fs.existsSync(readmePath)) {
@@ -792,14 +338,11 @@ class RemotionManager {
         callback(null, { mp4Path: finalPath, compositionId });
       } else {
         const errorMsg = stderr || stdout;
-        // If the error is a build/syntax error, find which .tsx file caused it
-        // and deregister it from Root.tsx so subsequent renders aren't blocked
         const buildErrorMatch = errorMsg.match(/compositions\/([^:]+\.tsx):\d+:\d+: ERROR:/);
         if (buildErrorMatch) {
           const brokenFile = buildErrorMatch[1].replace('.tsx', '');
           console.error(`[RemotionManager] Build error in ${brokenFile}, deregistering from Root.tsx`);
           this._deregisterFromRoot(brokenFile);
-          // Also remove the broken file to prevent it from being re-registered
           const brokenPath = path.join(this.compositionsDir, buildErrorMatch[1]);
           if (fs.existsSync(brokenPath)) {
             try { fs.unlinkSync(brokenPath); } catch(_e) {}

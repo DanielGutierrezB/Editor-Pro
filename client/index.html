@@ -1217,21 +1217,34 @@
     <input type="file" id="audio-file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.webm,.mp4" style="display:none">
 
     <!-- Scripts -->
+    <!-- Core (no dependencies) -->
     <script src="js/logger.js"></script>
     <script src="js/CSInterface.js"></script>
     <script src="js/state.js"></script>
+    <script src="js/utils.js"></script>
     <script src="js/modal.js"></script>
+
+    <!-- Services (depend on core) -->
     <script src="js/settings.js"></script>
     <script src="js/sequence-controller.js"></script>
-    <script src="js/transcript-cache.js"></script>
     <script src="js/spellcheck-engine.js"></script>
     <script src="js/context-rules.js"></script>
     <script src="js/ai-analyzer.js"></script>
-    <script src="js/cutter.js"></script>
     <script src="js/speech-to-text.js"></script>
     <script src="js/recording-notes.js"></script>
     <script src="js/motion-pro.js"></script>
+
+    <!-- Extracted modules (depend on core + services) -->
+    <script src="js/prompt-editor.js"></script>
+    <script src="js/transcript-parser.js"></script>
+    <script src="js/transcript-cache.js"></script>
+    <script src="js/transcript-manager.js"></script>
+    <script src="js/cutter.js"></script>
+
+    <!-- Main controller (thin orchestrator) -->
     <script src="js/main.js"></script>
+
+    <!-- UI modules (depend on main exposing _ep* globals) -->
     <script src="js/ui-spellcheck.js"></script>
     <script src="js/ui-supertexts.js"></script>
     <script src="js/ui-edit-suggestions.js"></script>

@@ -10,27 +10,63 @@ Plugin CEP para Adobe Premiere Pro. Herramientas de edición asistida por IA y t
 Editor-Pro/
 ├── client/                  # Panel CEP (HTML + CSS + JS vanilla)
 │   ├── index.html           # UI principal — tool-cards colapsables
-│   ├── css/styles.css       # Un solo archivo CSS, tema oscuro, variables CSS
+│   ├── css/                 # CSS modular por feature
+│   │   ├── base.css         # Variables, reset, layout, toast, cards
+│   │   ├── cutter.css       # Estilos de Cortes Automáticos
+│   │   ├── motion-pro.css   # Estilos de Motion-Pro
+│   │   ├── recording.css    # Estilos de Recording Notes
+│   │   ├── spellcheck.css   # Estilos de SpellCheck
+│   │   └── supertexts.css   # Estilos de Smart Supertexts
 │   └── js/
 │       ├── CSInterface.js   # Bridge oficial Adobe CEP (no tocar)
-│       ├── main.js          # Controlador central — state, bindings, flujo
+│       ├── utils.js         # DOM helpers, formatters, escaping (window.EPUtils)
+│       ├── state.js         # Estado central (window._epState)
+│       ├── modal.js         # Sistema de modales
+│       ├── settings.js      # Carga/guardado de settings, provider UI
+│       ├── sequence-controller.js # Polling de secuencia activa, dropdown
+│       ├── prompt-editor.js # Editor de prompts IA con versionado
+│       ├── transcript-parser.js # Parseo de SRT/JSON/prtranscript/captions
+│       ├── transcript-cache.js  # Pre-cache de transcripts por secuencia
+│       ├── transcript-manager.js # Carga, búsqueda, y UI de transcripts
 │       ├── ai-analyzer.js   # IA multi-proveedor (Ollama, Gemini, Claude, GPT)
 │       ├── speech-to-text.js # STT multi-proveedor (ElevenLabs, Whisper local/API)
 │       ├── recording-notes.js # Notas de grabación — detección IN/OUT, segmentos
 │       ├── cutter.js        # Cortes automáticos por marcadores
 │       ├── motion-pro.js    # Motion-Pro — server lifecycle, generación, versionado
 │       ├── spellcheck-engine.js # Hunspell (typo-js) + reglas ortográficas
-│       └── context-rules.js # Reglas de confusión español (haber/a ver, etc.)
-├── host/
-│   └── index.jsx            # ExtendScript — API de Premiere Pro (ES3)
+│       ├── context-rules.js # Reglas de confusión español (haber/a ver, etc.)
+│       ├── main.js          # Orquestador delgado: init, bindings, proxies (~800 líneas)
+│       ├── ui-spellcheck.js # UI de SpellCheck
+│       ├── ui-supertexts.js # UI de Smart Supertexts + MOGRT
+│       ├── ui-edit-suggestions.js # UI de Edit Suggestions + Reel Proposal
+│       ├── ui-recording.js  # UI de Recording Notes + STT + Vistas
+│       └── ui-motion-pro.js # UI de Motion-Pro
+├── host/                    # ExtendScript — API de Premiere Pro (ES3)
+│   ├── index.jsx            # Entry point (#include de módulos)
+│   ├── common.jsx           # Helpers comunes, polyfills, JSON
+│   ├── cutter.jsx           # Cortes, marcadores, backup/restore
+│   ├── spellcheck.jsx       # Exportación XML para spellcheck
+│   ├── supertexts.jsx       # MOGRT insertion, Smart Supertexts
+│   ├── recording.jsx        # Audio export, backup+cut, reel sequences
+│   └── motion.jsx           # Motion-Pro placement functions
 ├── motion-server/           # Node.js Express server para Motion-Pro (puerto 3847)
 │   ├── server.js            # Entry point Express
-│   ├── routes/              # generate, render, feedback, studio
-│   └── lib/                 # llm.js, remotion-manager.js, prompts.js
+│   ├── routes/              # generate, render, feedback, propose, studio
+│   └── lib/
+│       ├── remotion-manager.js # Composition writing, Root.tsx, render (~390 líneas)
+│       ├── tsx-sanitizer.js    # Sanitización de TSX (brandfetch, Trail, transitions, staticPreview)
+│       ├── tsx-validator.js    # Validación de imports/syntax + auto-fix
+│       ├── llm.js              # LLM provider abstraction
+│       ├── prompts.js          # Prompt builder (loads from Prompts/MotionPro/*.md)
+│       ├── render-queue.js     # Async render queue (1 at a time, polling)
+│       ├── template-manager.js # Template registry
+│       ├── rhythm-analyzer.js  # Transcript rhythm analysis
+│       └── color-extractor.js  # Brand color extraction
 ├── motion-render/           # Proyecto Remotion (React/TSX → MP4)
 │   ├── src/components/      # Safe, E, Fd, theme (reusables)
 │   ├── src/compositions/    # TSX generados por LLM (auto)
 │   └── src/Root.tsx         # Registro de composiciones (auto-actualizado)
+├── Prompts/MotionPro/       # Prompt templates en .md
 ├── CSXS/
 │   └── manifest.xml         # Manifiesto CEP: com.codigo.editorpro
 ├── whisper/                 # whisper.cpp: scripts de instalación + modelos .bin
@@ -45,11 +81,11 @@ Editor-Pro/
 client/js/*.js  →  csInterface.evalScript("functionName(args)")  →  host/index.jsx  →  return JSON string
 ```
 
-- El host (`index.jsx`) es ExtendScript **ES3**: no hay let/const, no hay arrow functions, no hay template literals.
+- El host (`index.jsx`) es ES3 entry point que `#include`s modular .jsx files (common, cutter, spellcheck, supertexts, recording, motion).
 - `TICKS_PER_SECOND = 254016000000` para convertir tiempo de Premiere.
 - Incluye polyfill JSON propio para ES3.
 
-## Estado central (main.js)
+## Estado central (state.js)
 
 ```javascript
 state = {
@@ -231,7 +267,7 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 - `selectMOGRTFile()` — Diálogo nativo para seleccionar .mogrt
 - `validateMOGRT(mogrtPath)` / `getAvailableVideoTrackCount()`
 
-## Host ExtendScript — funciones clave (host/index.jsx)
+## Host ExtendScript — funciones clave (host/*.jsx)
 
 | Función | Uso |
 |---------|-----|
