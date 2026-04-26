@@ -191,7 +191,12 @@
         var el = _el("br-selected-count");
         if (el) el.textContent = checked.length;
         var btn = _el("btn-br-generate");
-        if (btn) btn.disabled = checked.length === 0;
+        if (btn) {
+            var hasSelection = checked.length > 0;
+            btn.disabled = !hasSelection;
+            if (hasSelection) btn.classList.remove("btn-disabled");
+            else btn.classList.add("btn-disabled");
+        }
     }
 
     function toggleSelectAll() {
