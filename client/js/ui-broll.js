@@ -151,6 +151,21 @@
     }
 
     function _doAnalysis(transcript) {
+        // Reset previous results — new analysis = fresh start
+        if (broll) {
+            broll.proposals = [];
+            broll.clips = [];
+            broll.saveState(_sessionKey);
+        }
+        var step2 = _el("br-proposals-section");
+        if (step2) step2.style.display = "none";
+        var step3 = _el("br-clips-section");
+        if (step3) step3.style.display = "none";
+        var list = _el("br-proposal-list");
+        if (list) list.innerHTML = "";
+        var clipsList = _el("br-clips-list");
+        if (clipsList) clipsList.innerHTML = "";
+
         var btn = _el("btn-br-analyze");
         if (btn) { btn.disabled = true; btn.textContent = "Analizando…"; }
         _el("br-step-hint-1") && (_el("br-step-hint-1").textContent = "Procesando…");
@@ -174,7 +189,8 @@
             }
             broll.saveState(_sessionKey);
             _renderProposals(proposals);
-            // Reveal and expand step 2
+            // Reveal and expand step 2, collapse others
+            _collapseAllSteps();
             var step2 = _el("br-proposals-section");
             if (step2) step2.style.display = "";
             var step2Body = _el("br-step-body-2");
@@ -260,6 +276,20 @@
         _updateSelectedCount();
     }
 
+    // ── Accordion helper ─────────────────────────────────────────────────────
+
+    function _collapseAllSteps() {
+        ["1","2","3","4"].forEach(function(n) {
+            var body = _el("br-step-body-" + n);
+            if (body) body.classList.add("hidden");
+            var section = document.querySelector("[data-br-step='" + n + "'].rec-step-header");
+            if (section) {
+                var arrow = section.querySelector(".rec-step-arrow");
+                if (arrow) arrow.textContent = "▸";
+            }
+        });
+    }
+
     // ── Output dir: "BRoll Generation" next to .prproj ───────────────────────
 
     function _resolveBrollOutputDir(callback) {
@@ -308,6 +338,7 @@
             broll.generating = true;
             broll.generateCancelRequested = false;
 
+            _collapseAllSteps();
             var step3 = _el("br-clips-section");
             if (step3) step3.style.display = "";
             var step3Body = _el("br-step-body-3");
@@ -677,7 +708,7 @@
         var vidProv = _el("br-vid-provider");
         if (vidProv) vidProv.addEventListener("change", _refreshSettingsVisibility);
 
-        // Step headers: expand/collapse
+        // Step headers: accordion — only one open at a time
         var stepHeaders = document.querySelectorAll("[data-br-step]");
         stepHeaders.forEach(function(hdr) {
             if (!hdr.classList.contains("rec-step-header")) return;
@@ -685,13 +716,23 @@
                 var stepNum = hdr.getAttribute("data-br-step");
                 var body = _el("br-step-body-" + stepNum);
                 if (!body) return;
-                var arrow = hdr.querySelector(".rec-step-arrow");
-                if (body.classList.contains("hidden")) {
+                var wasHidden = body.classList.contains("hidden");
+
+                // Collapse all steps first
+                stepHeaders.forEach(function(otherHdr) {
+                    if (!otherHdr.classList.contains("rec-step-header")) return;
+                    var otherNum = otherHdr.getAttribute("data-br-step");
+                    var otherBody = _el("br-step-body-" + otherNum);
+                    var otherArrow = otherHdr.querySelector(".rec-step-arrow");
+                    if (otherBody) otherBody.classList.add("hidden");
+                    if (otherArrow) otherArrow.textContent = "▸";
+                });
+
+                // Toggle clicked step
+                if (wasHidden) {
                     body.classList.remove("hidden");
+                    var arrow = hdr.querySelector(".rec-step-arrow");
                     if (arrow) arrow.textContent = "▾";
-                } else {
-                    body.classList.add("hidden");
-                    if (arrow) arrow.textContent = "▸";
                 }
             });
         });
