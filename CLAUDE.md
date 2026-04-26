@@ -326,6 +326,12 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 - **localStorage** para persistir settings, API keys, prompts custom, diccionario, presets de vista
 - **Prompts versionables**: el usuario puede editar y guardar versiones de los prompts de IA
 - **Callbacks everywhere**: no se usan Promises (compatibilidad con CEP antiguo)
+- **EventBus** (`event-bus.js`): pub/sub para desacoplar módulos. Los módulos se suscriben a eventos en su `init()` en vez de ser llamados directamente desde sequence-controller. Eventos:
+  - `sequence-changed` → `{ name }` — secuencia activa cambió
+  - `sequence-first-load` → `{ name }` — primera secuencia detectada al abrir panel
+  - `transcript-changed` → `{}` — transcripción actualizada
+  - `state-restored` → `{ sequenceName }` — state restaurado desde cache
+  - **Para agregar features nuevos**: suscribirse al EventBus en init(), NO agregar calls manuales en sequence-controller
 
 ## Cosas a tener en cuenta
 

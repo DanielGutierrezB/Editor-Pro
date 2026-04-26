@@ -568,6 +568,14 @@
             var body = _el("br-settings-body");
             if (body) body.classList.toggle("hidden");
         });
+
+        // Subscribe to EventBus — self-contained, no need to wire in sequence-controller
+        if (window.EventBus) {
+            window.EventBus.on("sequence-changed", function(data) { switchToSequence(data.name); });
+            window.EventBus.on("sequence-first-load", function(data) { switchToSequence(data.name); });
+            window.EventBus.on("state-restored", function() { _renderNoTranscript(); _refreshServerStatus(); });
+            window.EventBus.on("transcript-changed", function() { _renderNoTranscript(); });
+        }
     }
 
     // ── Public API ─────────────────────────────────────────────────────────────

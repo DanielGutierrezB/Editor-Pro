@@ -383,6 +383,7 @@
         if (_TM()) _TM().onTranscriptChange();
         mpUpdateAnalyzeButton();
         brUpdateAnalyzeButton();
+        if (window.EventBus) window.EventBus.emit("transcript-changed", {});
     }
 
     // ═══════════════════════════════════════════════════════════════
