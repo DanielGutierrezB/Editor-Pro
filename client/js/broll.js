@@ -224,20 +224,26 @@
         var userPrompt = "Analyze the following transcript and identify B-roll opportunities.\n\n" + transcript +
             '\n\nReturn ONLY a valid JSON array. No explanation text.';
 
-        analyzer._send(BROLL_SYSTEM_PROMPT, userPrompt, function(rawText) {
+        analyzer._send(BROLL_SYSTEM_PROMPT, userPrompt, function(result) {
             self.analyzing = false;
-            if (!rawText) return callback(new Error("La IA no devolvió respuesta"));
+            if (!result) return callback(new Error("La IA no devolvió respuesta"));
+            if (result.error) return callback(new Error(result.error));
 
             try {
-                var jsonStr = rawText.trim();
-                // Extract JSON from markdown code blocks
-                var blockMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-                if (blockMatch) jsonStr = blockMatch[1].trim();
-                var start = jsonStr.indexOf("[");
-                var end = jsonStr.lastIndexOf("]");
-                if (start !== -1 && end !== -1) jsonStr = jsonStr.substring(start, end + 1);
+                // _send's _parseResponse already JSON.parse'd the response
+                // Result is either an array directly, or an object wrapping it
+                var proposals = Array.isArray(result) ? result : (result.proposals || result.moments || []);
 
-                var proposals = JSON.parse(jsonStr);
+                if (!Array.isArray(proposals) || proposals.length === 0) {
+                    // Fallback: try to extract from stringified result
+                    var str = JSON.stringify(result);
+                    var start = str.indexOf("[");
+                    var end = str.lastIndexOf("]");
+                    if (start !== -1 && end !== -1) {
+                        proposals = JSON.parse(str.substring(start, end + 1));
+                    }
+                }
+
                 if (!Array.isArray(proposals)) throw new Error("Expected JSON array");
 
                 self.proposals = proposals
