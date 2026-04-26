@@ -434,10 +434,15 @@
         }
 
         var timedOut = false;
+        // Timeout scales with queue depth: base 3min + 1min per potential queued job
+        var _osT = (function() { try { return require('os'); } catch(_e) { return null; } })();
+        var _ramT = _osT ? _osT.totalmem() : 0;
+        var _concurrency = _ramT > 16e9 ? 4 : _ramT > 8e9 ? 3 : 2;
+        var _timeoutMs = (3 + _concurrency) * 60 * 1000; // e.g. 7min with CONCURRENCY=4
         var pipelineTimer = setTimeout(function() {
             timedOut = true;
-            callback(new Error("Preview pipeline timeout (3min) for " + proposal.id));
-        }, 3 * 60 * 1000); // 3 min — LLM + queued still render
+            callback(new Error("Preview pipeline timeout (" + Math.round(_timeoutMs / 60000) + "min) for " + proposal.id));
+        }, _timeoutMs);
 
         var body = {
             proposal: {

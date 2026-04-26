@@ -2678,34 +2678,11 @@
     }
 
     /**
-     * Update a single motion card in-place after feedback completes.
-     * Only rebuilds the card for the specific motionId — preserves all other cards'
-     * state (textarea content, progress bars, scroll position).
+     * Update the control panel after a feedback completes, preserving
+     * other cards' textarea content and in-progress feedback states.
      */
     function _mpUpdateSingleCard(motionId) {
-        var card = document.querySelector('.mp-motion-card[data-motion-id="' + motionId + '"]');
-        if (!card) {
-            // Card not found — fallback to full re-render
-            mpRenderControlPanel();
-            return;
-        }
-
-        // Rebuild just this card by re-rendering the full panel into a temp container
-        // and extracting only the updated card.
-        // This is simpler than duplicating the complex card-building logic.
-        var tempContainer = document.createElement("div");
-        tempContainer.style.display = "none";
-        document.body.appendChild(tempContainer);
-
-        // Build a mini version: save state, re-render to temp, extract card
-        var motion = motionPro._findMotion(motionId);
-        if (!motion) {
-            document.body.removeChild(tempContainer);
-            mpRenderControlPanel();
-            return;
-        }
-
-        // Save other cards' feedback textarea values before any DOM changes
+        // Save ALL textarea values before re-render
         var savedTextareas = {};
         var allTextareas = document.querySelectorAll(".mp-feedback-input");
         for (var ti = 0; ti < allTextareas.length; ti++) {
@@ -2715,7 +2692,24 @@
             }
         }
 
-        // Full re-render (this rebuilds everything)
+        // Save progress state for in-flight feedbacks (so we can restore visual indicators)
+        var activeProgress = {};
+        if (state.mpFeedbackActive) {
+            var allProgs = document.querySelectorAll(".mp-feedback-progress");
+            for (var pi = 0; pi < allProgs.length; pi++) {
+                var progId = allProgs[pi].getAttribute("data-motion-id");
+                if (progId && state.mpFeedbackActive[progId]) {
+                    var fillEl = allProgs[pi].querySelector(".mp-fb-fill");
+                    var txtEl = allProgs[pi].querySelector(".mp-fb-text");
+                    activeProgress[progId] = {
+                        width: fillEl ? fillEl.style.width : "50%",
+                        text: txtEl ? txtEl.textContent : "Procesando feedback..."
+                    };
+                }
+            }
+        }
+
+        // Full re-render
         mpRenderControlPanel();
 
         // Restore saved textarea values for other cards
@@ -2727,7 +2721,7 @@
             }
         }
 
-        // Restore in-progress feedback states for other motions
+        // Restore in-progress feedback states (buttons, textareas, progress bars)
         if (state.mpFeedbackActive) {
             Object.keys(state.mpFeedbackActive).forEach(function(activeId) {
                 if (!state.mpFeedbackActive[activeId]) return;
@@ -2740,15 +2734,14 @@
                 if (activeTa) activeTa.disabled = true;
                 if (activeProg) {
                     activeProg.classList.remove("hidden");
+                    var savedProg = activeProgress[activeId];
                     var activeFill = activeProg.querySelector(".mp-fb-fill");
                     var activeTxt = activeProg.querySelector(".mp-fb-text");
-                    if (activeFill) activeFill.style.width = "60%";
-                    if (activeTxt) activeTxt.textContent = "Procesando feedback...";
+                    if (activeFill) activeFill.style.width = savedProg ? savedProg.width : "50%";
+                    if (activeTxt) activeTxt.textContent = savedProg ? savedProg.text : "Procesando feedback...";
                 }
             });
         }
-
-        document.body.removeChild(tempContainer);
     }
 
     function mpRenderControlPanel() {
@@ -3124,8 +3117,7 @@
                             _mpRestoreFeedbackCard(motionId, savedFeedbackText);
                         } else {
                             showToast("Versión " + result.version + " preview con feedback", "success");
-                            motionPro.saveState();
-                            // Place new PNG preview in timeline, then update only this card
+                            // Place new PNG preview in timeline, then save + update card
                             if (result.pngPath) {
                                 mpPlacePreviewInTimeline(motionId, function() {
                                     motionPro.saveState();
@@ -3133,6 +3125,7 @@
                                 });
                                 return;
                             }
+                            motionPro.saveState();
                             _mpUpdateSingleCard(motionId);
                         }
                     }, _mpOutputDir || undefined);
