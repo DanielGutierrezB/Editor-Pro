@@ -328,6 +328,8 @@
                     showToast("Error generando " + (idx + 1) + ": " + err.message, "error");
                 } else {
                     if (window.EPLogger) EPLogger.log("broll", "generate-image-ok", "clip " + (idx + 1) + "/" + ids.length);
+                    _renderClips(); // refresh to show new clip immediately
+                    broll.saveState(_sessionKey);
                 }
                 _generateNext(ids, idx + 1, done);
             }
