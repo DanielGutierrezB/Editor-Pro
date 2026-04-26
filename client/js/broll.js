@@ -37,12 +37,12 @@
 
     BRoll.prototype._loadSettings = function() {
         var defaults = {
-            imageProvider: "placeholder",
+            imageProvider: "comfyui",
             imageEndpointUrl: "http://localhost:8188",
-            imageFalModel: "fal-ai/flux/schnell",
+            imageFalModel: "",
             imageFalApiKey: "",
             videoProvider: "placeholder",
-            videoEndpointUrl: "http://localhost:7861",
+            videoEndpointUrl: "",
             videoKlingApiKey: "",
             trackIndex: "auto",
             outputDir: ""

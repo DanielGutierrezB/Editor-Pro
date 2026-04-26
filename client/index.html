@@ -1326,44 +1326,30 @@
                             <div class="br-settings-row">
                                 <span class="br-settings-label">Proveedor</span>
                                 <select id="br-img-provider" class="select-input">
+                                    <option value="comfyui" selected>⚡ ComfyUI + Flux (local)</option>
                                     <option value="placeholder">🧪 Placeholder (sin API)</option>
-                                    <option value="comfyui">⚡ ComfyUI + Flux (local)</option>
-                                    <option value="flux_local">⚡ AUTOMATIC1111 (local)</option>
-                                    <option value="fal">☁ FAL.ai (cloud)</option>
                                 </select>
                             </div>
                             <div class="br-settings-row" id="br-img-endpoint-row" style="display:none">
                                 <span class="br-settings-label">URL endpoint</span>
                                 <input type="text" id="br-img-endpoint" class="text-input" placeholder="http://localhost:8188">
                             </div>
+                            <!-- FAL.ai settings hidden — not currently installed -->
                             <div id="br-img-fal-row" style="display:none">
-                                <div class="br-settings-row">
-                                    <span class="br-settings-label">Modelo FAL</span>
-                                    <input type="text" id="br-img-fal-model" class="text-input" placeholder="fal-ai/flux/schnell">
-                                </div>
-                                <div class="br-settings-row">
-                                    <span class="br-settings-label">API key</span>
-                                    <input type="password" id="br-img-fal-key" class="text-input" placeholder="fal_...">
-                                </div>
+                                <input type="hidden" id="br-img-fal-model" value="">
+                                <input type="hidden" id="br-img-fal-key" value="">
                             </div>
 
                             <div class="br-settings-title" style="margin-top:10px">Generación de Video (Animación)</div>
                             <div class="br-settings-row">
                                 <span class="br-settings-label">Proveedor</span>
                                 <select id="br-vid-provider" class="select-input">
-                                    <option value="placeholder">🧪 Placeholder (ffmpeg estático)</option>
-                                    <option value="ltx_local">⚡ LTX Video local</option>
-                                    <option value="kling">☁ Kling API (cloud)</option>
+                                    <option value="placeholder" selected>🧪 Placeholder (ffmpeg estático)</option>
                                 </select>
                             </div>
-                            <div class="br-settings-row" id="br-vid-endpoint-row" style="display:none">
-                                <span class="br-settings-label">URL endpoint</span>
-                                <input type="text" id="br-vid-endpoint" class="text-input" placeholder="http://localhost:7861">
-                            </div>
-                            <div class="br-settings-row" id="br-vid-kling-row" style="display:none">
-                                <span class="br-settings-label">API key</span>
-                                <input type="password" id="br-vid-kling-key" class="text-input" placeholder="kling_...">
-                            </div>
+                            <!-- LTX/Kling settings hidden — not currently installed -->
+                            <div id="br-vid-endpoint-row" style="display:none"><input type="hidden" id="br-vid-endpoint" value=""></div>
+                            <div id="br-vid-kling-row" style="display:none"><input type="hidden" id="br-vid-kling-key" value=""></div>
 
                             <div class="br-settings-title" style="margin-top:10px">Timeline</div>
                             <div class="br-settings-row">
