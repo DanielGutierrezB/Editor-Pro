@@ -528,6 +528,8 @@
         if (!broll) return;
         _sessionKey = seqName || "";
         var loaded = broll.loadState(_sessionKey);
+        _renderNoTranscript();
+        _refreshServerStatus();
         _renderProposals(broll.proposals);
         _renderClips();
         var step2 = _el("br-proposals-section");
@@ -538,6 +540,7 @@
 
     function updateAnalyzeButton() {
         _renderNoTranscript();
+        _refreshServerStatus();
     }
 
     // ── Init ───────────────────────────────────────────────────────────────────
