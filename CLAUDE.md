@@ -12,6 +12,7 @@ Editor-Pro/
 │   ├── index.html           # UI principal — tool-cards colapsables
 │   ├── css/                 # CSS modular por feature
 │   │   ├── base.css         # Variables, reset, layout, toast, cards
+│   │   ├── broll.css        # Estilos de B-Roll
 │   │   ├── cutter.css       # Estilos de Cortes Automáticos
 │   │   ├── motion-pro.css   # Estilos de Motion-Pro
 │   │   ├── recording.css    # Estilos de Recording Notes
@@ -32,6 +33,7 @@ Editor-Pro/
 │       ├── speech-to-text.js # STT multi-proveedor (ElevenLabs, Whisper local/API)
 │       ├── recording-notes.js # Notas de grabación — detección IN/OUT, segmentos
 │       ├── cutter.js        # Cortes automáticos por marcadores
+│       ├── broll.js         # B-Roll — image gen, video gen, versioning (window.BRoll)
 │       ├── motion-pro.js    # Motion-Pro — server lifecycle, generación, versionado
 │       ├── spellcheck-engine.js # Hunspell (typo-js) + reglas ortográficas
 │       ├── context-rules.js # Reglas de confusión español (haber/a ver, etc.)
@@ -39,6 +41,7 @@ Editor-Pro/
 │       ├── ui-spellcheck.js # UI de SpellCheck
 │       ├── ui-supertexts.js # UI de Smart Supertexts + MOGRT
 │       ├── ui-edit-suggestions.js # UI de Edit Suggestions + Reel Proposal
+│       ├── ui-broll.js      # UI de B-Roll
 │       ├── ui-recording.js  # UI de Recording Notes + STT + Vistas
 │       └── ui-motion-pro.js # UI de Motion-Pro
 ├── host/                    # ExtendScript — API de Premiere Pro (ES3)
@@ -47,12 +50,16 @@ Editor-Pro/
 │   ├── cutter.jsx           # Cortes, marcadores, backup/restore
 │   ├── spellcheck.jsx       # Exportación XML para spellcheck
 │   ├── supertexts.jsx       # MOGRT insertion, Smart Supertexts
+│   ├── broll.jsx            # B-Roll: importAndPlaceBroll, replaceBrollClip, getBrollTrackInfo
 │   ├── recording.jsx        # Audio export, backup+cut, reel sequences
 │   └── motion.jsx           # Motion-Pro placement functions
-├── motion-server/           # Node.js Express server para Motion-Pro (puerto 3847)
+├── motion-server/           # Node.js Express server para Motion-Pro y B-Roll (puerto 3847)
 │   ├── server.js            # Entry point Express
-│   ├── routes/              # generate, render, feedback, propose, studio
+│   ├── routes/              # generate, render, feedback, propose, studio, broll
 │   └── lib/
+│       ├── broll-prompts.js    # Prompt builder para análisis B-roll
+│       ├── image-generator.js  # Generación de imágenes (placeholder/Flux/FAL.ai)
+│       ├── video-generator.js  # Generación de video (placeholder/LTX/Kling)
 │       ├── remotion-manager.js # Composition writing, Root.tsx, render (~390 líneas)
 │       ├── tsx-sanitizer.js    # Sanitización de TSX (brandfetch, Trail, transitions, staticPreview)
 │       ├── tsx-validator.js    # Validación de imports/syntax + auto-fix
@@ -196,6 +203,7 @@ SpellCheck con Hunspell (typo-js) + reglas contextuales para español.
 | 5 | `reelproposal` | Propuesta de Reel | Analizar transcripción → proponer reels virales |
 | 6 | `recording` | Notas de Grabación | STT → IN/OUT → tomas → marcadores → cortar |
 | 7 | `motionpro` | Motion-Pro | Transcript → IA analiza → genera motion graphics con Remotion → timeline |
+| 8 | `broll` | B-Roll | Transcript → IA identifica momentos → genera imágenes → anima a video → timeline |
 
 ## Workflow: Notas de Grabación (7 pasos)
 
@@ -402,3 +410,62 @@ Cada motion tiene array `versions[]` con `{version, compositionId, tsxPath, mp4P
 | cards | Cards | #2dd4bf |
 | diagram | Diagrama | #f87171 |
 | ui | UI Mockup | #fbbf24 |
+
+---
+
+## B-Roll — Image-to-Video Pipeline (v1.6.0)
+
+Genera B-roll visual (imágenes + videos animados) a partir de la transcripción usando APIs de generación de imagen/video.
+
+### Arquitectura
+
+```
+Panel CEP (client/js/broll.js + client/js/ui-broll.js)
+    ↕ HTTP localhost:3847
+motion-server/ (Express, rutas /api/broll/*)
+    ↕ image-generator.js + video-generator.js
+    → PNG / MP4 output
+    ↕ evalScript()
+host/broll.jsx (importAndPlaceBroll, replaceBrollClip)
+```
+
+### Flujo (4 pasos)
+
+1. **Análisis** — Envía transcript al LLM via `/api/broll/analyze`. Devuelve propuestas con startTime, endTime, description, rationale.
+2. **Selección y Generación de Imagen** — Usuario selecciona propuestas con checkboxes. Por cada una: genera PNG via `/api/broll/generate-image` → coloca en timeline.
+3. **Animación** — '🎬 Animar' por clip o '🎬 Animar Todos': genera video MP4 a partir del PNG via `/api/broll/animate` → reemplaza en timeline.
+4. **Feedback** — Textarea por clip → 'Regenerar' envía descripción + feedback para nueva imagen.
+
+### Proveedores de Imagen
+
+| Proveedor | Descripción | Config |
+|-----------|-------------|--------|
+| placeholder | ffmpeg solid color + text overlay (no requiere API) | — |
+| flux_local | AUTOMATIC1111 txt2img API | endpointUrl (default http://localhost:7860) |
+| fal | FAL.ai API (Flux, SDXL, etc.) | apiKey, model (default fal-ai/flux/schnell) |
+
+### Proveedores de Video
+
+| Proveedor | Descripción | Config |
+|-----------|-------------|--------|
+| placeholder | ffmpeg PNG→MP4 estático (requiere ffmpeg) | — |
+| ltx_local | LTX Video API local | endpointUrl (default http://localhost:7861) |
+| kling | Kling API cloud (image2video) | apiKey |
+
+### localStorage Keys
+
+- `editorpro_broll_state` — propuestas y clips por sesión
+- `editorpro_broll_settings` — configuración de proveedores y tracks
+
+### Funciones JSX
+
+| Función | Uso |
+|---------|-----|
+| `importAndPlaceBroll(jsonPath)` | Importa PNG/MP4, crea bin "B-Roll", coloca en track |
+| `replaceBrollClip(jsonPath)` | Reemplaza un clip B-Roll existente en la timeline |
+| `getBrollTrackInfo()` | Retorna trackCount y nextAvailable del sequence activo |
+
+### Prompts
+
+- `Prompts/BRoll/analysis.md` — System prompt para detección de momentos B-roll
+- `motion-server/lib/broll-prompts.js` — Builder que carga el prompt y construye el user message

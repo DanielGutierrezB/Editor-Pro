@@ -18,6 +18,7 @@
     try { fs = require("fs"); path = require("path"); os = require("os"); } catch(e) {}
 
     var motionPro = null;
+    var broll = null;
 
     // State is defined in state.js and exposed as window._epState before this script loads.
     var state = window._epState;
@@ -63,6 +64,7 @@
         stt = new SpeechToText();
         recorder = new RecordingNotes();
         motionPro = new MotionPro();
+        broll = new BRoll();
 
         stt.setPluginDir(extensionPath);
 
@@ -73,6 +75,7 @@
         window._epStt = stt;
         window._epRecorder = recorder;
         window._epMotionPro = motionPro;
+        window._epBroll = broll;
 
         // Initialize UI modules (capture shared references now that _ep* globals are set)
         if (window.EditorProUI && window.EditorProUI.spellcheck && window.EditorProUI.spellcheck.init) window.EditorProUI.spellcheck.init();
@@ -91,6 +94,7 @@
         refreshSequenceInfo();
         startSequencePolling();
         mpInit();
+        brInit();
 
         // Initialize prompt editor
         if (window.PromptEditor && window.PromptEditor.init) window.PromptEditor.init();
@@ -566,6 +570,11 @@
     // Motion-Pro delegates
     function mpInit() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.init(); }
     function mpSwitchToSequence() { if (window.EditorProUI && window.EditorProUI.motionPro && window.EditorProUI.motionPro.switchToSequence) window.EditorProUI.motionPro.switchToSequence(); }
+
+    // B-Roll delegates
+    function brInit() { if (window.EditorProUI && window.EditorProUI.broll) window.EditorProUI.broll.init(); }
+    function brSwitchToSequence(n) { if (window.EditorProUI && window.EditorProUI.broll && window.EditorProUI.broll.switchToSequence) window.EditorProUI.broll.switchToSequence(n); }
+    function brUpdateAnalyzeButton() { if (window.EditorProUI && window.EditorProUI.broll) window.EditorProUI.broll.updateAnalyzeButton(); }
     function mpUpdateAnalyzeButton() { if (window.EditorProUI && window.EditorProUI.motionPro && window.EditorProUI.motionPro.updateAnalyzeButton) window.EditorProUI.motionPro.updateAnalyzeButton(); }
     function mpToggleServer() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.toggleServer(); }
     function mpStartAnalysis() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.startAnalysis(); }
@@ -589,6 +598,7 @@
         if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.refreshES2HeaderProgressVisibility();
         if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.refreshRPHeaderProgressVisibility();
         if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.refreshHeaderProgressVisibility();
+        if (window.EditorProUI && window.EditorProUI.broll) window.EditorProUI.broll.refreshHeaderProgressVisibility();
     }
 
     // ─── Expose remaining bindings for UI modules ────────────────

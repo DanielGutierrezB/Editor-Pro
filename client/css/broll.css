@@ -1,0 +1,319 @@
+/* ── B-Roll Tab ─────────────────────────────────────────────────────────────── */
+
+/* Server status bar */
+.br-server-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+}
+.br-server-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.br-dot-on  { background: var(--success); box-shadow: 0 0 4px var(--success); }
+.br-dot-off { background: var(--text-muted); }
+.br-dot-starting { background: var(--warning); animation: pulse-update 1s infinite; }
+.br-server-label { color: var(--text-secondary); }
+
+/* Warning box */
+.br-warning-box {
+    background: rgba(251, 146, 60, 0.1);
+    border: 1px solid rgba(251, 146, 60, 0.3);
+    border-radius: 5px;
+    padding: 7px 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin: 6px 0;
+}
+
+/* ── Proposal cards (Step 1) ─────────────────────────────────────────────────── */
+
+.br-proposal-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+
+.br-proposal-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 7px 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+.br-proposal-card:hover { border-color: var(--accent); }
+.br-proposal-card.selected {
+    border-color: var(--accent);
+    background: var(--bg-active);
+}
+
+.br-proposal-check { margin-top: 1px; flex-shrink: 0; }
+
+.br-proposal-body { flex: 1; min-width: 0; }
+
+.br-proposal-timecode {
+    font-size: 10px;
+    font-family: monospace;
+    color: var(--accent);
+    margin-bottom: 2px;
+}
+
+.br-proposal-desc {
+    font-size: 11px;
+    color: var(--text-primary);
+    line-height: 1.4;
+    margin-bottom: 2px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.br-proposal-rationale {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-style: italic;
+    line-height: 1.3;
+}
+
+/* ── B-Roll clip cards (Step 2 & 3) ─────────────────────────────────────────── */
+
+.br-clips-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+
+.br-clip-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+}
+.br-clip-card.placed { border-color: rgba(16, 185, 129, 0.4); }
+.br-clip-card.error  { border-color: rgba(248, 113, 113, 0.4); }
+
+.br-clip-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--bg-raised);
+    border-bottom: 1px solid var(--border);
+}
+
+.br-clip-num {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--bg-active);
+    border-radius: 3px;
+    padding: 1px 5px;
+    flex-shrink: 0;
+}
+
+.br-clip-timecode {
+    font-size: 10px;
+    font-family: monospace;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.br-clip-title {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-primary);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.br-status-badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.br-status-badge[data-status="pending"]    { background: rgba(100,116,139,0.2); color: var(--text-muted); }
+.br-status-badge[data-status="generating"] { background: rgba(251,191,36,0.2); color: #fbbf24; animation: pulse-update 1s infinite; }
+.br-status-badge[data-status="image"]      { background: rgba(16,185,129,0.2); color: #10b981; }
+.br-status-badge[data-status="animating"]  { background: rgba(129,140,248,0.2); color: #818cf8; animation: pulse-update 1s infinite; }
+.br-status-badge[data-status="video"]      { background: rgba(45,212,191,0.2); color: #2dd4bf; }
+.br-status-badge[data-status="placed"]     { background: rgba(16,185,129,0.3); color: #10b981; }
+.br-status-badge[data-status="error"]      { background: rgba(248,113,113,0.2); color: #f87171; }
+
+/* Thumbnail area */
+.br-clip-thumb {
+    width: 100%;
+    aspect-ratio: 16/9;
+    max-height: 120px;
+    object-fit: cover;
+    display: block;
+    background: var(--bg-raised);
+}
+.br-clip-thumb-wrap {
+    position: relative;
+    background: var(--bg-raised);
+    border-bottom: 1px solid var(--border);
+}
+.br-clip-thumb-placeholder {
+    width: 100%;
+    aspect-ratio: 16/9;
+    max-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: var(--text-muted);
+    background: var(--bg-raised);
+}
+.br-clip-thumb-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 4px 8px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.7));
+    font-size: 9px;
+    color: rgba(255,255,255,0.8);
+}
+
+/* Clip body */
+.br-clip-body {
+    padding: 8px;
+}
+
+.br-clip-desc {
+    font-size: 10px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin-bottom: 6px;
+}
+
+/* Version selector */
+.br-version-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.br-version-label { font-size: 10px; color: var(--text-muted); }
+.br-version-select {
+    flex: 1;
+    font-size: 10px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 4px;
+}
+
+/* Feedback */
+.br-feedback-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 5px 7px;
+    font-size: 10px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 44px;
+    margin-bottom: 6px;
+    transition: border-color 0.15s;
+}
+.br-feedback-input:focus { outline: none; border-color: var(--accent); }
+.br-feedback-input::placeholder { color: var(--text-muted); }
+
+/* Clip action buttons */
+.br-clip-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+
+.br-progress-bar {
+    height: 3px;
+    background: var(--bg-active);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 4px 0;
+}
+.br-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.3s;
+}
+
+/* ── Settings section ────────────────────────────────────────────────────────── */
+.br-settings {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin-top: 8px;
+}
+.br-settings-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+.br-settings-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 7px;
+}
+.br-settings-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    width: 90px;
+    flex-shrink: 0;
+}
+.br-settings-row .select-input,
+.br-settings-row .text-input {
+    flex: 1;
+    font-size: 10px;
+    padding: 3px 6px;
+}
+
+/* ── Batch animate button ────────────────────────────────────────────────────── */
+.br-batch-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin: 6px 0;
+}
+
+/* ── Header progress (when tab is collapsed) ─────────────────────────────────── */
+.br-header-progress {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    margin-left: 8px;
+}
+.br-header-progress-track {
+    flex: 1;
+    max-width: 80px;
+    height: 3px;
+    background: var(--bg-active);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.br-header-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.3s;
+}
+.br-header-progress-text {
+    font-size: 9px;
+    color: var(--accent);
+    white-space: nowrap;
+}

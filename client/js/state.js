@@ -45,6 +45,9 @@
         mpAnalyzing: false,
         mpGenerating: false,
         mpGenerateCancelRequested: false,
+        // B-Roll
+        brAnalyzing: false,
+        brGenerating: false,
         settings: {
             aiProvider: "ollama",
             aiModel: "mistral-small3.1:latest",

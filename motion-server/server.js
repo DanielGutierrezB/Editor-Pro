@@ -8,6 +8,7 @@ const proposeRoute = require('./routes/propose');
 const renderRoute = require('./routes/render');
 const feedbackRoute = require('./routes/feedback');
 const studioRoute = require('./routes/studio');
+const brollRoute = require('./routes/broll');
 
 const PORT = process.env.MP_PORT || 3847;
 const RENDER_PROJECT = path.resolve(__dirname, '..', 'motion-render');
@@ -206,6 +207,7 @@ app.use('/api/generate', generateRoute);
 app.use('/api/render', renderRoute);
 app.use('/api/feedback', feedbackRoute);
 app.use('/api/studio', studioRoute);
+app.use('/api/broll', brollRoute);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' });
