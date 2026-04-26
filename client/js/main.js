@@ -382,6 +382,7 @@
     function onTranscriptChange() {
         if (_TM()) _TM().onTranscriptChange();
         mpUpdateAnalyzeButton();
+        brUpdateAnalyzeButton();
     }
 
     // ═══════════════════════════════════════════════════════════════

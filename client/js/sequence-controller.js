@@ -69,6 +69,7 @@
                 if (changed && !_isAnyBatchActive()) {
                     restoreSequenceState(newSeqName);
                     if (global.EditorProUI && global.EditorProUI.motionPro && global.EditorProUI.motionPro.switchToSequence) global.EditorProUI.motionPro.switchToSequence();
+                    if (global.EditorProUI && global.EditorProUI.broll && global.EditorProUI.broll.switchToSequence) global.EditorProUI.broll.switchToSequence(newSeqName);
                 } else if (isFirstLoad) {
                     if (!state.transcript && (!state.segments || state.segments.length === 0)) {
                         if (global.autoLoadTranscriptForSequence) global.autoLoadTranscriptForSequence(newSeqName);
@@ -110,6 +111,7 @@
                         if (_isAnyBatchActive()) return;
                         restoreSequenceState(data.name);
                         if (global.EditorProUI && global.EditorProUI.motionPro && global.EditorProUI.motionPro.switchToSequence) global.EditorProUI.motionPro.switchToSequence();
+                        if (global.EditorProUI && global.EditorProUI.broll && global.EditorProUI.broll.switchToSequence) global.EditorProUI.broll.switchToSequence(data.name);
                         csInterface.evalScript("getTranscribeFolder()", function(tfResult) {
                             try {
                                 var tfData = JSON.parse(tfResult);
