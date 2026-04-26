@@ -628,5 +628,7 @@
     global._epGetTranscriptFolders = _getTranscriptFolders;
     global._epBuildTranscriptCache = _buildTranscriptCache;
     global._epShowTranscriptExportInstructions = _showTranscriptExportInstructions;
+    global._epSaveLastTranscriptFolder = _saveLastTranscriptFolder;
+    global._epTryLoadTranscriptFromFolder = _tryLoadTranscriptFromFolder;
 
 })(window);

@@ -2786,7 +2786,9 @@
         updateAnalyzeButton: mpUpdateAnalyzeButton,
         animateSingle: mpAnimateSingle,
         animateAll: mpAnimateAll,
-        placePreviewInTimeline: mpPlacePreviewInTimeline
+        placePreviewInTimeline: mpPlacePreviewInTimeline,
+        getSessionName: function() { return _mpSessionName; },
+        getOutputDir: function() { return _mpOutputDir; }
     };
 
 })(window);

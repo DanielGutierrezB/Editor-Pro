@@ -48,12 +48,6 @@
     var showElement = function(id) { return window._epShowElement(id); };
     var hideElement = function(id) { return window._epHideElement(id); };
     var on = function(id, evt, fn) { return window._epOn(id, evt, fn); };
-    var showTranscriptExportInstructions = function() { return window._epShowTranscriptExportInstructions ? window._epShowTranscriptExportInstructions() : undefined; };
-    var _buildTranscriptCache = function(cb) { return window._epBuildTranscriptCache ? window._epBuildTranscriptCache(cb) : (cb && cb()); };
-    var _saveLastTranscriptFolder = function(p) { if (window._epSaveLastTranscriptFolder) window._epSaveLastTranscriptFolder(p); };
-    var _getTranscriptFolders = function() { return window._epGetTranscriptFolders ? window._epGetTranscriptFolders() : []; };
-    var _tryLoadTranscriptFromFolder = function(f, n) { return window._epTryLoadTranscriptFromFolder ? window._epTryLoadTranscriptFromFolder(f, n) : false; };
-    var copyTranscriptToFolder = function(s, n) { if (window.copyTranscriptToFolder) window.copyTranscriptToFolder(s, n); };
 
     // ─── Init ────────────────────────────────────────────────────
     function init() {
@@ -332,9 +326,10 @@
                 if (err) console.warn("[Motion-Pro] Studio error:", err.message);
                 var url = (result && result.url) || "http://localhost:3000";
                 try { require("child_process").exec('open "' + url + '"'); } catch(e) {}
-                var _mpSessionName = (window.EditorProUI && window.EditorProUI.motionPro && window.EditorProUI.motionPro._sessionName) || "global";
+                var mpUI = window.EditorProUI && window.EditorProUI.motionPro;
+                var _mpSessionName = (mpUI && mpUI.getSessionName) ? mpUI.getSessionName() : "global";
                 showToast("Abriendo Remotion Studio (sesión: " + _mpSessionName + ")", "info");
-            }, window.EditorProUI && window.EditorProUI.motionPro && window.EditorProUI.motionPro._outputDir);
+            }, (window.EditorProUI && window.EditorProUI.motionPro && window.EditorProUI.motionPro.getOutputDir) ? window.EditorProUI.motionPro.getOutputDir() : undefined);
         });
         on("btn-mp-docs", "click", function() {
             try { require("child_process").exec('open "http://localhost:' + MotionPro.SERVER_PORT + '/docs/docs.html"'); } catch(e) {}
@@ -360,131 +355,28 @@
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // TRANSCRIPT — fetch from sequence (uses TranscriptParser + TranscriptManager)
+    // TRANSCRIPT — delegates to TranscriptManager module
     // ═══════════════════════════════════════════════════════════════
 
-    function fetchCaptionsFromSequence() {
-        var btn = document.getElementById("btn-fetch-captions");
-        if (btn) { btn.textContent = "Buscando..."; btn.classList.add("btn-disabled"); }
-        var resetBtn = function() {
-            if (btn) { btn.textContent = "🎬 Traer de secuencia"; btn.classList.remove("btn-disabled"); }
-        };
+    function _TM() { return window.TranscriptManager; }
 
-        csInterface.evalScript("getSequenceTranscriptInfo()", function(result) {
-            try {
-                var info = JSON.parse(result);
-                if (info.error) {
-                    showToast(info.error, "error");
-                    resetBtn();
-                    return;
-                }
-
-                // Priority 1: Check known transcript folders
-                var knownFolders = _getTranscriptFolders();
-                for (var kf = 0; kf < knownFolders.length; kf++) {
-                    if (_tryLoadTranscriptFromFolder(knownFolders[kf], info.sequenceName)) {
-                        resetBtn();
-                        return;
-                    }
-                }
-
-                // Priority 2: Search near project/media files
-                var TP = window.TranscriptParser;
-                if (TP) {
-                    var found = TP.findTranscriptFiles(info.projectPath, info.mediaPaths, info.sequenceName);
-                    if (found) {
-                        var fileSrt = TP.sttResultToSRT(found.result);
-                        window._epLoadTranscriptText(fileSrt, path.basename(found.file));
-                        _saveLastTranscriptFolder(found.file);
-                        resetBtn();
-                        return;
-                    }
-
-                    var embedded = TP.readTranscriptFromProjectFile(info.projectPath);
-                    if (embedded && embedded.words.length > 5) {
-                        var embSrt = TP.sttResultToSRT(embedded);
-                        window._epLoadTranscriptText(embSrt, "transcript de Premiere (" + info.sequenceName + ")");
-                        resetBtn();
-                        return;
-                    }
-
-                    var captions = TP.readCaptionsFromProjectFile(info.projectPath, info.sequenceId);
-                    if (captions && captions.length > 0) {
-                        var capSrt = "";
-                        var secsToSRTTime = window._epSecsToSRTTime;
-                        for (var i = 0; i < captions.length; i++) {
-                            var cap = captions[i];
-                            capSrt += (i + 1) + "\n";
-                            capSrt += secsToSRTTime(cap.startTime) + " --> " + secsToSRTTime(cap.endTime) + "\n";
-                            capSrt += cap.text + "\n\n";
-                        }
-                        window._epLoadTranscriptText(capSrt.trim(), "secuencia (" + captions.length + " captions)");
-                        resetBtn();
-                        return;
-                    }
-                }
-
-                resetBtn();
-                showTranscriptExportInstructions();
-            } catch(e) {
-                resetBtn();
-                showToast("Error al buscar transcript: " + e.message, "error");
-            }
-        });
-    }
+    function fetchCaptionsFromSequence() { if (_TM()) _TM().fetchCaptionsFromSequence(); }
 
     function loadSRTFile() {
         var fileInput = document.getElementById("srt-file-input");
         if (fileInput) fileInput.click();
     }
 
-    function handleFileSelect(evt) {
-        var file = evt.target.files[0];
-        if (!file) return;
-
-        if (fs && path) {
-            try {
-                var content = fs.readFileSync(file.path, "utf8");
-                window._epLoadTranscriptText(content, file.name);
-                _saveLastTranscriptFolder(file.path);
-            } catch(e) {
-                showToast("Error al leer archivo: " + e.message, "error");
-            }
-        } else {
-            var reader = new FileReader();
-            reader.onload = function(e) { window._epLoadTranscriptText(e.target.result, file.name); };
-            reader.readAsText(file);
-        }
-        evt.target.value = "";
-    }
-
-    function pasteFromClipboard() {
-        if (navigator.clipboard && navigator.clipboard.readText) {
-            navigator.clipboard.readText().then(function(text) {
-                if (text && text.trim()) window._epLoadTranscriptText(text, "clipboard");
-                else showToast("Portapapeles vacío", "info");
-            }).catch(function() { showToast("No se pudo acceder al portapapeles", "error"); });
-        } else {
-            showToast("Pega el texto directamente en el área de texto", "info");
-        }
-    }
+    function handleFileSelect(evt) { if (_TM()) _TM().handleFileSelect(evt); }
+    function pasteFromClipboard() { if (_TM()) _TM().pasteFromClipboard(); }
 
     function clearTranscript() {
-        state.transcript = "";
-        state.segments = [];
-        state.transcriptJson = null;
-        var textarea = document.getElementById("transcript-input");
-        if (textarea) textarea.value = "";
-        document.getElementById("transcript-info").textContent = "Sin transcripción cargada";
-        hideElement("transcript-stats");
-        clearRenderedTranscript();
+        if (_TM()) _TM().clearTranscript();
         mpUpdateAnalyzeButton();
     }
 
     function onTranscriptChange() {
-        if (window.TranscriptManager && window.TranscriptManager.onTranscriptChange) {
-            window.TranscriptManager.onTranscriptChange();
-        }
+        if (_TM()) _TM().onTranscriptChange();
         mpUpdateAnalyzeButton();
     }
 
@@ -752,9 +644,9 @@
 
     function _cleanupBeforeReload(callback) {
         try {
-            if (window.motionPro && typeof window.motionPro.stopServer === "function") {
+            if (window._epMotionPro && typeof window._epMotionPro.stopServer === "function") {
                 console.log("[Editor-Pro] Stopping motion-server before reload...");
-                window.motionPro.stopServer(function() { callback(); });
+                window._epMotionPro.stopServer(function() { callback(); });
                 setTimeout(callback, 2000);
                 return;
             }

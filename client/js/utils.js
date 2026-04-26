@@ -257,6 +257,7 @@
     global._epCopyToClipboard = copyToClipboard;
     global._epNavigateToTime = navigateToTime;
     global._epShowInfoModal = showInfoModal;
+    global._epHideInfoModal = hideInfoModal;
     global._epExpandSection = expandSection;
 
 })(window);
