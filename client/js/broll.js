@@ -333,14 +333,13 @@
             outputDir: outputDir
         }, function(err, result) {
             if (err) {
-                clip.status = "error";
-                clip.lastError = err.message;
+                // Remove the failed clip entry — don't leave error ghosts
+                self.clips = self.clips.filter(function(c) { return c.id !== clip.id; });
                 if (onProgress) onProgress(proposalId, "error", 0);
                 return callback(err);
             }
             if (result.error) {
-                clip.status = "error";
-                clip.lastError = result.error;
+                self.clips = self.clips.filter(function(c) { return c.id !== clip.id; });
                 return callback(new Error(result.error));
             }
             var jobId = result.jobId;
@@ -348,8 +347,7 @@
 
             self._pollJob(jobId, function(pollErr, job) {
                 if (pollErr) {
-                    clip.status = "error";
-                    clip.lastError = pollErr.message;
+                    self.clips = self.clips.filter(function(c) { return c.id !== clip.id; });
                     if (onProgress) onProgress(proposalId, "error", 0);
                     return callback(pollErr);
                 }

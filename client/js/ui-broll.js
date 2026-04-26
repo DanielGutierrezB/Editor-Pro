@@ -296,8 +296,16 @@
                 broll.generating = false;
                 if (btn) btn.disabled = false;
                 broll.saveState(_sessionKey);
-                showToast("Imágenes generadas. Revisa y anima los clips.", "success");
-                _el("br-step-hint-2") && (_el("br-step-hint-2").textContent = broll.clips.length + " clips");
+                if (broll.clips.length > 0) {
+                    showToast(broll.clips.length + " imágenes generadas. Revisa y anima los clips.", "success");
+                    _el("br-step-hint-2") && (_el("br-step-hint-2").textContent = broll.clips.length + " clips");
+                } else {
+                    showToast("No se generaron imágenes — revisa la conexión con ComfyUI", "error");
+                    // Hide step 3 if no clips
+                    var step3 = _el("br-clips-section");
+                    if (step3) step3.style.display = "none";
+                }
+                _clearHeaderProgress();
                 _renderClips();
             });
         });
