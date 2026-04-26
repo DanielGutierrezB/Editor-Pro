@@ -334,7 +334,9 @@
             }
 
             var btn = _el("btn-br-generate");
-            if (btn) btn.disabled = true;
+            if (btn) { btn.disabled = true; btn.style.display = "none"; }
+            var stopBtn = _el("btn-br-stop");
+            if (stopBtn) stopBtn.style.display = "";
             broll.generating = true;
             broll.generateCancelRequested = false;
 
@@ -348,7 +350,8 @@
 
             _generateNext(selected, 0, function() {
                 broll.generating = false;
-                if (btn) btn.disabled = false;
+                if (btn) { btn.disabled = false; btn.style.display = ""; }
+                if (stopBtn) stopBtn.style.display = "none";
                 broll.saveState(_sessionKey);
                 if (broll.clips.length > 0) {
                     showToast(broll.clips.length + " imágenes generadas. Revisa y anima los clips.", "success");
