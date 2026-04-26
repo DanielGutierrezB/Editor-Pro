@@ -102,6 +102,7 @@
         if (!broll) return;
 
         // Analysis uses ai-analyzer directly — no server needed
+        if (window.EPLogger) EPLogger.log("broll", "analyze-start", "transcriptLen=" + transcript.length);
         _doAnalysis(transcript);
     }
 
@@ -118,7 +119,11 @@
 
         broll.analyze(transcript, aiSettings, function(err, proposals) {
             if (btn) { btn.disabled = false; btn.textContent = "🎯 Analizar B-Roll"; }
-            if (err) { showToast("Error al analizar: " + err.message, "error"); return; }
+            if (err) {
+                if (window.EPLogger) EPLogger.error("broll", "analyze-error", err.message);
+                showToast("Error al analizar: " + err.message, "error");
+                return;
+            }
             if (!proposals || proposals.length === 0) {
                 showToast("No se encontraron momentos de B-roll", "warning");
                 return;
@@ -222,8 +227,14 @@
         if (selected.length === 0) { showToast("Selecciona al menos una propuesta", "error"); return; }
         if (!broll) return;
 
+        if (window.EPLogger) EPLogger.log("broll", "generate-start", selected.length + " proposals, provider=" + (broll.getSettings().imageProvider || "?"));
+
         broll.checkServer(function(ok) {
-            if (!ok) { showToast("Inicia el servidor Motion-Pro primero", "error"); return; }
+            if (!ok) {
+                if (window.EPLogger) EPLogger.error("broll", "generate-error", "server not running");
+                showToast("Inicia el servidor Motion-Pro primero", "error");
+                return;
+            }
 
             var btn = _el("btn-br-generate");
             if (btn) btn.disabled = true;
@@ -256,7 +267,12 @@
                 _refreshClipCard(pId, status);
             },
             function(err) {
-                if (err) showToast("Error generando " + (idx + 1) + ": " + err.message, "error");
+                if (err) {
+                    if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "clip " + (idx + 1) + ": " + err.message);
+                    showToast("Error generando " + (idx + 1) + ": " + err.message, "error");
+                } else {
+                    if (window.EPLogger) EPLogger.log("broll", "generate-image-ok", "clip " + (idx + 1) + "/" + ids.length);
+                }
                 _generateNext(ids, idx + 1, done);
             }
         );
@@ -396,7 +412,7 @@
         var clip = broll._findClipById(clipId);
         if (!clip) return;
         broll.placeInTimeline(clipId, csInterface, function(err) {
-            if (err) { showToast("Error al colocar: " + err.message, "error"); return; }
+            if (err) { if (window.EPLogger) EPLogger.error("broll", "place-error", err.message); showToast("Error al colocar: " + err.message, "error"); return; }
             broll.saveState(_sessionKey);
             showToast("B-roll colocado en timeline", "success");
             _renderClips();
@@ -420,7 +436,7 @@
         broll.animateClip(clipId,
             function(cId, status) { _refreshClipCard(cId, status); },
             function(err, clip) {
-                if (err) { showToast("Error al animar: " + err.message, "error"); }
+                if (err) { if (window.EPLogger) EPLogger.error("broll", "animate-error", err.message); showToast("Error al animar: " + err.message, "error"); }
                 else { showToast("Video generado", "success"); }
                 broll.saveState(_sessionKey);
                 _renderClips();
@@ -438,7 +454,7 @@
             broll.regenerateImage(clipId, feedback,
                 function(pId, status) { _refreshClipCard(pId, status); },
                 function(err, clip) {
-                    if (err) { showToast("Error al regenerar: " + err.message, "error"); return; }
+                    if (err) { if (window.EPLogger) EPLogger.error("broll", "regen-error", err.message); showToast("Error al regenerar: " + err.message, "error"); return; }
                     broll.saveState(_sessionKey);
                     showToast("Imagen regenerada", "success");
                     _renderClips();
