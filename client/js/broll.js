@@ -323,6 +323,14 @@
 
         if (onProgress) onProgress(proposalId, "generating", 0);
 
+        // Build a readable clip name: SeqName_BRoll_01
+        var proposalIndex = 0;
+        for (var pi = 0; pi < self.proposals.length; pi++) {
+            if (self.proposals[pi].id === proposalId) { proposalIndex = pi; break; }
+        }
+        var seqPrefix = (self._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
+        var clipName = seqPrefix + "_BRoll_" + String(proposalIndex + 1).padStart(2, "0");
+
         self._post("/api/broll/generate-image", {
             proposalId: proposalId,
             description: proposal.description,
@@ -330,7 +338,8 @@
             endpointUrl: settings.imageEndpointUrl,
             apiKey: settings.imageFalApiKey,
             model: settings.imageFalModel,
-            outputDir: outputDir
+            outputDir: outputDir,
+            clipName: clipName
         }, function(err, result) {
             if (err) {
                 // Remove the failed clip entry — don't leave error ghosts
@@ -486,7 +495,15 @@
         var durationSecs = Math.max(1, endSecs - startSecs);
 
         var isVideo = filePath.toLowerCase().indexOf(".mp4") !== -1 || filePath.toLowerCase().indexOf(".mov") !== -1;
-        var clipName = "BRoll_" + (clip.proposalId || "clip") + "_v" + (clip.activeVersion + 1) + (isVideo ? ".mp4" : ".png");
+        // Build readable clip name: SeqName_BRoll_01_v1
+        var proposalIndex = 0;
+        for (var pi = 0; pi < self.proposals.length; pi++) {
+            if (self.proposals[pi].id === clip.proposalId) { proposalIndex = pi; break; }
+        }
+        var seqPrefix = (self._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
+        var clipNum = String(proposalIndex + 1);
+        if (clipNum.length < 2) clipNum = "0" + clipNum;
+        var clipName = seqPrefix + "_BRoll_" + clipNum + "_v" + (clip.activeVersion + 1) + (isVideo ? "" : "");
 
         var tmpFile = pathMod ? pathMod.join(pathMod.dirname(filePath), "broll_place_" + Date.now() + ".json") : "/tmp/broll_place.json";
         var payload = {

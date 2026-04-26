@@ -73,7 +73,7 @@ router.post('/analyze', (req, res) => {
 router.post('/generate-image', (req, res) => {
   const {
     proposalId, description, imageProvider = 'placeholder',
-    endpointUrl, apiKey, model, outputDir,
+    endpointUrl, apiKey, model, outputDir, clipName,
   } = req.body;
 
   if (!description) return res.status(400).json({ error: 'description is required' });
@@ -81,8 +81,11 @@ router.post('/generate-image', (req, res) => {
   const sessionDir = outputDir || path.join(os.tmpdir(), 'editorpro-broll');
   if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 
-  const safeId = (proposalId || Date.now()).toString().replace(/[^a-z0-9_-]/gi, '_');
-  const outputPath = path.join(sessionDir, safeId + '.png');
+  // Use readable clipName if provided, fallback to proposalId
+  const fileName = clipName
+    ? clipName.replace(/[^a-z0-9_-]/gi, '_')
+    : (proposalId || Date.now()).toString().replace(/[^a-z0-9_-]/gi, '_');
+  const outputPath = path.join(sessionDir, fileName + '.png');
 
   const jobId = _newJobId();
   _setJob(jobId, { type: 'image', status: 'running', proposalId, outputPath });

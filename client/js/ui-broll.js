@@ -347,11 +347,15 @@
                 var info = JSON.parse(res);
                 if (info.projectPath) {
                     var projDir = require("path").dirname(info.projectPath);
-                    var brollDir = require("path").join(projDir, "BRoll Generation");
+                    var seqName = _sessionKey || info.sequenceName || "default";
+                    // Sanitize sequence name for filesystem
+                    var safeSeqName = seqName.replace(/[<>:"/\\|?*]/g, "_").substring(0, 80);
+                    var brollDir = require("path").join(projDir, "BRoll Generation", safeSeqName);
                     if (!require("fs").existsSync(brollDir)) {
                         require("fs").mkdirSync(brollDir, { recursive: true });
                     }
                     broll.setOutputDir(brollDir);
+                    broll._currentSequenceName = safeSeqName;
                     if (window.EPLogger) EPLogger.log("broll", "output-dir", brollDir);
                 }
             } catch(e) {}
