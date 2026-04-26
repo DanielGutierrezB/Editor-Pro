@@ -68,7 +68,7 @@
 
                 if (changed && !_isAnyBatchActive()) {
                     restoreSequenceState(newSeqName);
-                    if (global.mpSwitchToSequence) global.mpSwitchToSequence();
+                    if (global.EditorProUI && global.EditorProUI.motionPro && global.EditorProUI.motionPro.switchToSequence) global.EditorProUI.motionPro.switchToSequence();
                 } else if (isFirstLoad) {
                     if (!state.transcript && (!state.segments || state.segments.length === 0)) {
                         if (global.autoLoadTranscriptForSequence) global.autoLoadTranscriptForSequence(newSeqName);
@@ -82,7 +82,7 @@
                 var data = JSON.parse(result);
                 if (data.success && data.path) {
                     state.transcribeFolder = data.path;
-                    if (global._saveLastTranscriptFolder) global._saveLastTranscriptFolder(data.path + "/dummy");
+                    if (global._epSaveLastTranscriptFolder) global._epSaveLastTranscriptFolder(data.path + "/dummy");
                     if (global._epBuildTranscriptCache) global._epBuildTranscriptCache();
                 }
             } catch(e) {}
@@ -109,14 +109,14 @@
                         document.getElementById("seq-meta").textContent = meta.join(" · ");
                         if (_isAnyBatchActive()) return;
                         restoreSequenceState(data.name);
-                        if (global.mpSwitchToSequence) global.mpSwitchToSequence();
+                        if (global.EditorProUI && global.EditorProUI.motionPro && global.EditorProUI.motionPro.switchToSequence) global.EditorProUI.motionPro.switchToSequence();
                         csInterface.evalScript("getTranscribeFolder()", function(tfResult) {
                             try {
                                 var tfData = JSON.parse(tfResult);
                                 if (tfData.success && tfData.path) {
                                     var _prevFolder = state.transcribeFolder;
                                     state.transcribeFolder = tfData.path;
-                                    if (global._saveLastTranscriptFolder) global._saveLastTranscriptFolder(tfData.path + "/dummy");
+                                    if (global._epSaveLastTranscriptFolder) global._epSaveLastTranscriptFolder(tfData.path + "/dummy");
                                     if (tfData.path !== _prevFolder && global._epBuildTranscriptCache) global._epBuildTranscriptCache();
                                 }
                             } catch(e) {}
@@ -326,31 +326,31 @@
         // Transcript
         var textarea = document.getElementById("transcript-input");
         if (textarea) textarea.value = state.transcript || "";
-        if (global.onTranscriptChange) global.onTranscriptChange();
+        if (global._epOnTranscriptChange) global._epOnTranscriptChange();
 
         if (state.sttResult && state.sttResult.words && state.sttResult.words.length > 0) {
-            if (global.renderTranscriptFromSegments) global.renderTranscriptFromSegments();
-            if (global.refreshTraerTranscriptButtons) global.refreshTraerTranscriptButtons();
+            if (global._epRenderTranscriptFromSegments) global._epRenderTranscriptFromSegments();
+            if (global._epRefreshTraerTranscriptButtons) global._epRefreshTraerTranscriptButtons();
         } else {
-            if (global.clearRenderedTranscript) global.clearRenderedTranscript();
+            if (global.TranscriptManager && global.TranscriptManager.clearRenderedTranscript) global.TranscriptManager.clearRenderedTranscript();
         }
 
         // SpellCheck
         if (state.clipResults && Object.keys(state.clipResults).length > 0) {
-            if (global.renderSpellCheckResults) global.renderSpellCheckResults();
-            if (global.showElement) global.showElement("sc-results");
-            if (global.hideElement) global.hideElement("sc-empty");
+            if (global.EditorProUI && global.EditorProUI.spellcheck) global.EditorProUI.spellcheck.render();
+            if (global._epShowElement) global._epShowElement("sc-results");
+            if (global._epHideElement) global._epHideElement("sc-empty");
         } else {
             var scList = document.getElementById("sc-clip-list");
             if (scList) scList.innerHTML = "";
-            if (global.hideElement) global.hideElement("sc-results");
-            if (global.showElement) global.showElement("sc-empty");
+            if (global._epHideElement) global._epHideElement("sc-results");
+            if (global._epShowElement) global._epShowElement("sc-empty");
         }
 
         // Smart Supertexts
         if (state.supertexts2 && state.supertexts2.length > 0) {
-            if (global.renderSupertext2Results) {
-                global.renderSupertext2Results({
+            if (global.EditorProUI && global.EditorProUI.supertexts && global.EditorProUI.supertexts.render) {
+                global.EditorProUI.supertexts.render({
                     summary: cached && cached.supertexts2Summary ? "" : state.supertexts2.length + " momentos clave identificados"
                 });
             }
@@ -358,53 +358,53 @@
                 var stSummary = document.getElementById("st2-summary");
                 if (stSummary) stSummary.innerHTML = cached.supertexts2Summary;
             }
-            if (global.showElement) global.showElement("st2-results");
-            if (global.hideElement) global.hideElement("st2-empty");
+            if (global._epShowElement) global._epShowElement("st2-results");
+            if (global._epHideElement) global._epHideElement("st2-empty");
         } else {
             var st2List = document.getElementById("st2-list");
             var st2Sum = document.getElementById("st2-summary");
             if (st2List) st2List.innerHTML = "";
             if (st2Sum) st2Sum.innerHTML = "";
-            if (global.hideElement) global.hideElement("st2-results");
-            if (global.showElement) global.showElement("st2-empty");
+            if (global._epHideElement) global._epHideElement("st2-results");
+            if (global._epShowElement) global._epShowElement("st2-empty");
         }
 
         // Edit Suggestions
         if ((state.es2Highlights && state.es2Highlights.length > 0) ||
             (state.es2Suggestions && state.es2Suggestions.length > 0) ||
             (state.es2Errors && state.es2Errors.length > 0)) {
-            if (global.renderES2Results) global.renderES2Results({ summary: "", overallScore: undefined });
+            if (global.EditorProUI && global.EditorProUI.editSuggestions) global.EditorProUI.editSuggestions.render({ summary: "", overallScore: undefined });
             if (cached && cached.es2ResultSummary) {
                 var es2Summary = document.getElementById("es2-summary");
                 if (es2Summary) es2Summary.innerHTML = cached.es2ResultSummary;
             }
-            if (global.showElement) global.showElement("es2-results");
-            if (global.hideElement) global.hideElement("es2-empty");
+            if (global._epShowElement) global._epShowElement("es2-results");
+            if (global._epHideElement) global._epHideElement("es2-empty");
         } else {
             var es2List = document.getElementById("es2-list");
             var es2Sum = document.getElementById("es2-summary");
             if (es2List) es2List.innerHTML = "";
             if (es2Sum) es2Sum.innerHTML = "";
-            if (global.hideElement) global.hideElement("es2-results");
-            if (global.showElement) global.showElement("es2-empty");
+            if (global._epHideElement) global._epHideElement("es2-results");
+            if (global._epShowElement) global._epShowElement("es2-empty");
         }
 
         // Reel Proposals
         if (state.reelProposals && state.reelProposals.length > 0) {
-            if (global.renderReelResults) global.renderReelResults({ reels: state.reelProposals, assessment: "", notSuitable: [] });
+            if (global.EditorProUI && global.EditorProUI.editSuggestions) global.EditorProUI.editSuggestions.renderReelResults({ reels: state.reelProposals, assessment: "", notSuitable: [] });
             if (cached && cached.reelAssessment) {
                 var rpAssess = document.getElementById("rp-assessment");
                 if (rpAssess) rpAssess.innerHTML = cached.reelAssessment;
             }
-            if (global.showElement) global.showElement("rp-results");
-            if (global.hideElement) global.hideElement("rp-empty");
+            if (global._epShowElement) global._epShowElement("rp-results");
+            if (global._epHideElement) global._epHideElement("rp-empty");
         } else {
             var rpList = document.getElementById("rp-list");
             var rpAssessEl = document.getElementById("rp-assessment");
             if (rpList) rpList.innerHTML = "";
             if (rpAssessEl) rpAssessEl.innerHTML = "";
-            if (global.hideElement) global.hideElement("rp-results");
-            if (global.showElement) global.showElement("rp-empty");
+            if (global._epHideElement) global._epHideElement("rp-results");
+            if (global._epShowElement) global._epShowElement("rp-empty");
         }
     }
 

@@ -17,12 +17,7 @@ function exportSequenceXML() {
     }
 }
 
-function findSequenceById(seqId) {
-    for (var i = 0; i < app.project.sequences.numSequences; i++) {
-        if (app.project.sequences[i].sequenceID === seqId) return app.project.sequences[i];
-    }
-    return null;
-}
+// findSequenceById moved to common.jsx (shared by spellcheck + recording)
 
 function addMarkersFromFile(filePath, seqId) {
     try {

@@ -1142,3 +1142,11 @@ function getClipRangesOnTrack(trackIndex) {
     }
 }
 
+
+// ─── Sequence lookup by ID ─────────────────────────────────
+function findSequenceById(seqId) {
+    for (var i = 0; i < app.project.sequences.numSequences; i++) {
+        if (app.project.sequences[i].sequenceID === seqId) return app.project.sequences[i];
+    }
+    return null;
+}
