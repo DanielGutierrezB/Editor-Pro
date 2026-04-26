@@ -304,10 +304,10 @@ function _runComfyUIWorkflow(baseUrl, clientId, description, modelName, outputPa
       }
     },
     "27": {
-      "class_type": "EmptySD3LatentImage",
+      "class_type": "EmptyLatentImage",
       "inputs": {
-        "width": 1920,
-        "height": 1080,
+        "width": 1024,
+        "height": 576,
         "batch_size": 1
       }
     },
@@ -342,7 +342,13 @@ function _runComfyUIWorkflow(baseUrl, clientId, description, modelName, outputPa
     res.on('end', () => {
       try {
         const parsed = JSON.parse(data);
-        if (parsed.error) return callback(new Error('ComfyUI error: ' + JSON.stringify(parsed.error)));
+        if (parsed.error) {
+          const errMsg = typeof parsed.error === 'object' ? JSON.stringify(parsed.error) : String(parsed.error);
+          console.error('[ComfyUI] Prompt error:', errMsg);
+          // Include node errors if available
+          if (parsed.node_errors) console.error('[ComfyUI] Node errors:', JSON.stringify(parsed.node_errors));
+          return callback(new Error('ComfyUI error: ' + errMsg + (parsed.node_errors ? ' | nodes: ' + JSON.stringify(parsed.node_errors) : '')));
+        }
         const promptId = parsed.prompt_id;
         if (!promptId) return callback(new Error('No prompt_id from ComfyUI'));
         // Step 2: Poll history until complete
