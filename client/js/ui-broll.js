@@ -147,7 +147,55 @@
 
         // Analysis uses ai-analyzer directly — no server needed
         if (window.EPLogger) EPLogger.log("broll", "analyze-start", "transcriptLen=" + transcript.length);
-        _doAnalysis(transcript);
+
+        // Check "Solo en marcadores" toggle — filter B-Roll to marker ranges
+        var markersOnly = document.getElementById("br-markers-only");
+        if (markersOnly && markersOnly.checked && csInterface) {
+            var _markersDone = false;
+            var _markersTimeout = setTimeout(function() {
+                if (_markersDone) return;
+                _markersDone = true;
+                console.warn("[BRoll] getSequenceMarkers timed out after 15s, proceeding without markers");
+                if (window.EPLogger) EPLogger.log("broll", "markers-timeout", "15s exceeded");
+                showToast("Timeout leyendo marcadores — continuando sin filtro", "warning");
+                _doAnalysis(transcript);
+            }, 15000);
+
+            csInterface.evalScript('getSequenceMarkers()', function(res) {
+                if (_markersDone) return;
+                _markersDone = true;
+                clearTimeout(_markersTimeout);
+                try {
+                    var data = JSON.parse(res);
+                    if (data.markers && data.markers.length > 0) {
+                        var markerText = '\n\nGENERAR B-ROLL SOLO EN ESTOS RANGOS DE TIEMPO (marcadores del editor):\n';
+                        for (var i = 0; i < data.markers.length; i++) {
+                            var m = data.markers[i];
+                            var mStart = parseFloat(m.startSeconds);
+                            var mEnd = parseFloat(m.endSeconds);
+                            // Point markers (zero duration): use ±5 seconds range
+                            if (Math.abs(mEnd - mStart) < 0.1) {
+                                mStart = Math.max(0, mStart - 5);
+                                mEnd = mEnd + 5;
+                            }
+                            markerText += '  Marcador ' + (i + 1) + ': [' + mStart.toFixed(1) + 's - ' + mEnd.toFixed(1) + 's] ' + (m.name || '') + '\n';
+                        }
+                        markerText += '\nSOLO propón B-Roll dentro de estos rangos. NO propongas B-Roll fuera de los marcadores.\n';
+                        transcript += markerText;
+
+                        if (window.EPLogger) EPLogger.log("broll", "markers-filter", data.markers.length + " markers loaded");
+                        showToast(data.markers.length + " marcadores detectados", "info");
+                    } else {
+                        showToast("No hay marcadores en la secuencia", "warning");
+                    }
+                } catch(e) {
+                    console.warn("[BRoll] Marker parsing error:", e.message);
+                }
+                _doAnalysis(transcript);
+            });
+        } else {
+            _doAnalysis(transcript);
+        }
     }
 
     function _doAnalysis(transcript) {

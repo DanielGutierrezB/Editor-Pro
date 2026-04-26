@@ -1,11 +1,34 @@
 /**
  * host/broll.jsx — ExtendScript functions for B-Roll tab
  * ES3 compatible: no let/const, no arrow functions, no template literals
+ * Follows the same proven placement pattern as motion.jsx
  */
+
+// ── Bin management ────────────────────────────────────────────────────────────
+
+var _brBaseTrack = -1;
+var _brLastSequenceId = "";
+
+function _getOrCreateBrollBin() {
+    var root = app.project.rootItem;
+    for (var i = 0; i < root.children.numItems; i++) {
+        if (root.children[i].name === "B-Roll" && root.children[i].type === 2) {
+            return root.children[i];
+        }
+    }
+    app.project.rootItem.createBin("B-Roll");
+    for (var j = 0; j < root.children.numItems; j++) {
+        if (root.children[j].name === "B-Roll" && root.children[j].type === 2) {
+            return root.children[j];
+        }
+    }
+    return null;
+}
 
 // ── importAndPlaceBroll(jsonPath) ─────────────────────────────────────────────
 // JSON schema: { clips: [{ filePath, clipName, startTimeSecs, durationSecs, labelColor, trackIndex }] }
-// Creates a "B-Roll" bin and places clips on the specified track (or next available).
+// Creates a "B-Roll" bin with sequence subfolders and places clips using
+// overwriteClip / insertClip (same robust pattern as importAndPlaceMotions).
 
 function importAndPlaceBroll(jsonPath) {
     try {
@@ -15,89 +38,216 @@ function importAndPlaceBroll(jsonPath) {
         f.open("r");
         var raw = f.read();
         f.close();
-        var payload = JSON.parse(raw);
-        var clips = payload.clips;
-        if (!clips || clips.length === 0) return JSON.stringify({ success: true, placed: 0 });
+
+        var data = JSON.parse(raw);
+        if (!data.clips || data.clips.length === 0) {
+            return JSON.stringify({ success: true, placed: 0 });
+        }
 
         var seq = app.project.activeSequence;
         if (!seq) return JSON.stringify({ error: "No active sequence" });
 
-        var fps = getSequenceFps(seq);
+        // Reset base track if sequence changed
+        try {
+            var sid = seq.sequenceID;
+            if (sid && sid !== _brLastSequenceId) {
+                _brLastSequenceId = sid;
+                _brBaseTrack = -1;
+            }
+        } catch(eSid) {}
+
         var bin = _getOrCreateBrollBin();
+        if (!bin) return JSON.stringify({ error: "No se pudo crear bin B-Roll." });
+
+        // Create sequence subfolder inside B-Roll bin
+        var seqBin = bin;
+        try {
+            var firstClip = data.clips[0];
+            if (firstClip && firstClip.clipName) {
+                var seqMatch = firstClip.clipName.match(/^([^_]+)/);
+                if (seqMatch) {
+                    var seqFolderName = seqMatch[1];
+                    var found = false;
+                    if (bin.children) {
+                        for (var sf = 0; sf < bin.children.numItems; sf++) {
+                            if (bin.children[sf].name === seqFolderName && bin.children[sf].type === 2) {
+                                seqBin = bin.children[sf];
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!found) {
+                        bin.createBin(seqFolderName);
+                        for (var sf2 = 0; sf2 < bin.children.numItems; sf2++) {
+                            if (bin.children[sf2].name === seqFolderName && bin.children[sf2].type === 2) {
+                                seqBin = bin.children[sf2];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch(eBin) {}
+
+        // Determine base track: use explicit trackIndex from first clip, or reuse/create
+        var baseTrack = _brBaseTrack;
+
+        // If first clip specifies a trackIndex >= 0, use that
+        var firstTrackIdx = (data.clips[0] && typeof data.clips[0].trackIndex === "number" && data.clips[0].trackIndex >= 0)
+            ? data.clips[0].trackIndex : -1;
+
+        if (firstTrackIdx >= 0) {
+            baseTrack = firstTrackIdx;
+        }
+
+        if (baseTrack < 0 || baseTrack >= seq.videoTracks.numTracks) {
+            var beforeCount = seq.videoTracks.numTracks;
+            try {
+                app.enableQE();
+                var qeSeq = qe.project.getActiveSequence();
+                qeSeq.addTracks(1, beforeCount, 0);
+                $.sleep(500);
+            } catch(eQE) {}
+            var afterCount = seq.videoTracks.numTracks;
+            baseTrack = (afterCount > beforeCount) ? afterCount - 1 : beforeCount - 1;
+        }
+        _brBaseTrack = baseTrack;
+
+        // Ensure track exists
+        while (seq.videoTracks.numTracks <= baseTrack) {
+            try {
+                app.enableQE();
+                var qeSeq2 = qe.project.getActiveSequence();
+                qeSeq2.addTracks(1, seq.videoTracks.numTracks, 0);
+                $.sleep(500);
+            } catch(eQE2) { break; }
+        }
+
+        var inserted = 0;
         var errors = [];
-        var placed = 0;
 
-        for (var i = 0; i < clips.length; i++) {
-            var clip = clips[i];
-            if (!clip || !clip.filePath) continue;
-
-            // Import file
-            var item = _findProjectItemByPath(clip.filePath);
-            if (!item) {
-                var importArr = [clip.filePath];
-                app.project.importFiles(importArr, true, bin, false);
-                item = _findProjectItemByPath(clip.filePath);
-            }
-            if (!item) { errors.push("Could not import: " + clip.filePath); continue; }
-
-            // Move to B-Roll bin if not already there
-            try {
-                if (item.parent !== bin) item.moveBin(bin);
-            } catch(e) {}
-
-            // Set clip name
-            if (clip.clipName) { try { item.name = clip.clipName; } catch(e) {} }
-
-            // Determine track
-            var trackIdx = (typeof clip.trackIndex === "number" && clip.trackIndex >= 0)
-                ? clip.trackIndex
-                : _getBrollBaseTrack(seq);
-
-            // Ensure track exists
-            while (seq.videoTracks.numTracks <= trackIdx) {
-                try { seq.videoTracks.addTrack(); } catch(e) { break; }
-            }
-
-            var track = seq.videoTracks[trackIdx];
-            if (!track) { errors.push("Track " + trackIdx + " unavailable"); continue; }
-
-            var startTicks = Math.round((clip.startTimeSecs || 0) * 254016000000);
-            var startTime = new Time();
-            startTime.ticks = startTicks;
-
-            try {
-                track.insertClip(item, startTime);
-            } catch(e) {
-                errors.push("insertClip failed for " + clip.clipName + ": " + e.toString());
+        for (var c = 0; c < data.clips.length; c++) {
+            var clip = data.clips[c];
+            var filePath = clip.filePath || clip.mp4Path;
+            if (!filePath) {
+                errors.push("No filePath for clip " + c);
                 continue;
             }
 
-            // Set duration by trimming outPoint
-            if (clip.durationSecs && clip.durationSecs > 0) {
-                try {
-                    // Find the clip we just inserted (last clip near startTime)
-                    var trackItem = _findClipNearTime(track, startTicks, 1000000);
-                    if (trackItem) {
-                        var outTicks = startTicks + Math.round(clip.durationSecs * 254016000000);
-                        var outTime = new Time();
-                        outTime.ticks = outTicks;
-                        trackItem.end = outTime;
-                    }
-                } catch(e) {}
+            var mediaFile = new File(filePath);
+            if (!mediaFile.exists) {
+                errors.push("File not found: " + filePath);
+                continue;
             }
+
+            // Import file into seqBin
+            var countBefore = seqBin.children ? seqBin.children.numItems : 0;
+            app.project.importFiles(
+                [mediaFile.fsName],
+                true,
+                seqBin,
+                false
+            );
+
+            // Retry loop: wait for item to appear (up to 25 × 250ms = ~6s)
+            var item = null;
+            var wait;
+            for (wait = 0; wait < 25; wait++) {
+                $.sleep(250);
+                if (seqBin.children && seqBin.children.numItems > countBefore) {
+                    item = seqBin.children[seqBin.children.numItems - 1];
+                }
+                if (!item) {
+                    item = _findProjectItemByPath(mediaFile.fsName, seqBin);
+                }
+                if (item) break;
+            }
+            if (!item) {
+                errors.push("Imported but could not find item (timeout): " + filePath);
+                continue;
+            }
+
+            // Set clip name
+            try { item.name = clip.clipName || ("BR_" + c); } catch(e) {}
 
             // Set label color
-            if (typeof clip.labelColor === "number") {
-                try { item.setColorLabel(clip.labelColor); } catch(e) {}
+            try {
+                if (clip.labelColor !== undefined && clip.labelColor >= 0) {
+                    item.setColorLabel(clip.labelColor);
+                }
+            } catch(eLabel) {}
+
+            // Calculate start position as string ticks
+            var startTicks = String(Math.round((clip.startTimeSecs || 0) * TICKS_PER_SECOND));
+            var track = seq.videoTracks[baseTrack];
+            if (!track) {
+                errors.push("Track " + baseTrack + " not available.");
+                continue;
             }
 
-            placed++;
+            // Place clip: overwriteClip first, fall back to insertClip
+            var placed = false;
+            try {
+                track.overwriteClip(item, startTicks);
+                placed = true;
+            } catch(eOw) {
+                try {
+                    track.insertClip(item, startTicks, baseTrack, 0);
+                    placed = true;
+                } catch(e4) {
+                    try {
+                        track.insertClip(item, startTicks);
+                        placed = true;
+                    } catch(e2) {
+                        errors.push("Place error on clip " + c + ": " + eOw.message + " | " + e4.message + " | " + e2.message);
+                        continue;
+                    }
+                }
+            }
+            if (placed) inserted++;
+            $.sleep(300);
+
+            // Set clip duration by trimming end point
+            try {
+                var durationSecs = parseFloat(clip.durationSecs) || 0;
+                if (durationSecs > 0) {
+                    var numClips = track.clips.numItems;
+                    for (var ci = numClips - 1; ci >= 0; ci--) {
+                        var trackClip = track.clips[ci];
+                        var clipStartSecs = parseFloat(trackClip.start.seconds);
+                        if (Math.abs(clipStartSecs - (clip.startTimeSecs || 0)) < 1.0) {
+                            var endTicks = Math.round(((clip.startTimeSecs || 0) + durationSecs) * TICKS_PER_SECOND);
+                            trackClip.end = endTicks.toString();
+                            break;
+                        }
+                    }
+                }
+            } catch(eDur) {}
+            $.sleep(100);
         }
 
-        return JSON.stringify({ success: true, placed: placed, errors: errors });
+        if (inserted === 0 && errors.length > 0) {
+            return JSON.stringify({
+                error: errors.join("; "),
+                inserted: 0,
+                trackIndex: baseTrack,
+                videoTrackNumber: baseTrack + 1,
+                errors: errors
+            });
+        }
+
+        return JSON.stringify({
+            success: true,
+            placed: inserted,
+            inserted: inserted,
+            trackIndex: baseTrack,
+            videoTrackNumber: baseTrack + 1,
+            errors: errors
+        });
 
     } catch(e) {
-        return JSON.stringify({ error: e.toString() });
+        return JSON.stringify({ error: "importAndPlaceBroll error: " + e.message });
     }
 }
 
@@ -114,49 +264,83 @@ function replaceBrollClip(jsonPath) {
         var raw = f.read();
         f.close();
         var payload = JSON.parse(raw);
-        if (!payload.filePath) return JSON.stringify({ error: "filePath required" });
+        var filePath = payload.filePath || payload.mp4Path;
+        if (!filePath) return JSON.stringify({ error: "filePath required" });
 
         var seq = app.project.activeSequence;
         if (!seq) return JSON.stringify({ error: "No active sequence" });
 
         var bin = _getOrCreateBrollBin();
+        if (!bin) return JSON.stringify({ error: "No se pudo crear bin B-Roll." });
 
         // Import new file
-        var item = _findProjectItemByPath(payload.filePath);
-        if (!item) {
-            app.project.importFiles([payload.filePath], true, bin, false);
-            item = _findProjectItemByPath(payload.filePath);
+        var mediaFile = new File(filePath);
+        if (!mediaFile.exists) return JSON.stringify({ error: "File not found: " + filePath });
+
+        var countBefore = bin.children ? bin.children.numItems : 0;
+        app.project.importFiles([mediaFile.fsName], true, bin, false);
+
+        var item = null;
+        for (var w = 0; w < 25; w++) {
+            $.sleep(250);
+            if (bin.children && bin.children.numItems > countBefore) {
+                item = bin.children[bin.children.numItems - 1];
+            }
+            if (!item) item = _findProjectItemByPath(mediaFile.fsName, bin);
+            if (item) break;
         }
-        if (!item) return JSON.stringify({ error: "Could not import: " + payload.filePath });
+        if (!item) return JSON.stringify({ error: "Could not find imported item (timeout)." });
+
         if (payload.clipName) { try { item.name = payload.clipName; } catch(e) {} }
 
         var trackIdx = (typeof payload.trackIndex === "number" && payload.trackIndex >= 0)
             ? payload.trackIndex
-            : _getBrollBaseTrack(seq);
+            : _brBaseTrack;
+
+        if (trackIdx < 0) trackIdx = 0;
 
         while (seq.videoTracks.numTracks <= trackIdx) {
-            try { seq.videoTracks.addTrack(); } catch(e) { break; }
+            try {
+                app.enableQE();
+                var qeSeq = qe.project.getActiveSequence();
+                qeSeq.addTracks(1, seq.videoTracks.numTracks, 0);
+                $.sleep(500);
+            } catch(eQE) { break; }
         }
 
         var track = seq.videoTracks[trackIdx];
         if (!track) return JSON.stringify({ error: "Track unavailable" });
 
-        var startTicks = Math.round((payload.startTimeSecs || 0) * 254016000000);
-        var startTime = new Time();
-        startTime.ticks = startTicks;
+        var startTicks = String(Math.round((payload.startTimeSecs || 0) * TICKS_PER_SECOND));
 
-        track.insertClip(item, startTime);
-
-        if (payload.durationSecs && payload.durationSecs > 0) {
+        // Place: overwriteClip first, fall back to insertClip
+        try {
+            track.overwriteClip(item, startTicks);
+        } catch(eOw) {
             try {
-                var trackItem = _findClipNearTime(track, startTicks, 1000000);
-                if (trackItem) {
-                    var outTicks = startTicks + Math.round(payload.durationSecs * 254016000000);
-                    var outTime = new Time();
-                    outTime.ticks = outTicks;
-                    trackItem.end = outTime;
+                track.insertClip(item, startTicks, trackIdx, 0);
+            } catch(e4) {
+                try {
+                    track.insertClip(item, startTicks);
+                } catch(e2) {
+                    return JSON.stringify({ error: "Place error: " + eOw.message + " | " + e4.message + " | " + e2.message });
                 }
-            } catch(e) {}
+            }
+        }
+
+        // Set duration
+        if (payload.durationSecs && parseFloat(payload.durationSecs) > 0) {
+            $.sleep(300);
+            try {
+                var durationSecs = parseFloat(payload.durationSecs);
+                for (var ci = track.clips.numItems - 1; ci >= 0; ci--) {
+                    var tc = track.clips[ci];
+                    if (Math.abs(parseFloat(tc.start.seconds) - (payload.startTimeSecs || 0)) < 1.0) {
+                        tc.end = String(Math.round(((payload.startTimeSecs || 0) + durationSecs) * TICKS_PER_SECOND));
+                        break;
+                    }
+                }
+            } catch(eDur) {}
         }
 
         return JSON.stringify({ success: true });
@@ -167,7 +351,6 @@ function replaceBrollClip(jsonPath) {
 }
 
 // ── getBrollTrackInfo() ───────────────────────────────────────────────────────
-// Returns info about the current active sequence's video track count
 
 function getBrollTrackInfo() {
     try {
@@ -175,71 +358,10 @@ function getBrollTrackInfo() {
         if (!seq) return JSON.stringify({ trackCount: 0 });
         return JSON.stringify({
             trackCount: seq.videoTracks.numTracks,
-            nextAvailable: _getBrollBaseTrack(seq)
+            brollTrack: _brBaseTrack,
+            videoTrackNumber: _brBaseTrack >= 0 ? _brBaseTrack + 1 : -1
         });
     } catch(e) {
         return JSON.stringify({ error: e.toString() });
     }
-}
-
-// ── Private helpers ───────────────────────────────────────────────────────────
-
-function _getOrCreateBrollBin() {
-    var root = app.project.rootItem;
-    for (var i = 0; i < root.children.numItems; i++) {
-        var child = root.children[i];
-        if (child && child.name === "B-Roll" && child.type === ProjectItemType.BIN) {
-            return child;
-        }
-    }
-    return root.createBin("B-Roll");
-}
-
-function _getBrollBaseTrack(seq) {
-    // Find the next track above all existing content
-    var count = seq.videoTracks.numTracks;
-    for (var i = count - 1; i >= 0; i--) {
-        var track = seq.videoTracks[i];
-        if (track && track.clips && track.clips.numItems > 0) {
-            return i + 1;
-        }
-    }
-    return count > 0 ? count : 0;
-}
-
-function _findClipNearTime(track, targetTicks, toleranceTicks) {
-    var best = null;
-    var bestDist = toleranceTicks + 1;
-    for (var i = 0; i < track.clips.numItems; i++) {
-        var clip = track.clips[i];
-        if (!clip) continue;
-        var dist = Math.abs(clip.start.ticks - targetTicks);
-        if (dist < bestDist) {
-            bestDist = dist;
-            best = clip;
-        }
-    }
-    return best;
-}
-
-function _findProjectItemByPath(filePath) {
-    function search(item) {
-        if (!item) return null;
-        if (item.type === ProjectItemType.FILE) {
-            try {
-                if (item.getMediaPath && item.getMediaPath() === filePath) return item;
-            } catch(e) {}
-            try {
-                if (item.mediaPath && item.mediaPath === filePath) return item;
-            } catch(e) {}
-        }
-        if (item.type === ProjectItemType.BIN || item === app.project.rootItem) {
-            for (var i = 0; i < item.children.numItems; i++) {
-                var found = search(item.children[i]);
-                if (found) return found;
-            }
-        }
-        return null;
-    }
-    return search(app.project.rootItem);
 }
