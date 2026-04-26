@@ -689,9 +689,21 @@
                                     btn.title = "Actualizado! Recargando...";
                                     _cleanupBeforeReload(function() { location.reload(); });
                                 } else {
-                                    btn.innerHTML = "❌";
-                                    btn.title = "Error: " + (err2.message || "git pull falló");
-                                    setTimeout(function() { btn.innerHTML = originalHTML; btn.title = "Recargar panel"; }, 3000);
+                                    // Fallback: force reset to remote (nuclear option — always works)
+                                    exec("cd '" + extensionPath + "' && BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main) && git fetch origin $BRANCH && git reset --hard origin/$BRANCH 2>&1",
+                                        { timeout: 30000 },
+                                        function(err3) {
+                                            if (!err3) {
+                                                btn.innerHTML = "✅";
+                                                btn.title = "Actualizado (reset)! Recargando...";
+                                                _cleanupBeforeReload(function() { location.reload(); });
+                                            } else {
+                                                btn.innerHTML = "❌";
+                                                btn.title = "Error: " + (err3.message || "git pull falló");
+                                                setTimeout(function() { btn.innerHTML = originalHTML; btn.title = "Recargar panel"; }, 3000);
+                                            }
+                                        }
+                                    );
                                 }
                             }
                         );
