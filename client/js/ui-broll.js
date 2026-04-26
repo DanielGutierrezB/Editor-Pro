@@ -77,7 +77,19 @@
         var warn = _el("br-no-transcript");
         if (warn) warn.style.display = transcriptSrc.trim() ? "none" : "";
         var btn = _el("btn-br-analyze");
-        if (btn) btn.disabled = !transcriptSrc.trim();
+        if (btn) {
+            var hasTranscript = !!transcriptSrc.trim();
+            btn.disabled = !hasTranscript;
+            if (hasTranscript) {
+                btn.classList.remove("btn-disabled");
+            } else {
+                btn.classList.add("btn-disabled");
+            }
+        }
+        var hint = _el("br-step-hint-1");
+        if (hint && transcriptSrc.trim()) {
+            hint.textContent = "Listo para analizar";
+        }
     }
 
     function startAnalysis() {
