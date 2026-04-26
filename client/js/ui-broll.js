@@ -533,15 +533,38 @@
     }
 
     function _placeClip(clipId, callback) {
-        if (!broll || !csInterface) { if (callback) callback(); return; }
+        if (!broll) {
+            console.error("[BRoll] _placeClip: broll not initialized");
+            showToast("Error: módulo B-Roll no inicializado", "error");
+            if (callback) callback();
+            return;
+        }
+        if (!csInterface) {
+            console.error("[BRoll] _placeClip: csInterface not available");
+            showToast("Error: CSInterface no disponible", "error");
+            if (callback) callback();
+            return;
+        }
         var clip = broll._findClipById(clipId);
-        if (!clip) { if (callback) callback(); return; }
+        if (!clip) {
+            console.error("[BRoll] _placeClip: clip not found:", clipId);
+            showToast("Error: clip no encontrado", "error");
+            if (callback) callback();
+            return;
+        }
+        var version = clip.versions[clip.activeVersion];
+        console.log("[BRoll] _placeClip:", clipId, "version:", clip.activeVersion,
+            "imagePath:", version ? version.imagePath : "NONE",
+            "videoPath:", version ? version.videoPath : "NONE",
+            "status:", clip.status);
         broll.placeInTimeline(clipId, csInterface, function(err) {
             if (err) {
                 if (window.EPLogger) EPLogger.error("broll", "place-error", err.message);
+                console.error("[BRoll] placeInTimeline error:", err.message);
                 showToast("Error al colocar: " + err.message, "error");
             } else {
                 if (window.EPLogger) EPLogger.log("broll", "place-ok", clipId + " at " + clip.startTime);
+                showToast("Clip colocado en timeline", "success");
                 broll.saveState(_sessionKey);
                 _renderClips();
             }

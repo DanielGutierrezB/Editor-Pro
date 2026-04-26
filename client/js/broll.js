@@ -463,13 +463,20 @@
     BRoll.prototype.placeInTimeline = function(clipId, csInterface, callback) {
         var self = this;
         var clip = self._findClipById(clipId);
-        if (!clip) return callback(new Error("Clip no encontrado"));
+        if (!clip) return callback(new Error("Clip no encontrado: " + clipId));
         var version = clip.versions[clip.activeVersion];
-        if (!version) return callback(new Error("No hay versión disponible"));
+        if (!version) return callback(new Error("No hay versión disponible para clip " + clipId));
 
         var filePath = version.videoPath || version.imagePath;
-        if (!filePath || !fs || !fs.existsSync(filePath)) {
-            return callback(new Error("Archivo no encontrado: " + filePath));
+        console.log("[BRoll] placeInTimeline — clipId:", clipId, "filePath:", filePath, "exists:", fs ? fs.existsSync(filePath) : "no-fs");
+        if (!filePath) {
+            return callback(new Error("Sin ruta de archivo — regenera la imagen"));
+        }
+        if (!fs) {
+            return callback(new Error("Módulo fs no disponible"));
+        }
+        if (!fs.existsSync(filePath)) {
+            return callback(new Error("Archivo no existe: " + filePath));
         }
 
         var settings = self._settings;
