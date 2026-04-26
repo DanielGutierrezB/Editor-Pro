@@ -41,17 +41,66 @@
 
     function _el(id) { return document.getElementById(id); }
 
-    function _setServerStatus(online) {
-        var dot = _el("br-server-dot");
-        var text = _el("br-server-text");
-        if (!dot || !text) return;
-        dot.className = "br-server-dot " + (online ? "br-dot-on" : "br-dot-off");
-        text.textContent = online ? "Servidor activo" : "Servidor detenido";
+    function _setDotStatus(dotId, textId, online, label) {
+        var dot = _el(dotId);
+        var text = _el(textId);
+        if (dot) dot.className = "br-server-dot " + (online ? "br-dot-on" : "br-dot-off");
+        if (text) text.textContent = label;
     }
 
     function _refreshServerStatus() {
         if (!broll) return;
-        broll.checkServer(function(ok) { _setServerStatus(ok); });
+
+        // 1. Motion-Pro server
+        broll.checkServer(function(ok) {
+            _setDotStatus("br-dep-server-dot", "br-dep-server-text", ok,
+                ok ? "Motion Server (:3847)" : "Motion Server — detenido");
+        });
+
+        // 2. ComfyUI
+        var settings = broll.getSettings();
+        if (settings.imageProvider === "comfyui") {
+            var comfyUrl = settings.imageEndpointUrl || "http://localhost:8188";
+            try {
+                var http2 = require("http");
+                var req = http2.get(comfyUrl + "/system_stats", function(res) {
+                    var data = "";
+                    res.on("data", function(c) { data += c; });
+                    res.on("end", function() {
+                        try {
+                            var stats = JSON.parse(data);
+                            var device = stats.devices && stats.devices[0] ? stats.devices[0].name : "?";
+                            _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", true,
+                                "ComfyUI (" + device + ")");
+                        } catch(e) {
+                            _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", false, "ComfyUI — no responde");
+                        }
+                    });
+                });
+                req.on("error", function() {
+                    _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", false,
+                        "ComfyUI — no conecta (" + comfyUrl + ")");
+                });
+                req.setTimeout(3000, function() { req.destroy(); });
+            } catch(e) {
+                _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", false, "ComfyUI — error");
+            }
+        } else {
+            _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", false, "ComfyUI — no seleccionado");
+            var comfyRow = _el("br-dep-comfy-row");
+            if (comfyRow) comfyRow.style.display = "none";
+        }
+
+        // 3. ffmpeg
+        try {
+            var exec = require("child_process").exec;
+            exec("ffmpeg -version 2>/dev/null || /opt/homebrew/bin/ffmpeg -version 2>/dev/null", { timeout: 3000 }, function(err) {
+                _setDotStatus("br-dep-ffmpeg-dot", "br-dep-ffmpeg-text", !err,
+                    !err ? "ffmpeg ✓" : "ffmpeg — no instalado");
+            });
+        } catch(e) {
+            _setDotStatus("br-dep-ffmpeg-dot", "br-dep-ffmpeg-text", false, "ffmpeg — error");
+        }
     }
 
     function _getTranscriptText() {
@@ -524,6 +573,7 @@
             trackIndex:       _getSelectVal("br-track-select")
         });
         showToast("Configuración B-Roll guardada", "success");
+        _refreshServerStatus(); // re-check dependencies with new settings
     }
 
     function _setSelectVal(id, val) { var el = _el(id); if (el && val !== undefined) el.value = val; }

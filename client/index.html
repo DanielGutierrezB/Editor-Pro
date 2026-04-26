@@ -1223,11 +1223,20 @@
             </div>
             <div class="tool-card-body hidden" id="broll-body">
 
-                <!-- Server Status -->
-                <div class="br-server-status">
-                    <span id="br-server-dot" class="br-server-dot br-dot-off"></span>
-                    <span id="br-server-text" class="br-server-label">Verificando servidor...</span>
-                    <span style="font-size:10px; color:var(--text-muted); flex:1;">— solo para generar imágenes/video</span>
+                <!-- Dependency Status -->
+                <div class="br-deps-status">
+                    <div class="br-dep-row" id="br-dep-server-row">
+                        <span id="br-dep-server-dot" class="br-server-dot br-dot-off"></span>
+                        <span id="br-dep-server-text" class="br-server-label">Verificando...</span>
+                    </div>
+                    <div class="br-dep-row" id="br-dep-comfy-row">
+                        <span id="br-dep-comfy-dot" class="br-server-dot br-dot-off"></span>
+                        <span id="br-dep-comfy-text" class="br-server-label">Verificando ComfyUI...</span>
+                    </div>
+                    <div class="br-dep-row" id="br-dep-ffmpeg-row">
+                        <span id="br-dep-ffmpeg-dot" class="br-server-dot br-dot-off"></span>
+                        <span id="br-dep-ffmpeg-text" class="br-server-label">Verificando ffmpeg...</span>
+                    </div>
                 </div>
 
                 <!-- Steps Wrapper -->

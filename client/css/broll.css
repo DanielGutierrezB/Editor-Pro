@@ -1,14 +1,18 @@
 /* ── B-Roll Tab ─────────────────────────────────────────────────────────────── */
 
-/* Server status bar */
-.br-server-status {
+/* Dependencies status */
+.br-deps-status {
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    gap: 2px;
     padding: 6px 0 4px;
     font-size: 11px;
     color: var(--text-secondary);
-    flex-wrap: wrap;
+}
+.br-dep-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 .br-server-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .br-dot-on  { background: var(--success); box-shadow: 0 0 4px var(--success); }
