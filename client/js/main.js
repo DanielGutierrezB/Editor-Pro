@@ -681,7 +681,7 @@
                     if (stdout && stdout.trim() && stdout.indexOf("files changed") !== -1) {
                         btn.innerHTML = "⬇️";
                         btn.title = "Descargando update...";
-                        exec("cd '" + extensionPath + "' && BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main) && git pull origin $BRANCH 2>&1",
+                        exec("cd '" + extensionPath + "' && BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main) && git stash -q 2>/dev/null; git pull origin $BRANCH 2>&1",
                             { timeout: 30000 },
                             function(err2, stdout2) {
                                 if (!err2) {
