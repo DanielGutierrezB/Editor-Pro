@@ -489,7 +489,7 @@
     function _refreshSettingsVisibility() {
         var imgProv = _getSelectVal("br-img-provider");
         var vidProv = _getSelectVal("br-vid-provider");
-        _toggleEl("br-img-endpoint-row",  imgProv === "flux_local");
+        _toggleEl("br-img-endpoint-row",  imgProv === "flux_local" || imgProv === "comfyui");
         _toggleEl("br-img-fal-row",       imgProv === "fal");
         _toggleEl("br-vid-endpoint-row",  vidProv === "ltx_local");
         _toggleEl("br-vid-kling-row",     vidProv === "kling");

@@ -447,6 +447,7 @@ host/broll.jsx (importAndPlaceBroll, replaceBrollClip)
 | Proveedor | Descripción | Config |
 |-----------|-------------|--------|
 | placeholder | ffmpeg solid color + text overlay (no requiere API) | — |
+| comfyui | ComfyUI + Flux (local, Apple Silicon MPS) | endpointUrl (default http://localhost:8188) |
 | flux_local | AUTOMATIC1111 txt2img API | endpointUrl (default http://localhost:7860) |
 | fal | FAL.ai API (Flux, SDXL, etc.) | apiKey, model (default fal-ai/flux/schnell) |
 

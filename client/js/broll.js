@@ -38,7 +38,7 @@
     BRoll.prototype._loadSettings = function() {
         var defaults = {
             imageProvider: "placeholder",
-            imageEndpointUrl: "http://localhost:7860",
+            imageEndpointUrl: "http://localhost:8188",
             imageFalModel: "fal-ai/flux/schnell",
             imageFalApiKey: "",
             videoProvider: "placeholder",
