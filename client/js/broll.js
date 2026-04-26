@@ -185,23 +185,77 @@
         self._pollTimers[jobId] = setTimeout(tick, 1500);
     };
 
-    // ── Step 1: Analyze transcript → proposals ────────────────────────────────
+    // ── B-Roll analysis system prompt ────────────────────────────────────────
+
+    var BROLL_SYSTEM_PROMPT = [
+        "You are a professional video editor and visual storyteller specializing in educational content.",
+        "Analyze the transcript and identify 3-8 moments where B-roll visual content would enhance the educational impact.",
+        "",
+        "Each moment should be 3-10 seconds long. The description must be a specific, actionable image generation prompt.",
+        "Good: 'Close-up of hands typing Python code on a dark terminal'",
+        "Bad: 'Something visual', 'A relevant image'",
+        "",
+        "Return ONLY a valid JSON array:",
+        '[{ "startTime": "HH:MM:SS.mmm", "endTime": "HH:MM:SS.mmm", "description": "...", "rationale": "..." }]'
+    ].join("\n");
+
+    // Try to load from Prompts/BRoll/analysis.md if available
+    try {
+        var _promptPath = require("path").join(
+            require("path").dirname(require("path").dirname(__dirname)),
+            "Prompts", "BRoll", "analysis.md"
+        );
+        if (require("fs").existsSync(_promptPath)) {
+            BROLL_SYSTEM_PROMPT = require("fs").readFileSync(_promptPath, "utf8");
+        }
+    } catch(e) {}
+
+    // ── Step 1: Analyze transcript → proposals (direct LLM, no server needed) ─
 
     BRoll.prototype.analyze = function(transcript, aiSettings, callback) {
         var self = this;
         if (self.analyzing) return callback(new Error("Ya se está analizando"));
+
+        // Use ai-analyzer directly — no server dependency for analysis
+        var analyzer = window._epAiAnalyzer;
+        if (!analyzer) return callback(new Error("AI Analyzer no disponible"));
+
         self.analyzing = true;
-        self._post("/api/broll/analyze", {
-            transcript: transcript,
-            provider: aiSettings.provider,
-            model: aiSettings.model,
-            apiKey: aiSettings.apiKey
-        }, function(err, result) {
+        var userPrompt = "Analyze the following transcript and identify B-roll opportunities.\n\n" + transcript +
+            '\n\nReturn ONLY a valid JSON array. No explanation text.';
+
+        analyzer._send(BROLL_SYSTEM_PROMPT, userPrompt, function(rawText) {
             self.analyzing = false;
-            if (err) return callback(err);
-            if (result.error) return callback(new Error(result.error));
-            self.proposals = result.proposals || [];
-            callback(null, self.proposals);
+            if (!rawText) return callback(new Error("La IA no devolvió respuesta"));
+
+            try {
+                var jsonStr = rawText.trim();
+                // Extract JSON from markdown code blocks
+                var blockMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+                if (blockMatch) jsonStr = blockMatch[1].trim();
+                var start = jsonStr.indexOf("[");
+                var end = jsonStr.lastIndexOf("]");
+                if (start !== -1 && end !== -1) jsonStr = jsonStr.substring(start, end + 1);
+
+                var proposals = JSON.parse(jsonStr);
+                if (!Array.isArray(proposals)) throw new Error("Expected JSON array");
+
+                self.proposals = proposals
+                    .filter(function(p) { return p && p.startTime && p.endTime && p.description; })
+                    .map(function(p, i) {
+                        return {
+                            id: "broll_" + Date.now() + "_" + i,
+                            startTime: p.startTime,
+                            endTime: p.endTime,
+                            description: String(p.description).trim(),
+                            rationale: String(p.rationale || "").trim()
+                        };
+                    });
+
+                callback(null, self.proposals);
+            } catch(e) {
+                callback(new Error("Error parseando propuestas: " + e.message));
+            }
         });
     };
 

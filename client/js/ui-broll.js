@@ -89,10 +89,8 @@
         if (!checkAIReady()) return;
         if (!broll) return;
 
-        broll.checkServer(function(ok) {
-            if (!ok) { showToast("Inicia el servidor Motion-Pro primero", "error"); return; }
-            _doAnalysis(transcript);
-        });
+        // Analysis uses ai-analyzer directly — no server needed
+        _doAnalysis(transcript);
     }
 
     function _doAnalysis(transcript) {
