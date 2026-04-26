@@ -74,6 +74,8 @@
                     if (!state.transcript && (!state.segments || state.segments.length === 0)) {
                         if (global.autoLoadTranscriptForSequence) global.autoLoadTranscriptForSequence(newSeqName);
                     }
+                    // Notify B-Roll on first load too (not just on sequence change)
+                    if (global.EditorProUI && global.EditorProUI.broll && global.EditorProUI.broll.switchToSequence) global.EditorProUI.broll.switchToSequence(newSeqName);
                 }
             } catch(e) {}
         });
@@ -329,6 +331,8 @@
         var textarea = document.getElementById("transcript-input");
         if (textarea) textarea.value = state.transcript || "";
         if (global._epOnTranscriptChange) global._epOnTranscriptChange();
+        // Notify B-Roll that transcript may have changed
+        if (global.EditorProUI && global.EditorProUI.broll && global.EditorProUI.broll.updateAnalyzeButton) global.EditorProUI.broll.updateAnalyzeButton();
 
         if (state.sttResult && state.sttResult.words && state.sttResult.words.length > 0) {
             if (global._epRenderTranscriptFromSegments) global._epRenderTranscriptFromSegments();
