@@ -156,4 +156,29 @@ router.get('/status/:jobId', (req, res) => {
   res.json(job);
 });
 
+// ── GET /api/broll/check-comfyui?url=... ─────────────────────────────────────
+// Proxy health check: panel can't connect to ComfyUI directly from CEP,
+// so motion-server checks on its behalf.
+
+router.get('/check-comfyui', (req, res) => {
+  const comfyUrl = req.query.url || 'http://localhost:8188';
+  const http2 = comfyUrl.startsWith('https') ? require('https') : require('http');
+  const checkReq = http2.get(comfyUrl + '/system_stats', (checkRes) => {
+    let data = '';
+    checkRes.on('data', (c) => { data += c; });
+    checkRes.on('end', () => {
+      try {
+        const stats = JSON.parse(data);
+        const device = stats.devices && stats.devices[0] ? stats.devices[0].name : 'unknown';
+        const vram = stats.devices && stats.devices[0] ? Math.round(stats.devices[0].vram_total / 1024 / 1024) + 'MB' : '?';
+        res.json({ ok: true, device, vram });
+      } catch (e) {
+        res.json({ ok: false, error: 'parse error' });
+      }
+    });
+  });
+  checkReq.on('error', (e) => res.json({ ok: false, error: 'no conecta: ' + e.message }));
+  checkReq.setTimeout(5000, () => { checkReq.destroy(); res.json({ ok: false, error: 'timeout' }); });
+});
+
 module.exports = router;

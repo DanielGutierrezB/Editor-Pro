@@ -57,34 +57,19 @@
                 ok ? "Motion Server (:3847)" : "Motion Server — detenido");
         });
 
-        // 2. ComfyUI
+        // 2. ComfyUI — check via motion-server proxy (CEP can't connect directly)
         var settings = broll.getSettings();
         if (settings.imageProvider === "comfyui") {
             var comfyUrl = settings.imageEndpointUrl || "http://localhost:8188";
-            try {
-                var http2 = require("http");
-                var req = http2.get(comfyUrl + "/system_stats", function(res) {
-                    var data = "";
-                    res.on("data", function(c) { data += c; });
-                    res.on("end", function() {
-                        try {
-                            var stats = JSON.parse(data);
-                            var device = stats.devices && stats.devices[0] ? stats.devices[0].name : "?";
-                            _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", true,
-                                "ComfyUI (" + device + ")");
-                        } catch(e) {
-                            _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", false, "ComfyUI — no responde");
-                        }
-                    });
-                });
-                req.on("error", function() {
+            broll._get("/api/broll/check-comfyui?url=" + encodeURIComponent(comfyUrl), function(err, result) {
+                if (!err && result && result.ok) {
+                    _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", true,
+                        "ComfyUI (" + (result.device || "?") + ")");
+                } else {
                     _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", false,
-                        "ComfyUI — no conecta (" + comfyUrl + ")");
-                });
-                req.setTimeout(3000, function() { req.destroy(); });
-            } catch(e) {
-                _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", false, "ComfyUI — error");
-            }
+                        "ComfyUI — " + (err ? "servidor detenido" : (result && result.error ? result.error : "no conecta")));
+                }
+            });
         } else {
             _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", false, "ComfyUI — no seleccionado");
             var comfyRow = _el("br-dep-comfy-row");
