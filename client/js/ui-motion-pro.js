@@ -2137,13 +2137,15 @@
             motionPro.saveState();
             mpRenderControlPanel();
 
-            var totalTime = ((Date.now() - _mpTimers.totalStart) / 1000).toFixed(0);
-            var genTime = ((Date.now() - _mpTimers.generateStart) / 1000).toFixed(0);
+            var _fe = window._epFormatElapsed || function(s) { return Math.round(s) + "s"; };
+            var totalTimeSec = (Date.now() - _mpTimers.totalStart) / 1000;
+            var genTimeSec = (Date.now() - _mpTimers.generateStart) / 1000;
+            var totalTimeStr = _fe(totalTimeSec);
             var hint3 = document.getElementById("mp-step-hint-3");
-            if (hint3) hint3.textContent = "Total: " + totalTime + "s (gen: " + genTime + "s)";
+            if (hint3) hint3.textContent = "Total: " + totalTimeStr + " (gen: " + _fe(genTimeSec) + ")";
 
             var hint = document.getElementById("mp-step-hint-2");
-            if (hint) hint.textContent = (total - errors.length) + "/" + total + " generados en " + totalTime + "s";
+            if (hint) hint.textContent = (total - errors.length) + "/" + total + " generados en " + totalTimeStr;
 
             if (errors.length > 0) {
                 var timeoutCount = errors.filter(function(e) { return e.error && (e.error.indexOf("timeout") !== -1 || e.error.indexOf("Timeout") !== -1); }).length;
@@ -2151,10 +2153,10 @@
                 if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", done + "/" + total + " done, " + errors.length + " errors (" + timeoutCount + " timeouts)");
                 var errDetail = timeoutCount > 0 ? (timeoutCount + " timeouts") : "";
                 if (otherCount > 0) errDetail += (errDetail ? ", " : "") + otherCount + " errores";
-                showToast("⚠️ " + (total - errors.length) + "/" + total + " motions generados en " + totalTime + "s — " + errDetail + ". Los que fallaron se pueden reintentar.", "error");
+                showToast("⚠️ " + (total - errors.length) + "/" + total + " motions generados en " + totalTimeStr + " — " + errDetail + ". Los que fallaron se pueden reintentar.", "error");
             } else {
                 if (window.EPLogger) EPLogger.log("motion-pro", "generate-complete", total + "/" + total + " done, 0 errors");
-                showToast("✅ " + total + " motions generados en " + totalTime + "s", "success");
+                showToast("✅ " + total + " motions generados en " + totalTimeStr, "success");
             }
         }
 
@@ -2196,9 +2198,10 @@
             activeWorkers++;
             _mpTimers.itemStarts[proposal.id] = Date.now();
 
-            var elapsed = ((Date.now() - _mpTimers.generateStart) / 1000).toFixed(0);
+            var _fe2 = window._epFormatElapsed || function(s) { return Math.round(s) + "s"; };
+            var elapsedSec = (Date.now() - _mpTimers.generateStart) / 1000;
             mpSetProgress("mp-generate", Math.round((done / total) * 100),
-                "Generando " + done + " de " + total + " completados (" + elapsed + "s)");
+                "Generando " + done + " de " + total + " completados (" + _fe2(elapsedSec) + ")");
 
             var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
 

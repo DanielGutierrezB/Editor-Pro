@@ -129,6 +129,18 @@
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
+    /** Format elapsed seconds as human-readable duration: "45s", "2m 15s", "1h 3m" */
+    function formatElapsed(secs) {
+        secs = Math.round(secs);
+        if (secs < 60) return secs + "s";
+        var m = Math.floor(secs / 60);
+        var s = secs % 60;
+        if (m < 60) return s > 0 ? m + "m " + s + "s" : m + "m";
+        var h = Math.floor(m / 60);
+        m = m % 60;
+        return m > 0 ? h + "h " + m + "m" : h + "h";
+    }
+
     function formatTimeFull(secs) {
         var h = Math.floor(secs / 3600);
         var m = Math.floor((secs % 3600) / 60);
@@ -221,6 +233,7 @@
         pad3: pad3,
         secsToSRTTime: secsToSRTTime,
         formatTime: formatTime,
+        formatElapsed: formatElapsed,
         formatTimeFull: formatTimeFull,
         truncate: truncate,
         formatFileSize: formatFileSize,
@@ -252,6 +265,7 @@
     global._epSecsToSRTTime = secsToSRTTime;
     global._epFormatTime = formatTime;
     global._epFormatTimeFull = formatTimeFull;
+    global._epFormatElapsed = formatElapsed;
     global._epTruncate = truncate;
     global._epFormatFileSize = formatFileSize;
     global._epCopyToClipboard = copyToClipboard;
