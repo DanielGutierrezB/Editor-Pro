@@ -2110,8 +2110,10 @@
 
         mpShowStep(3);
 
-        // Parallel generation with concurrency limit
-        var CONCURRENCY = 1; // Root.tsx race condition handled server-side with file lock
+        // Parallel generation with concurrency limit — auto-detect from system RAM
+        var _os = (function() { try { return require('os'); } catch(_e) { return null; } })();
+        var _ramBytes = _os ? _os.totalmem() : 0;
+        var CONCURRENCY = _ramBytes > 16 * 1024 * 1024 * 1024 ? 4 : _ramBytes > 8 * 1024 * 1024 * 1024 ? 3 : 2;
         var nextIndex = 0;
         var activeWorkers = 0;
 

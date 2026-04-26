@@ -266,6 +266,20 @@ class RemotionManager {
     });
   }
 
+  /**
+   * Delete all .tsx/.duration files from compositionsDir and reset Root.tsx to empty.
+   * Session folders remain the single source of truth — this dir is ephemeral.
+   */
+  cleanCompositions() {
+    if (fs.existsSync(this.compositionsDir)) {
+      fs.readdirSync(this.compositionsDir)
+        .filter(f => f.endsWith('.tsx') || f.endsWith('.duration'))
+        .forEach(f => { try { fs.unlinkSync(path.join(this.compositionsDir, f)); } catch(_e) {} });
+    }
+    this._rebuildRoot(); // compositionsDir is empty → produces clean empty Root.tsx
+    console.log('[RemotionManager] Cleaned compositions dir and reset Root.tsx');
+  }
+
   render(compositionId, callback, customOutputDir) {
     const sessionDir = customOutputDir || this.outputDir;
     const rendersDir = customOutputDir ? path.join(sessionDir, 'renders') : sessionDir;
@@ -349,6 +363,46 @@ class RemotionManager {
           }
         }
         callback(new Error(`Render failed (code ${code}): ${errorMsg}`));
+      }
+    });
+
+    proc.on('error', (err) => {
+      callback(new Error('Spawn error: ' + err.message));
+    });
+
+    return proc;
+  }
+
+  /**
+   * Render a single still frame as PNG (async).
+   * Used by the preview queue — one at a time, no concurrency issues.
+   */
+  renderStill(compositionId, outPath, frame, callback) {
+    let npxPath;
+    try { npxPath = execSync('which npx', { encoding: 'utf8' }).trim(); } catch(_e) { npxPath = 'npx'; }
+    const entryPoint = path.join(this.projectPath, 'src', 'index.ts');
+    const staticProps = JSON.stringify({ staticPreview: true });
+
+    const proc = spawn(npxPath, [
+      'remotion', 'still', entryPoint, compositionId, outPath,
+      '--frame=' + (frame || 0),
+      '--image-format=png',
+      '--props=' + staticProps,
+    ], {
+      cwd: this.projectPath,
+      shell: false,
+      env: { ...process.env, FORCE_COLOR: '0' },
+    });
+
+    let stderr = '';
+    proc.stdout.on('data', () => {}); // drain
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+    proc.on('close', (code) => {
+      if (code === 0 && fs.existsSync(outPath)) {
+        callback(null, { pngPath: outPath, compositionId });
+      } else {
+        callback(new Error('Still render failed (code ' + code + '): ' + stderr.substring(0, 500)));
       }
     });
 

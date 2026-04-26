@@ -436,8 +436,8 @@
         var timedOut = false;
         var pipelineTimer = setTimeout(function() {
             timedOut = true;
-            callback(new Error("Preview pipeline timeout (120s) for " + proposal.id));
-        }, 120000); // 2 min — stills are much faster
+            callback(new Error("Preview pipeline timeout (3min) for " + proposal.id));
+        }, 3 * 60 * 1000); // 3 min — LLM + queued still render
 
         var body = {
             proposal: {
@@ -470,13 +470,13 @@
                 return callback(new Error("Motion-Pro server not responding after restart attempt"));
             }
 
-            // Step 1: Generate template (TSX)
+            // Step 1: Generate template (TSX) — this is the LLM call, can run in parallel
             self._post("/api/generate/template", body, function(err, result) {
                 if (timedOut) return;
                 if (err) { clearTimeout(pipelineTimer); return callback(err); }
                 if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
 
-                // Step 2: Render still (PNG) — use last frame so all elements are visible
+                // Step 2: Enqueue still render — goes through serial queue (no Root.tsx races)
                 var lastFrame = Math.max(1, (result.durationFrames || 90) - 1);
                 var previewBody = {
                     compositionId: result.compositionId,
@@ -485,51 +485,62 @@
                     frame: lastFrame
                 };
 
-                self._post("/api/render/preview", previewBody, function(prevErr, prevResult) {
+                self._post("/api/render/preview", previewBody, function(enqueueErr, enqueueResult) {
                     if (timedOut) return;
-                    clearTimeout(pipelineTimer);
-                    if (prevErr) return callback(prevErr);
-                    if (prevResult.error) return callback(new Error(prevResult.error));
+                    if (enqueueErr) { clearTimeout(pipelineTimer); return callback(enqueueErr); }
+                    if (enqueueResult.error) { clearTimeout(pipelineTimer); return callback(new Error(enqueueResult.error)); }
 
-                    var versionData = {
-                        version: version,
-                        compositionId: result.compositionId,
-                        tsxPath: result.tsxPath,
-                        pngPath: prevResult.pngPath || null,
-                        // NOTE: base64 preview NOT stored in versionData (would bloat localStorage).
-                        // It's passed via callback for immediate UI display only.
-                        mp4Path: null,
-                        mediaDurationSec: null,
-                        status: "preview",
-                        feedback: "",
-                        createdAt: new Date().toISOString()
-                    };
-
-                    if (existingMotion) {
-                        existingMotion.versions.push(versionData);
-                        existingMotion.activeVersion = version;
-                    } else {
-                        var motion = {
-                            id: proposal.id,
-                            startTime: proposal.startTime,
-                            endTime: proposal.endTime,
-                            type: proposal.type,
-                            description: proposal.description,
-                            group: proposal.group || '',
-                            baseTrackIndex: -1,
-                            versions: [versionData],
-                            activeVersion: version,
-                            placedInTimeline: false
-                        };
-                        self.motions.push(motion);
+                    if (!enqueueResult.jobId) {
+                        clearTimeout(pipelineTimer);
+                        return callback(new Error("Server did not return jobId for preview"));
                     }
 
-                    callback(null, {
-                        motionId: proposal.id,
-                        version: version,
-                        pngPath: prevResult.pngPath,
-                        preview: prevResult.preview,  // base64 for immediate UI display
-                        compositionId: result.compositionId
+                    // Poll until preview completes (same pattern as video renders)
+                    self._pollRenderJob(enqueueResult.jobId, function(pollErr, prevResult) {
+                        if (timedOut) return;
+                        clearTimeout(pipelineTimer);
+                        if (pollErr) return callback(pollErr);
+
+                        var versionData = {
+                            version: version,
+                            compositionId: result.compositionId,
+                            tsxPath: result.tsxPath,
+                            pngPath: prevResult.pngPath || null,
+                            // NOTE: base64 preview NOT stored in versionData (would bloat localStorage).
+                            // It's passed via callback for immediate UI display only.
+                            mp4Path: null,
+                            mediaDurationSec: null,
+                            status: "preview",
+                            feedback: "",
+                            createdAt: new Date().toISOString()
+                        };
+
+                        if (existingMotion) {
+                            existingMotion.versions.push(versionData);
+                            existingMotion.activeVersion = version;
+                        } else {
+                            var motion = {
+                                id: proposal.id,
+                                startTime: proposal.startTime,
+                                endTime: proposal.endTime,
+                                type: proposal.type,
+                                description: proposal.description,
+                                group: proposal.group || '',
+                                baseTrackIndex: -1,
+                                versions: [versionData],
+                                activeVersion: version,
+                                placedInTimeline: false
+                            };
+                            self.motions.push(motion);
+                        }
+
+                        callback(null, {
+                            motionId: proposal.id,
+                            version: version,
+                            pngPath: prevResult.pngPath,
+                            preview: prevResult.preview,  // base64 for immediate UI display
+                            compositionId: result.compositionId
+                        });
                     });
                 });
             });
@@ -758,34 +769,45 @@
                 frame: lastFrame2
             };
 
-            self._post("/api/render/preview", previewBody, function(prevErr, prevResult) {
+            self._post("/api/render/preview", previewBody, function(enqueueErr, enqueueResult) {
                 if (timedOut) return;
-                clearTimeout(pipelineTimer);
-                if (prevErr) return callback(prevErr);
-                if (prevResult.error) return callback(new Error(prevResult.error));
+                if (enqueueErr) { clearTimeout(pipelineTimer); return callback(enqueueErr); }
+                if (enqueueResult.error) { clearTimeout(pipelineTimer); return callback(new Error(enqueueResult.error)); }
 
-                var versionData = {
-                    version: newVersion,
-                    compositionId: result.compositionId,
-                    tsxPath: result.tsxPath,
-                    pngPath: prevResult.pngPath || null,
-                    // NOTE: base64 NOT stored — passed via callback only
-                    mp4Path: null,
-                    mediaDurationSec: null,
-                    status: "preview",
-                    feedback: feedback,
-                    createdAt: new Date().toISOString()
-                };
+                if (!enqueueResult.jobId) {
+                    clearTimeout(pipelineTimer);
+                    return callback(new Error("Server did not return jobId for feedback preview"));
+                }
 
-                motion.versions.push(versionData);
-                motion.activeVersion = newVersion;
+                // Poll until preview completes
+                self._pollRenderJob(enqueueResult.jobId, function(pollErr, prevResult) {
+                    if (timedOut) return;
+                    clearTimeout(pipelineTimer);
+                    if (pollErr) return callback(pollErr);
 
-                callback(null, {
-                    motionId: motionId,
-                    version: newVersion,
-                    pngPath: prevResult.pngPath,
-                    preview: prevResult.preview,
-                    compositionId: result.compositionId
+                    var versionData = {
+                        version: newVersion,
+                        compositionId: result.compositionId,
+                        tsxPath: result.tsxPath,
+                        pngPath: prevResult.pngPath || null,
+                        // NOTE: base64 NOT stored — passed via callback only
+                        mp4Path: null,
+                        mediaDurationSec: null,
+                        status: "preview",
+                        feedback: feedback,
+                        createdAt: new Date().toISOString()
+                    };
+
+                    motion.versions.push(versionData);
+                    motion.activeVersion = newVersion;
+
+                    callback(null, {
+                        motionId: motionId,
+                        version: newVersion,
+                        pngPath: prevResult.pngPath,
+                        preview: prevResult.preview,
+                        compositionId: result.compositionId
+                    });
                 });
             });
         });

@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const { execSync, execFileSync, execFile } = require('child_process');
+const { execSync, execFileSync, execFile } = require('child_process'); // execFileSync used by probeVideoDurationSec
 const fs = require('fs');
 const RemotionManager = require('../lib/remotion-manager');
 const RenderQueue = require('../lib/render-queue');
 
-// Singleton render queue for this server
+// Singleton render queue — processes ONE job at a time (video or preview).
+// This guarantees no two Remotion processes compete for Root.tsx / compositions.
 const renderQueue = new RenderQueue();
 
 /**
@@ -87,7 +88,7 @@ function faststartMp4InPlace(filePath, callback) {
 }
 
 // Configure the render queue's render function
-// This captures req.app.locals via closure when the first request arrives
+// Handles both video renders (type=render) and preview stills (type=preview).
 let _renderFnConfigured = false;
 function _ensureRenderFn(app) {
   if (_renderFnConfigured) return;
@@ -96,9 +97,42 @@ function _ensureRenderFn(app) {
   renderQueue.setRenderFn(function(job, done) {
     const manager = new RemotionManager(app.locals.renderProject);
 
-    // Sync session before render to ensure Root.tsx is correct
+    // Sync session before render to ensure Root.tsx has the right compositions
     if (job.sessionDir) manager.syncFromSession(job.sessionDir);
 
+    // ── Preview still (PNG) ──────────────────────────────────────
+    if (job.type === 'preview') {
+      const tsx = manager.getCompositionTsx(job.compositionId);
+      if (!tsx) {
+        manager.cleanCompositions();
+        return done(new Error('Composition ' + job.compositionId + ' not found'));
+      }
+
+      manager.renderStill(job.compositionId, job.outPath, job.frame, function(err, result) {
+        // Clean ephemeral compositions — queue is serial, safe to clean now
+        manager.cleanCompositions();
+
+        if (err) return done(err);
+
+        // Read PNG and encode as base64
+        try {
+          var imgData = fs.readFileSync(result.pngPath);
+          var b64 = 'data:image/png;base64,' + imgData.toString('base64');
+          done(null, {
+            compositionId: result.compositionId,
+            pngPath: result.pngPath,
+            preview: b64,
+            frame: job.frame || 0,
+            status: 'preview',
+          });
+        } catch(readErr) {
+          done(new Error('Failed to read preview PNG: ' + readErr.message));
+        }
+      });
+      return;
+    }
+
+    // ── Video render (MP4) ───────────────────────────────────────
     // If durationFrames override is set (e.g., "Animar" matching timeline clip length),
     // update the composition registration in Root.tsx before rendering
     if (job.durationFrames && job.durationFrames > 0) {
@@ -107,11 +141,15 @@ function _ensureRenderFn(app) {
 
     const tsx = manager.getCompositionTsx(job.compositionId);
     if (!tsx) {
+      manager.cleanCompositions();
       return done(new Error('Composition ' + job.compositionId + ' not found'));
     }
 
     manager.render(job.compositionId, function(err, result) {
-      if (err) return done(err);
+      if (err) {
+        manager.cleanCompositions();
+        return done(err);
+      }
 
       // Post-process: faststart (async) + probe duration
       var mp4 = result.mp4Path;
@@ -119,6 +157,8 @@ function _ensureRenderFn(app) {
 
       function finish() {
         var mediaDurationSec = probeVideoDurationSec(mp4);
+        // Session is the single source of truth — clean ephemeral compositions dir
+        manager.cleanCompositions();
         done(null, {
           compositionId: result.compositionId,
           mp4Path: mp4,
@@ -136,7 +176,7 @@ function _ensureRenderFn(app) {
   });
 }
 
-// POST /api/render — enqueue a render job, return jobId immediately
+// POST /api/render — enqueue a video render job, return jobId immediately
 // Optional: durationFrames overrides the composition's registered duration (used by "Animar" to match timeline clip length)
 router.post('/', (req, res) => {
   const { compositionId, outputDir, sessionDir, durationFrames } = req.body;
@@ -150,6 +190,7 @@ router.post('/', (req, res) => {
   // Don't sync/validate here — the render function handles syncFromSession when the job executes.
   // This avoids double-sync which could cause race conditions if compositions change between enqueue and render.
   const job = renderQueue.enqueue({
+    type: 'render',
     compositionId,
     outputDir: outputDir || null,
     sessionDir: sessionDir || null,
@@ -163,7 +204,7 @@ router.post('/', (req, res) => {
   });
 });
 
-// GET /api/render/status/:jobId — poll job status
+// GET /api/render/status/:jobId — poll job status (works for both video and preview jobs)
 router.get('/status/:jobId', (req, res) => {
   const job = renderQueue.getJob(req.params.jobId);
   if (!job) {
@@ -189,20 +230,16 @@ router.get('/status/:jobId', (req, res) => {
   res.json(response);
 });
 
-// Preview: render single frame as PNG (persistent — saved to session/previews/)
+// Preview: enqueue a still render job (goes through the same serial queue as video renders).
+// The client polls /api/render/status/:jobId for completion — same as video renders.
+// This eliminates Root.tsx race conditions when CONCURRENCY > 1 on the client.
 router.post('/preview', (req, res) => {
   const { compositionId, sessionDir, frame, outputDir } = req.body;
   if (!compositionId) return res.status(400).json({ error: 'Missing compositionId' });
 
-  const manager = new RemotionManager(req.app.locals.renderProject);
-  if (sessionDir) manager.syncFromSession(sessionDir);
+  _ensureRenderFn(req.app);
 
-  const tsx = manager.getCompositionTsx(compositionId);
-  if (!tsx) return res.status(404).json({ error: `Composition ${compositionId} not found` });
-
-  const previewFrame = frame || 0; // frame 0 is fine — staticPreview mode renders everything at full opacity
-
-  // Determine output path: persist to session's previews/ folder if outputDir given
+  // Determine output path for the PNG
   let previewDir;
   if (outputDir) {
     previewDir = path.join(outputDir, 'previews');
@@ -216,33 +253,24 @@ router.post('/preview', (req, res) => {
   }
   const outPath = path.join(previewDir, `${compositionId}.png`);
 
-  try {
-    let npxPath;
-    try { npxPath = execSync('which npx', { encoding: 'utf8' }).trim(); } catch(_e) { npxPath = 'npx'; }
-    const entryPoint = path.join(req.app.locals.renderProject, 'src', 'index.ts');
-    const staticProps = JSON.stringify({staticPreview: true});
-    execFileSync(npxPath, [
-      'remotion', 'still', entryPoint, compositionId, outPath,
-      `--frame=${previewFrame}`,
-      '--image-format=png',
-      `--props=${staticProps}`,
-    ], {
-      cwd: req.app.locals.renderProject,
-      stdio: 'ignore',
-      timeout: 30000,
-    });
+  const previewFrame = frame || 0;
 
-    if (fs.existsSync(outPath)) {
-      const imgData = fs.readFileSync(outPath);
-      const b64 = 'data:image/png;base64,' + imgData.toString('base64');
-      // PNG persists on disk — NOT deleted
-      res.json({ success: true, preview: b64, pngPath: outPath, compositionId, frame: previewFrame });
-    } else {
-      res.status(500).json({ error: 'Preview frame not generated' });
-    }
-  } catch(e) {
-    res.status(500).json({ error: 'Preview error: ' + e.message });
-  }
+  // Enqueue as a preview job — processed serially by the same queue as video renders
+  const job = renderQueue.enqueue({
+    type: 'preview',
+    compositionId,
+    sessionDir: sessionDir || null,
+    outputDir: outputDir || null,
+    outPath: outPath,
+    frame: previewFrame,
+  });
+
+  // Return jobId immediately — client polls /api/render/status/:jobId
+  res.json({
+    jobId: job.id,
+    compositionId: compositionId,
+    status: job.status,
+  });
 });
 
 module.exports = router;

@@ -22,9 +22,12 @@ RenderQueue.prototype.enqueue = function(opts) {
   var id = 'rj_' + (++_jobCounter) + '_' + Date.now();
   var job = {
     id: id,
+    type: opts.type || 'render',  // 'render' (video MP4) or 'preview' (still PNG)
     compositionId: opts.compositionId,
     outputDir: opts.outputDir || null,
     sessionDir: opts.sessionDir || null,
+    outPath: opts.outPath || null,  // preview PNG output path
+    frame: opts.frame != null ? opts.frame : null,  // preview frame number
     durationFrames: opts.durationFrames || null,  // override for "Animar" (match timeline clip)
     status: 'queued',  // queued | rendering | complete | error
     result: null,

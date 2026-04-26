@@ -23,6 +23,17 @@ if (!fs.existsSync(app.locals.outputDir)) {
   fs.mkdirSync(app.locals.outputDir, { recursive: true });
 }
 
+// Startup cleanup: remove stale compositions from previous sessions so the
+// compositions dir starts empty and session folders remain the single source of truth.
+try {
+  const RemotionManager = require('./lib/remotion-manager');
+  const startupManager = new RemotionManager(RENDER_PROJECT);
+  startupManager.cleanCompositions();
+  console.log('[motion-server] Startup cleanup: compositions dir cleared');
+} catch(e) {
+  console.warn('[motion-server] Startup cleanup failed (non-fatal):', e.message);
+}
+
 app.get('/api/status', (_req, res) => {
   const remotionReady = fs.existsSync(path.join(RENDER_PROJECT, 'node_modules'));
   res.json({
