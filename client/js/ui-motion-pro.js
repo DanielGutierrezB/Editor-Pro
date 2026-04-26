@@ -2013,47 +2013,82 @@
         if (!motion) { if (callback) callback(); return; }
         var v = motionPro.getActiveVersion(motionId);
         if (!v || !v.pngPath) { if (callback) callback(); return; }
-        if (window.EPLogger) EPLogger.log("motion-pro", "timeline-place-preview", motionId + " at " + motion.startTime.toFixed(1) + "s");
+        if (window.EPLogger) EPLogger.log("motion-pro", "timeline-place-preview", motionId + " v" + v.version + " at " + motion.startTime.toFixed(1) + "s");
 
         var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
-        // PNG stills use the proposal's time range as duration
         var mpDuration = Math.max(0.1, motion.endTime - mpStart);
         var mediaPath = mpNormalizeMediaPath(v.pngPath);
+        var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1);
 
-        var payload = {
-            clips: [{
-                mp4Path: mediaPath, // importAndPlaceMotions handles both images and videos
+        // Version > 1 (feedback/regen): place on track ABOVE existing clip
+        var isNewVersion = v.version > 1 && motion.placedInTimeline && motion.baseTrackIndex >= 0;
+
+        if (isNewVersion) {
+            // Use replaceMotionOnTrack to stack on track above
+            var newTrackIdx = motion.baseTrackIndex + v.version - 1;
+            var payload = {
+                mp4Path: mediaPath,
                 startTimeSecs: mpStart,
                 durationSecs: mpDuration,
-                clipName: _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1),
+                newTrackIndex: newTrackIdx,
+                clipName: clipName + "_v" + v.version,
                 labelColor: _mpLabelColorForType(motion.type)
-            }]
-        };
+            };
 
-        var tmpPath = _writeTempJson(payload, "mp_preview");
-        if (!tmpPath) { if (callback) callback(); return; }
+            var tmpPath = _writeTempJson(payload, "mp_preview_v" + v.version);
+            if (!tmpPath) { if (callback) callback(); return; }
 
-        csInterface.evalScript('importAndPlaceMotions("' + mpEscapePathForEvalScript(tmpPath) + '")', function(res) {
-            if (res === undefined || res === null || res === "undefined" || res === "null" || res === "EvalScript error." || (typeof res === "string" && res.trim() === "")) {
-                console.warn("[Motion-Pro] PlacePreview: evalScript returned empty or error:", res);
-                if (callback) callback();
-                return;
-            }
-            try {
-                var result = typeof res === "string" ? JSON.parse(res) : res;
-                if (result.error) {
-                    console.warn("[Motion-Pro] PlacePreview error:", result.error);
-                    showToast("Preview no colocado: " + result.error, "error");
-                } else {
-                    motion.placedInTimeline = true;
-                    motion.baseTrackIndex = result.trackIndex != null ? result.trackIndex : -1;
-                    mpMovePlayhead(mpStart);
+            csInterface.evalScript('replaceMotionOnTrack("' + mpEscapePathForEvalScript(tmpPath) + '")', function(res) {
+                try {
+                    var result = typeof res === "string" ? JSON.parse(res) : res;
+                    if (result && result.error) {
+                        console.warn("[Motion-Pro] PlacePreview v" + v.version + " error:", result.error);
+                        showToast("Preview no colocado: " + result.error, "error");
+                    } else {
+                        mpMovePlayhead(mpStart);
+                    }
+                } catch(e) {
+                    console.warn("[Motion-Pro] PlacePreview parse error:", e.message);
                 }
-            } catch(e) {
-                console.warn("[Motion-Pro] PlacePreview parse error:", e.message);
-            }
-            if (callback) callback();
-        });
+                if (callback) callback();
+            });
+        } else {
+            // First version: use importAndPlaceMotions (creates/reuses Motion-Pro track)
+            var payload2 = {
+                clips: [{
+                    mp4Path: mediaPath,
+                    startTimeSecs: mpStart,
+                    durationSecs: mpDuration,
+                    clipName: clipName,
+                    labelColor: _mpLabelColorForType(motion.type)
+                }]
+            };
+
+            var tmpPath2 = _writeTempJson(payload2, "mp_preview");
+            if (!tmpPath2) { if (callback) callback(); return; }
+
+            csInterface.evalScript('importAndPlaceMotions("' + mpEscapePathForEvalScript(tmpPath2) + '")', function(res) {
+                if (res === undefined || res === null || res === "undefined" || res === "null" || res === "EvalScript error." || (typeof res === "string" && res.trim() === "")) {
+                    console.warn("[Motion-Pro] PlacePreview: evalScript returned empty or error:", res);
+                    if (callback) callback();
+                    return;
+                }
+                try {
+                    var result = typeof res === "string" ? JSON.parse(res) : res;
+                    if (result.error) {
+                        console.warn("[Motion-Pro] PlacePreview error:", result.error);
+                        showToast("Preview no colocado: " + result.error, "error");
+                    } else {
+                        motion.placedInTimeline = true;
+                        motion.baseTrackIndex = result.trackIndex != null ? result.trackIndex : -1;
+                        mpMovePlayhead(mpStart);
+                    }
+                } catch(e) {
+                    console.warn("[Motion-Pro] PlacePreview parse error:", e.message);
+                }
+                if (callback) callback();
+            });
+        }
     }
 
     // ─── Animate: render video + replace PNG in timeline ──────────
