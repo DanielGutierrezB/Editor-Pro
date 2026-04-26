@@ -48,11 +48,21 @@
         if (text) text.textContent = label;
     }
 
+    var _serverCheckRetries = 0;
+
     function _refreshServerStatus() {
         if (!broll) return;
 
-        // 1. Motion-Pro server
+        // 1. Motion-Pro server (retry up to 3 times with 2s delay for auto-start)
         broll.checkServer(function(ok) {
+            if (!ok && _serverCheckRetries < 3) {
+                _serverCheckRetries++;
+                setTimeout(_refreshServerStatus, 2000);
+                _setDotStatus("br-dep-server-dot", "br-dep-server-text", false,
+                    "Motion Server — iniciando...");
+                return;
+            }
+            _serverCheckRetries = 0;
             _setDotStatus("br-dep-server-dot", "br-dep-server-text", ok,
                 ok ? "Motion Server (:3847)" : "Motion Server — detenido");
         });
