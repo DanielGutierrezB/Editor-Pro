@@ -2663,6 +2663,95 @@
         preview.appendChild(wrap);
     }
 
+    /**
+     * Restore a single feedback card's controls after error (no full re-render).
+     * Preserves other cards' state (textareas, progress bars, etc.)
+     */
+    function _mpRestoreFeedbackCard(motionId, feedbackText) {
+        var card = document.querySelector('.mp-motion-card[data-motion-id="' + motionId + '"]');
+        if (!card) return;
+        var btn = card.querySelector(".mp-btn-feedback");
+        var ta = card.querySelector(".mp-feedback-input");
+        var prog = card.querySelector('.mp-feedback-progress[data-motion-id="' + motionId + '"]');
+        if (btn) { btn.disabled = false; btn.textContent = "Enviar"; }
+        if (ta) { ta.disabled = false; if (feedbackText) ta.value = feedbackText; }
+        if (prog) prog.classList.add("hidden");
+    }
+
+    /**
+     * Update a single motion card in-place after feedback completes.
+     * Only rebuilds the card for the specific motionId — preserves all other cards'
+     * state (textarea content, progress bars, scroll position).
+     */
+    function _mpUpdateSingleCard(motionId) {
+        var card = document.querySelector('.mp-motion-card[data-motion-id="' + motionId + '"]');
+        if (!card) {
+            // Card not found — fallback to full re-render
+            mpRenderControlPanel();
+            return;
+        }
+
+        // Rebuild just this card by re-rendering the full panel into a temp container
+        // and extracting only the updated card.
+        // This is simpler than duplicating the complex card-building logic.
+        var tempContainer = document.createElement("div");
+        tempContainer.style.display = "none";
+        document.body.appendChild(tempContainer);
+
+        // Build a mini version: save state, re-render to temp, extract card
+        var motion = motionPro._findMotion(motionId);
+        if (!motion) {
+            document.body.removeChild(tempContainer);
+            mpRenderControlPanel();
+            return;
+        }
+
+        // Save other cards' feedback textarea values before any DOM changes
+        var savedTextareas = {};
+        var allTextareas = document.querySelectorAll(".mp-feedback-input");
+        for (var ti = 0; ti < allTextareas.length; ti++) {
+            var taMotionId = allTextareas[ti].getAttribute("data-motion-id");
+            if (taMotionId && taMotionId !== motionId) {
+                savedTextareas[taMotionId] = allTextareas[ti].value;
+            }
+        }
+
+        // Full re-render (this rebuilds everything)
+        mpRenderControlPanel();
+
+        // Restore saved textarea values for other cards
+        var restoredTextareas = document.querySelectorAll(".mp-feedback-input");
+        for (var ri = 0; ri < restoredTextareas.length; ri++) {
+            var rMotionId = restoredTextareas[ri].getAttribute("data-motion-id");
+            if (rMotionId && savedTextareas[rMotionId] !== undefined) {
+                restoredTextareas[ri].value = savedTextareas[rMotionId];
+            }
+        }
+
+        // Restore in-progress feedback states for other motions
+        if (state.mpFeedbackActive) {
+            Object.keys(state.mpFeedbackActive).forEach(function(activeId) {
+                if (!state.mpFeedbackActive[activeId]) return;
+                var activeCard = document.querySelector('.mp-motion-card[data-motion-id="' + activeId + '"]');
+                if (!activeCard) return;
+                var activeBtn = activeCard.querySelector(".mp-btn-feedback");
+                var activeTa = activeCard.querySelector(".mp-feedback-input");
+                var activeProg = activeCard.querySelector('.mp-feedback-progress[data-motion-id="' + activeId + '"]');
+                if (activeBtn) { activeBtn.disabled = true; activeBtn.textContent = "Procesando..."; }
+                if (activeTa) activeTa.disabled = true;
+                if (activeProg) {
+                    activeProg.classList.remove("hidden");
+                    var activeFill = activeProg.querySelector(".mp-fb-fill");
+                    var activeTxt = activeProg.querySelector(".mp-fb-text");
+                    if (activeFill) activeFill.style.width = "60%";
+                    if (activeTxt) activeTxt.textContent = "Procesando feedback...";
+                }
+            });
+        }
+
+        document.body.removeChild(tempContainer);
+    }
+
     function mpRenderControlPanel() {
         var list = clearContainer(document.getElementById("mp-motions-list"));
         if (!list) return;
@@ -3005,9 +3094,16 @@
                     if (!motionPro.serverRunning) { showToast("Inicia el servidor primero", "error"); return; }
                     var feedback = textarea ? textarea.value.trim() : "";
                     if (!feedback) { showToast("Escribe feedback primero", "info"); return; }
-                    if (state.mpGenerating) { showToast("Espera a que termine el proceso actual", "info"); return; }
-                    state.mpGenerating = true;
 
+                    // Per-motion feedback concurrency (max 3 total in-flight)
+                    if (!state.mpFeedbackActive) state.mpFeedbackActive = {};
+                    var activeFeedbacks = Object.keys(state.mpFeedbackActive).filter(function(k) { return state.mpFeedbackActive[k]; }).length;
+                    if (activeFeedbacks >= 3) { showToast("Máximo 3 feedbacks simultáneos — espera que termine uno", "info"); return; }
+                    if (state.mpFeedbackActive[motionId]) { showToast("Ya hay feedback en proceso para este clip", "info"); return; }
+                    state.mpFeedbackActive[motionId] = true;
+
+                    // Save textarea value before disabling (in case UI refreshes)
+                    var savedFeedbackText = feedback;
                     fbBtn.disabled = true;
                     fbBtn.textContent = "Procesando...";
                     if (textarea) textarea.disabled = true;
@@ -3021,23 +3117,25 @@
 
                     var aiConfig = { provider: state.settings.aiProvider, model: state.settings.aiModel, apiKey: aiAnalyzer.getActiveKey() };
 
-                    motionPro.regenerateWithFeedback(motionId, feedback, aiConfig, function(err, result) {
-                        state.mpGenerating = false;
+                    motionPro.regenerateWithFeedback(motionId, savedFeedbackText, aiConfig, function(err, result) {
+                        if (state.mpFeedbackActive) delete state.mpFeedbackActive[motionId];
                         if (err) {
                             showToast("Error con feedback: " + err.message, "error");
+                            // Re-enable this card's controls without full re-render
+                            _mpRestoreFeedbackCard(motionId, savedFeedbackText);
                         } else {
                             showToast("Versión " + result.version + " preview con feedback", "success");
-                            // Place new PNG preview in timeline (replaces old one)
+                            motionPro.saveState();
+                            // Place new PNG preview in timeline, then update only this card
                             if (result.pngPath) {
                                 mpPlacePreviewInTimeline(motionId, function() {
                                     motionPro.saveState();
-                                    mpRenderControlPanel();
+                                    _mpUpdateSingleCard(motionId);
                                 });
-                                return; // callback chain handles saveState+render
+                                return;
                             }
+                            _mpUpdateSingleCard(motionId);
                         }
-                        motionPro.saveState();
-                        mpRenderControlPanel();
                     }, _mpOutputDir || undefined);
                 });
             })(m.id, m.startTime);
