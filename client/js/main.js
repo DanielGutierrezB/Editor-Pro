@@ -372,7 +372,7 @@
 
     function clearTranscript() {
         if (_TM()) _TM().clearTranscript();
-        mpUpdateAnalyzeButton();
+        // mpUpdateAnalyzeButton already called inside TranscriptManager.clearTranscript
     }
 
     function onTranscriptChange() {

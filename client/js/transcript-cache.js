@@ -47,17 +47,17 @@
         var jsonPath = path.join(folder, baseName + ".json");
         try {
             if (fs.existsSync(jsonPath)) {
-                var parsed = global.parseTranscriptJson(jsonPath);
+                var parsed = global._epParseTranscriptJson(jsonPath);
                 if (parsed && parsed.words && parsed.words.length > 5) {
                     state.sttResult = parsed;
                     state.lastWhisperResult = parsed;
                     try { state.transcriptJson = JSON.parse(fs.readFileSync(jsonPath, "utf8")); } catch (_re) {}
-                    global.refreshTraerTranscriptButtons();
-                    global.applySttResultToRecordingNotes(parsed, true);
-                    global.hideElement("recording-empty");
-                    var srt = global.sttResultToSRT(parsed);
-                    global.loadTranscriptText(srt, baseName + ".json");
-                    global.showToast("Transcript auto-cargado: " + baseName, "success");
+                    global._epRefreshTraerTranscriptButtons && global._epRefreshTraerTranscriptButtons();
+                    global._epApplySttResultToRecordingNotes && global._epApplySttResultToRecordingNotes(parsed, true);
+                    global._epHideElement && global._epHideElement("recording-empty");
+                    var srt = global._epSttResultToSRT(parsed);
+                    global._epLoadTranscriptText(srt, baseName + ".json");
+                    global._epShowToast && global._epShowToast("Transcript auto-cargado: " + baseName, "success");
                     return true;
                 }
             }
@@ -68,17 +68,17 @@
         try {
             if (fs.existsSync(srtPath)) {
                 var content = fs.readFileSync(srtPath, "utf8");
-                var segments = global.parseSRT(content);
+                var segments = global._epParseSRT(content);
                 if (segments && segments.length > 3) {
-                    var sttResult = global.srtSegmentsToSttResult(segments);
+                    var sttResult = global._epSrtSegmentsToSttResult(segments);
                     state.sttResult = sttResult;
                     state.lastWhisperResult = sttResult;
-                    global.refreshTraerTranscriptButtons();
-                    global.applySttResultToRecordingNotes(sttResult, true);
-                    global.hideElement("recording-empty");
-                    var srt2 = global.sttResultToSRT(sttResult);
-                    global.loadTranscriptText(srt2, baseName + ".srt");
-                    global.showToast("Transcript auto-cargado: " + baseName, "success");
+                    global._epRefreshTraerTranscriptButtons && global._epRefreshTraerTranscriptButtons();
+                    global._epApplySttResultToRecordingNotes && global._epApplySttResultToRecordingNotes(sttResult, true);
+                    global._epHideElement && global._epHideElement("recording-empty");
+                    var srt2 = global._epSttResultToSRT(sttResult);
+                    global._epLoadTranscriptText(srt2, baseName + ".srt");
+                    global._epShowToast && global._epShowToast("Transcript auto-cargado: " + baseName, "success");
                     return true;
                 }
             }
@@ -95,28 +95,28 @@
                     fnameLower.indexOf(seqLower) !== -1) {
                     var fullPath = path.join(folder, fname);
                     if (fnameLower.endsWith(".json")) {
-                        var p2 = global.parseTranscriptJson(fullPath);
+                        var p2 = global._epParseTranscriptJson(fullPath);
                         if (p2 && p2.words && p2.words.length > 5) {
                             state.sttResult = p2;
                             state.lastWhisperResult = p2;
                             try { state.transcriptJson = JSON.parse(fs.readFileSync(fullPath, "utf8")); } catch (_re) {}
-                            global.refreshTraerTranscriptButtons();
-                            global.applySttResultToRecordingNotes(p2, true);
-                            global.hideElement("recording-empty");
-                            global.loadTranscriptText(global.sttResultToSRT(p2), seqName);
+                            global._epRefreshTraerTranscriptButtons && global._epRefreshTraerTranscriptButtons();
+                            global._epApplySttResultToRecordingNotes && global._epApplySttResultToRecordingNotes(p2, true);
+                            global._epHideElement && global._epHideElement("recording-empty");
+                            global._epLoadTranscriptText(global._epSttResultToSRT(p2), seqName);
                             return true;
                         }
                     } else {
                         var c2 = fs.readFileSync(fullPath, "utf8");
-                        var s2 = global.parseSRT(c2);
+                        var s2 = global._epParseSRT(c2);
                         if (s2 && s2.length > 3) {
-                            var st2 = global.srtSegmentsToSttResult(s2);
+                            var st2 = global._epSrtSegmentsToSttResult(s2);
                             state.sttResult = st2;
                             state.lastWhisperResult = st2;
-                            global.refreshTraerTranscriptButtons();
-                            global.applySttResultToRecordingNotes(st2, true);
-                            global.hideElement("recording-empty");
-                            global.loadTranscriptText(global.sttResultToSRT(st2), seqName);
+                            global._epRefreshTraerTranscriptButtons && global._epRefreshTraerTranscriptButtons();
+                            global._epApplySttResultToRecordingNotes && global._epApplySttResultToRecordingNotes(st2, true);
+                            global._epHideElement && global._epHideElement("recording-empty");
+                            global._epLoadTranscriptText(global._epSttResultToSRT(st2), seqName);
                             return true;
                         }
                     }
@@ -155,28 +155,28 @@
             var ext = filePath.indexOf(".json") !== -1 ? "json" : (filePath.indexOf(".srt") !== -1 ? "srt" : "");
             var label = seqName || path.basename(filePath).replace(/\.(json|srt)$/i, "");
             if (ext === "json") {
-                var parsed = global.parseTranscriptJson(filePath);
+                var parsed = global._epParseTranscriptJson(filePath);
                 if (parsed && parsed.words && parsed.words.length > 5) {
                     state.sttResult = parsed;
                     state.lastWhisperResult = parsed;
                     try { state.transcriptJson = JSON.parse(fs.readFileSync(filePath, "utf8")); } catch (_re) {}
-                    global.refreshTraerTranscriptButtons();
-                    global.applySttResultToRecordingNotes(parsed, true);
-                    global.hideElement("recording-empty");
-                    global.loadTranscriptText(global.sttResultToSRT(parsed), label);
+                    global._epRefreshTraerTranscriptButtons && global._epRefreshTraerTranscriptButtons();
+                    global._epApplySttResultToRecordingNotes && global._epApplySttResultToRecordingNotes(parsed, true);
+                    global._epHideElement && global._epHideElement("recording-empty");
+                    global._epLoadTranscriptText(global._epSttResultToSRT(parsed), label);
                     return true;
                 }
             } else if (ext === "srt") {
                 var content = fs.readFileSync(filePath, "utf8");
-                var segments = global.parseSRT(content);
+                var segments = global._epParseSRT(content);
                 if (segments && segments.length > 3) {
-                    var sttResult = global.srtSegmentsToSttResult(segments);
+                    var sttResult = global._epSrtSegmentsToSttResult(segments);
                     state.sttResult = sttResult;
                     state.lastWhisperResult = sttResult;
-                    global.refreshTraerTranscriptButtons();
-                    global.applySttResultToRecordingNotes(sttResult, true);
-                    global.hideElement("recording-empty");
-                    global.loadTranscriptText(global.sttResultToSRT(sttResult), label);
+                    global._epRefreshTraerTranscriptButtons && global._epRefreshTraerTranscriptButtons();
+                    global._epApplySttResultToRecordingNotes && global._epApplySttResultToRecordingNotes(sttResult, true);
+                    global._epHideElement && global._epHideElement("recording-empty");
+                    global._epLoadTranscriptText(global._epSttResultToSRT(sttResult), label);
                     return true;
                 }
             }
@@ -338,13 +338,13 @@
 
             if (data.segments && Array.isArray(data.segments) && data.segments.length > 0 &&
                 data.segments[0].words && typeof data.segments[0].start === "number") {
-                parsed = global.parsePremiereTextPanelJson(data);
+                parsed = global.TranscriptParser ? global.TranscriptParser.parsePremiereTextPanelJson(data) : null;
             } else {
-                parsed = global.parseTranscriptJson(file.path);
+                parsed = global._epParseTranscriptJson(file.path);
             }
 
             if (!parsed || !parsed.words || parsed.words.length < 3) {
-                global.showToast("No se encontraron palabras válidas en el JSON", "error");
+                global._epShowToast && global._epShowToast("No se encontraron palabras válidas en el JSON", "error");
                 evt.target.value = "";
                 return;
             }
@@ -360,15 +360,15 @@
             state.sttResult = parsed;
             state.lastWhisperResult = parsed;
             state.transcriptJson = data;
-            global.refreshTraerTranscriptButtons();
-            global.applySttResultToRecordingNotes(parsed, true);
-            global.hideElement("recording-empty");
-            var srt = global.sttResultToSRT(parsed);
-            global.loadTranscriptText(srt, path.basename(file.path));
+            global._epRefreshTraerTranscriptButtons && global._epRefreshTraerTranscriptButtons();
+            global._epApplySttResultToRecordingNotes && global._epApplySttResultToRecordingNotes(parsed, true);
+            global._epHideElement && global._epHideElement("recording-empty");
+            var srt = global._epSttResultToSRT(parsed);
+            global._epLoadTranscriptText(srt, path.basename(file.path));
             _saveLastTranscriptFolder(file.path);
-            global.showToast("Transcript JSON cargado (" + parsed.words.length + " palabras)", "success");
+            global._epShowToast && global._epShowToast("Transcript JSON cargado (" + parsed.words.length + " palabras)", "success");
         } catch (e) {
-            global.showToast("Error al leer JSON: " + e.message, "error");
+            global._epShowToast && global._epShowToast("Error al leer JSON: " + e.message, "error");
         }
         evt.target.value = "";
     }
