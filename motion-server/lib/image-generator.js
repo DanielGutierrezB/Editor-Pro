@@ -666,7 +666,7 @@ function _generateGeminiImage(description, apiKey, referenceImages, outputPath, 
 
   const req = https.request({
     hostname: 'generativelanguage.googleapis.com',
-    path: '/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=' + encodeURIComponent(apiKey),
+    path: '/v1beta/models/gemini-2.5-flash-image:generateContent?key=' + encodeURIComponent(apiKey),
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
