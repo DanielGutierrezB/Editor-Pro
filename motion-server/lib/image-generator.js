@@ -306,8 +306,8 @@ function _runComfyUIWorkflow(baseUrl, clientId, description, modelName, outputPa
     "27": {
       "class_type": "EmptyLatentImage",
       "inputs": {
-        "width": 1024,
-        "height": 576,
+        "width": 1344,
+        "height": 768,
         "batch_size": 1
       }
     },

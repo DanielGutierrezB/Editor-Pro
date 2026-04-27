@@ -208,22 +208,85 @@ function importAndPlaceBroll(jsonPath) {
             if (placed) inserted++;
             $.sleep(300);
 
+            // Find the placed trackItem to adjust duration and scale
+            var placedTrackItem = null;
+            try {
+                var numClips = track.clips.numItems;
+                for (var ci = numClips - 1; ci >= 0; ci--) {
+                    var trackClip = track.clips[ci];
+                    var clipStartSecs = parseFloat(trackClip.start.seconds);
+                    if (Math.abs(clipStartSecs - (clip.startTimeSecs || 0)) < 1.0) {
+                        placedTrackItem = trackClip;
+                        break;
+                    }
+                }
+            } catch(eFind) {}
+
             // Set clip duration by trimming end point
             try {
                 var durationSecs = parseFloat(clip.durationSecs) || 0;
-                if (durationSecs > 0) {
-                    var numClips = track.clips.numItems;
-                    for (var ci = numClips - 1; ci >= 0; ci--) {
-                        var trackClip = track.clips[ci];
-                        var clipStartSecs = parseFloat(trackClip.start.seconds);
-                        if (Math.abs(clipStartSecs - (clip.startTimeSecs || 0)) < 1.0) {
-                            var endTicks = Math.round(((clip.startTimeSecs || 0) + durationSecs) * TICKS_PER_SECOND);
-                            trackClip.end = endTicks.toString();
-                            break;
+                if (durationSecs > 0 && placedTrackItem) {
+                    var endTicks = Math.round(((clip.startTimeSecs || 0) + durationSecs) * TICKS_PER_SECOND);
+                    placedTrackItem.end = endTicks.toString();
+                }
+            } catch(eDur) {}
+
+            // Scale to frame size so smaller images fill the 1080p frame
+            // Uses "Set to Frame Size" approach: scales proportionally to fill sequence dimensions
+            try {
+                if (placedTrackItem) {
+                    // Try Premiere's native setScaleToFrameSize if available (Premiere 2024+)
+                    if (typeof placedTrackItem.setScaleToFrameSize === "function") {
+                        placedTrackItem.setScaleToFrameSize();
+                    } else {
+                        // Manual fallback: read clip dimensions from metadata and calculate scale
+                        var seqW = parseInt(seq.frameSizeHorizontal) || 1920;
+                        var seqH = parseInt(seq.frameSizeVertical) || 1080;
+                        var clipW = 0;
+                        var clipH = 0;
+                        // Try to read clip dimensions from project item metadata
+                        try {
+                            var xmpMeta = item.getProjectMetadata();
+                            if (xmpMeta) {
+                                var wMatch = xmpMeta.match(/premierePrivateProjectMetaData:Column\.Intrinsic\.MediaWidth[^>]*>(\d+)/);
+                                var hMatch = xmpMeta.match(/premierePrivateProjectMetaData:Column\.Intrinsic\.MediaHeight[^>]*>(\d+)/);
+                                if (wMatch) clipW = parseInt(wMatch[1]);
+                                if (hMatch) clipH = parseInt(hMatch[1]);
+                            }
+                        } catch(eMeta) {}
+                        // If metadata read failed, try footage interpretation
+                        if (clipW <= 0 || clipH <= 0) {
+                            try {
+                                var interp = item.getFootageInterpretation ? item.getFootageInterpretation() : null;
+                                if (interp) {
+                                    clipW = interp.frameWidth || 0;
+                                    clipH = interp.frameHeight || 0;
+                                }
+                            } catch(eInterp) {}
+                        }
+                        // Only scale if we know the clip dimensions and they're smaller than seq
+                        if (clipW > 0 && clipH > 0 && (clipW < seqW || clipH < seqH)) {
+                            var components = placedTrackItem.components;
+                            for (var cmp = 0; cmp < components.numItems; cmp++) {
+                                var comp = components[cmp];
+                                if (comp.displayName === "Motion") {
+                                    for (var pp = 0; pp < comp.properties.numItems; pp++) {
+                                        if (comp.properties[pp].displayName === "Scale") {
+                                            var scaleW = (seqW / clipW) * 100;
+                                            var scaleH = (seqH / clipH) * 100;
+                                            // Use the larger ratio to fill frame (no black bars)
+                                            var scaleFactor = Math.max(scaleW, scaleH);
+                                            comp.properties[pp].setValue(scaleFactor, true);
+                                            break;
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
-            } catch(eDur) {}
+            } catch(eScale) {}
             $.sleep(100);
         }
 
