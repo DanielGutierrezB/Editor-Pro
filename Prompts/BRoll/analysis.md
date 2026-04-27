@@ -74,11 +74,24 @@ Match your editing rhythm to the speaker's rhythm. The transcript may include RH
 - The B-Roll should feel synchronized with the narration — like a real editor cut it
 
 ## NARRATIVE PROGRESSION TYPES:
-- **revelación** (revelation): Wide → Medium → Close-up (zooming into detail)
-- **causa-efecto** (cause-effect): Action shot → Result shot
-- **comparación** (comparison): Shot A → Shot B (visual contrast)
-- **secuencia** (sequence): State 1 → State 2 → State 3 (temporal progression)
-- **contextualización** (contextualization): Close-up → Wide (revealing the environment)
+Use these to describe how shots within a scene progress narratively.
+
+**Original types:**
+- **revelación** (revelation): Wide → Medium → Close-up — zooming into a concept; use when speaker introduces then deepens a topic
+- **causa-efecto** (cause-effect): Action shot → Result shot — use when speaker describes a cause and its consequence
+- **comparación** (comparison): Shot A → Shot B — side-by-side visual contrast; use when speaker is comparing two things
+- **secuencia** (sequence): State 1 → State 2 → State 3 — step-by-step or temporal progression; use for processes or timelines
+- **contextualización** (contextualization): Close-up → Wide — reveals the bigger picture; use when speaker starts with a detail then zooms out
+
+**New types:**
+- **contraste** (contrast): Opposites juxtaposed — wealth/poverty, success/failure, before/after; use when speaker explicitly contrasts two opposing states
+- **acumulación** (accumulation): Same idea with growing variation — 1 bill → stack → briefcase; use when speaker builds up a concept with escalating examples
+- **deconstrucción** (deconstruction): From complete to parts — company → departments → solo person; use when speaker breaks down a whole into its components
+- **metáfora-visual** (visual metaphor): Literal image representing abstract concept — hourglass = time running out; use when the concept is abstract (time, success, risk, opportunity)
+- **ritmo-espejo** (rhythm-mirror): Visual rhythm replicates narrator's speech rhythm — use when speaker uses a repetitive, rhythmic structure
+- **kuleshov** (Kuleshov effect): Same neutral face + different contexts = different emotions; use when speaker discusses psychological or emotional reactions
+- **match-cut** (match cut): Similar shape/color/movement linking two different shots — car wheel → clock → pie chart; use for elegant visual transitions between topics
+- **parallelismo** (parallelism): Two intercalated sequences — company thriving / company failing; use when speaker compares two parallel situations or stories
 
 ## CUTTING PRINCIPLES:
 - Minimum 2 shots per scene (one shot is not a sequence)
@@ -95,7 +108,7 @@ Return ONLY valid JSON. No markdown, no explanation, just the JSON object:
   "scenes": [
     {
       "title": "Descriptive scene title",
-      "narrative": "revelación|causa-efecto|comparación|secuencia|contextualización",
+      "narrative": "revelación|causa-efecto|comparación|secuencia|contextualización|contraste|acumulación|deconstrucción|metáfora-visual|ritmo-espejo|kuleshov|match-cut|parallelismo",
       "visualWorld": "Consistent visual style description for the entire scene — location, lighting, color palette, mood",
       "shots": [
         {

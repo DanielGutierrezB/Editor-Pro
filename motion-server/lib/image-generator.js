@@ -644,12 +644,85 @@ function _runComfyUIImg2ImgWorkflow(baseUrl, clientId, description, modelName, r
   req.end();
 }
 
+// ── Gemini Flash Image (Google AI native image generation) ───────────────────
+
+function _generateGeminiImage(description, apiKey, referenceImages, outputPath, callback) {
+  if (!apiKey) return callback(new Error('Google AI API key required for gemini_image provider'));
+
+  const parts = [];
+  if (referenceImages && referenceImages.length > 0) {
+    for (let i = 0; i < referenceImages.length; i++) {
+      parts.push({ inlineData: { mimeType: 'image/png', data: referenceImages[i] } });
+    }
+    parts.push({ text: 'Using the person/scene from the reference image, generate a new photorealistic image: ' + description });
+  } else {
+    parts.push({ text: 'Generate a photorealistic image: ' + description });
+  }
+
+  const body = JSON.stringify({
+    contents: [{ parts: parts }],
+    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+  });
+
+  const req = https.request({
+    hostname: 'generativelanguage.googleapis.com',
+    path: '/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' + encodeURIComponent(apiKey),
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+    },
+  }, (res) => {
+    let data = '';
+    res.on('data', (c) => { data += c; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.error) {
+          return callback(new Error('Gemini API error: ' + (parsed.error.message || JSON.stringify(parsed.error))));
+        }
+        const candidate = parsed.candidates && parsed.candidates[0];
+        if (!candidate || !candidate.content || !candidate.content.parts) {
+          return callback(new Error('Gemini: no candidates in response'));
+        }
+        const imgPart = candidate.content.parts.find((p) => p.inlineData && p.inlineData.data);
+        if (!imgPart) {
+          const textPart = candidate.content.parts.find((p) => p.text);
+          const msg = textPart ? textPart.text.substring(0, 300) : 'no image in response';
+          return callback(new Error('Gemini returned no image: ' + msg));
+        }
+        const imgBuf = Buffer.from(imgPart.inlineData.data, 'base64');
+        fs.writeFile(outputPath, imgBuf, (err) => callback(err, outputPath));
+      } catch (e) {
+        callback(new Error('Gemini parse error: ' + e.message + ' raw: ' + data.substring(0, 300)));
+      }
+    });
+  });
+  req.on('error', callback);
+  req.setTimeout(60000, () => { req.destroy(); callback(new Error('Gemini image generation timeout (60s)')); });
+  req.write(body);
+  req.end();
+}
+
 // ── Main entry point ─────────────────────────────────────────────────────────
 
 function generateImage(options, outputPath, callback) {
   const { provider, description, endpointUrl, apiKey, model, referenceImagePath, denoise } = options;
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  // Gemini: reference image is passed as base64 inline data (no denoise needed — Gemini handles consistency natively)
+  if (provider === 'gemini_image') {
+    if (referenceImagePath && fs.existsSync(referenceImagePath)) {
+      try {
+        const refData = fs.readFileSync(referenceImagePath).toString('base64');
+        return _generateGeminiImage(description, apiKey, [refData], outputPath, callback);
+      } catch (e) {
+        console.warn('[Gemini] Could not read reference image:', e.message);
+      }
+    }
+    return _generateGeminiImage(description, apiKey, [], outputPath, callback);
+  }
 
   // If a reference image is provided, use img2img workflow (ComfyUI only)
   if (referenceImagePath && provider === 'comfyui') {

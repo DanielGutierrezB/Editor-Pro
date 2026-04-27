@@ -1,7 +1,7 @@
 /**
  * BRoll — B-Roll Image-to-Video Pipeline for Editor-Pro
  * Server lifecycle (reuses motion-server port 3847), image gen, video gen, versioning
- * v1.8.20: Hero Shot system — one txt2img Hero per scene, all others img2img from Hero
+ * v1.9.0: Gemini Flash Image provider + feedback reference + Gemini-aware denoise skip
  */
 (function(global) {
     "use strict";
@@ -43,6 +43,7 @@
             imageEndpointUrl: "http://localhost:8188",
             imageFalModel: "",
             imageFalApiKey: "",
+            imageGeminiApiKey: "",
             videoProvider: "placeholder",
             videoEndpointUrl: "",
             videoKlingApiKey: "",
@@ -412,16 +413,19 @@
             description: proposal.description,
             imageProvider: settings.imageProvider,
             endpointUrl: settings.imageEndpointUrl,
-            apiKey: settings.imageFalApiKey,
+            apiKey: settings.imageProvider === "gemini_image" ? settings.imageGeminiApiKey : settings.imageFalApiKey,
             model: settings.imageFalModel,
             outputDir: outputDir,
             clipName: clipName
         };
 
-        // Add img2img parameters when reference image is available
+        // Add img2img / reference parameters when reference image is available
+        // Gemini handles consistency natively via inline image — no denoise parameter needed
         if (referenceImagePath) {
             requestBody.referenceImagePath = referenceImagePath;
-            requestBody.denoise = denoise;
+            if (settings.imageProvider !== "gemini_image") {
+                requestBody.denoise = denoise;
+            }
         }
 
         self._post("/api/broll/generate-image", requestBody, function(err, result) {
@@ -544,9 +548,24 @@
             existing.description = enhancedDesc;
         }
 
-        // Hero shot → txt2img; non-hero → img2img from hero with variable denoise
+        var settings = self._settings;
         var regenOptions = null;
-        if (clip.sceneId) {
+
+        // Gemini: use previous image as reference for feedback (no denoise — Gemini handles consistency natively)
+        if (settings.imageProvider === "gemini_image") {
+            if (curVersion && curVersion.imagePath) {
+                regenOptions = { referenceImagePath: curVersion.imagePath };
+            } else if (clip.sceneId && !clip.isHero) {
+                var heroClipG = self._findHeroShotClip(clip.sceneId);
+                if (heroClipG) {
+                    var heroVersionG = heroClipG.versions[heroClipG.activeVersion];
+                    if (heroVersionG && heroVersionG.imagePath) {
+                        regenOptions = { referenceImagePath: heroVersionG.imagePath };
+                    }
+                }
+            }
+        } else if (clip.sceneId) {
+            // ComfyUI: Hero shot → txt2img; non-hero → img2img from hero with variable denoise
             if (!clip.isHero) {
                 var heroClip = self._findHeroShotClip(clip.sceneId);
                 if (heroClip) {

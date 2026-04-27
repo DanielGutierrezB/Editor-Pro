@@ -39,6 +39,13 @@ Return ONLY a valid JSON array:
   }
 ]`;
 
+const GENERATOR_CAPABILITY_HINTS = `
+## IMAGE GENERATOR CAPABILITIES (use these to write better descriptions):
+- **Subject consistency**: If you describe the same person or location across different shots in a scene, they will look visually consistent. Reuse character details (age, clothing, face type) and location details (office color, furniture) across shots in the same scene.
+- **Legible text**: The image generator CAN render legible text, numbers, labels, and data in images. Feel free to include specific text like "82%", "PÉRDIDA NETA", "$1.2M", dashboard labels, or chart values in your descriptions — they will appear readable.
+- **World knowledge**: Be specific about what the narrator is saying at each moment. The generator understands concepts like financial dashboards, balance sheets, courtrooms, operating rooms, construction blueprints, etc. Name them explicitly.
+- **Photorealism**: Descriptions of real people in real environments always produce the best results. Avoid abstract or symbolic descriptions.`;
+
 function getAnalysisSystemPrompt() {
   const p = path.join(PROMPTS_DIR, 'analysis.md');
   if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
@@ -46,7 +53,7 @@ function getAnalysisSystemPrompt() {
 }
 
 function buildAnalysisPrompt(transcript) {
-  return DEFAULT_ANALYSIS_USER.replace('{TRANSCRIPT}', transcript);
+  return DEFAULT_ANALYSIS_USER.replace('{TRANSCRIPT}', transcript) + GENERATOR_CAPABILITY_HINTS;
 }
 
 module.exports = { getAnalysisSystemPrompt, buildAnalysisPrompt };

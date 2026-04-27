@@ -1340,12 +1340,17 @@
                                 <span class="br-settings-label">Proveedor</span>
                                 <select id="br-img-provider" class="select-input">
                                     <option value="comfyui" selected>⚡ ComfyUI + Flux (local)</option>
+                                    <option value="gemini_image">🤖 Gemini Flash Image (Google AI)</option>
                                     <option value="placeholder">🧪 Placeholder (sin API)</option>
                                 </select>
                             </div>
                             <div class="br-settings-row" id="br-img-endpoint-row" style="display:none">
                                 <span class="br-settings-label">URL endpoint</span>
                                 <input type="text" id="br-img-endpoint" class="text-input" placeholder="http://localhost:8188">
+                            </div>
+                            <div class="br-settings-row" id="br-img-gemini-key-row" style="display:none">
+                                <span class="br-settings-label">Google AI API Key</span>
+                                <input type="password" id="br-img-gemini-key" class="text-input" placeholder="AIza...">
                             </div>
                             <!-- FAL.ai settings hidden — not currently installed -->
                             <div id="br-img-fal-row" style="display:none">

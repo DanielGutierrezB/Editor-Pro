@@ -1,7 +1,7 @@
 /**
  * Editor-Pro — B-Roll UI Module
  * Handles all DOM interactions for the B-Roll tab.
- * v1.8.20: Hero Shot system — one txt2img Hero per scene, all others img2img from Hero
+ * v1.9.0: Gemini Flash Image provider — settings UI, status check, save/load
  */
 (function(global) {
     "use strict";
@@ -68,9 +68,11 @@
                 ok ? "Motion Server (:3847)" : "Motion Server — detenido");
         });
 
-        // 2. ComfyUI — check via motion-server proxy (CEP can't connect directly)
+        // 2. Image provider check — ComfyUI, Gemini, or none
         var settings = broll.getSettings();
+        var comfyRow = _el("br-dep-comfy-row");
         if (settings.imageProvider === "comfyui") {
+            if (comfyRow) comfyRow.style.display = "";
             var comfyUrl = settings.imageEndpointUrl || "http://localhost:8188";
             broll._get("/api/broll/check-comfyui?url=" + encodeURIComponent(comfyUrl), function(err, result) {
                 if (!err && result && result.ok) {
@@ -81,9 +83,13 @@
                         "ComfyUI — " + (err ? "servidor detenido" : (result && result.error ? result.error : "no conecta")));
                 }
             });
+        } else if (settings.imageProvider === "gemini_image") {
+            if (comfyRow) comfyRow.style.display = "";
+            var hasKey = !!(settings.imageGeminiApiKey && settings.imageGeminiApiKey.trim());
+            _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", hasKey,
+                hasKey ? "Gemini Flash Image — API key configurada" : "Gemini Flash Image — falta API key");
         } else {
             _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", false, "ComfyUI — no seleccionado");
-            var comfyRow = _el("br-dep-comfy-row");
             if (comfyRow) comfyRow.style.display = "none";
         }
 
@@ -1070,6 +1076,7 @@
         var s = broll.getSettings();
         _setSelectVal("br-img-provider", s.imageProvider);
         _setInputVal("br-img-endpoint", s.imageEndpointUrl);
+        _setInputVal("br-img-gemini-key", s.imageGeminiApiKey);
         _setInputVal("br-img-fal-model", s.imageFalModel);
         _setInputVal("br-img-fal-key", s.imageFalApiKey);
         _setSelectVal("br-vid-provider", s.videoProvider);
@@ -1082,19 +1089,21 @@
     function _refreshSettingsVisibility() {
         var imgProv = _getSelectVal("br-img-provider");
         _toggleEl("br-img-endpoint-row",  imgProv === "comfyui");
+        _toggleEl("br-img-gemini-key-row", imgProv === "gemini_image");
     }
 
     function saveSettings() {
         if (!broll) return;
         broll.saveSettings({
-            imageProvider:    _getSelectVal("br-img-provider"),
-            imageEndpointUrl: _getInputVal("br-img-endpoint"),
-            imageFalModel:    _getInputVal("br-img-fal-model"),
-            imageFalApiKey:   _getInputVal("br-img-fal-key"),
-            videoProvider:    _getSelectVal("br-vid-provider"),
-            videoEndpointUrl: _getInputVal("br-vid-endpoint"),
-            videoKlingApiKey: _getInputVal("br-vid-kling-key"),
-            trackIndex:       _getSelectVal("br-track-select")
+            imageProvider:     _getSelectVal("br-img-provider"),
+            imageEndpointUrl:  _getInputVal("br-img-endpoint"),
+            imageGeminiApiKey: _getInputVal("br-img-gemini-key"),
+            imageFalModel:     _getInputVal("br-img-fal-model"),
+            imageFalApiKey:    _getInputVal("br-img-fal-key"),
+            videoProvider:     _getSelectVal("br-vid-provider"),
+            videoEndpointUrl:  _getInputVal("br-vid-endpoint"),
+            videoKlingApiKey:  _getInputVal("br-vid-kling-key"),
+            trackIndex:        _getSelectVal("br-track-select")
         });
         showToast("Configuración B-Roll guardada", "success");
         _refreshServerStatus(); // re-check dependencies with new settings
