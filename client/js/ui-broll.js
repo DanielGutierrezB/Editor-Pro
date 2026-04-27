@@ -438,10 +438,29 @@
                 (proposal.transcriptText
                     ? '<div class="br-proposal-transcript">🎙 <em>' + esc(proposal.transcriptText.substring(0, 150)) + (proposal.transcriptText.length > 150 ? '…' : '') + '</em></div>'
                     : '') +
+                '<button class="btn btn-sm btn-ghost br-copy-prompt" data-prompt="' + escAttr(proposal.description) + '" title="Copiar prompt de imagen">📋 Copy Prompt</button>' +
             '</div>';
 
         card.addEventListener("click", function(e) {
             if (e.target.type === "checkbox") return;
+            // Copy prompt button
+            if (e.target.classList.contains("br-copy-prompt")) {
+                e.stopPropagation();
+                var prompt = e.target.dataset.prompt || "";
+                if (prompt && navigator.clipboard) {
+                    navigator.clipboard.writeText(prompt).then(function() {
+                        showToast("Prompt copiado al clipboard", "success");
+                    });
+                } else if (prompt) {
+                    // Fallback for CEP WebKit
+                    var ta = document.createElement("textarea");
+                    ta.value = prompt; ta.style.position = "fixed"; ta.style.left = "-9999px";
+                    document.body.appendChild(ta); ta.select();
+                    document.execCommand("copy"); document.body.removeChild(ta);
+                    showToast("Prompt copiado al clipboard", "success");
+                }
+                return;
+            }
             // If clicking the timecode link, navigate to that time
             if (e.target.classList.contains("br-timecode-link")) {
                 e.stopPropagation();
