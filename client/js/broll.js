@@ -768,12 +768,10 @@
 
     /** Returns true only when ref and target shot types are compatible for img2img transfer */
     BRoll.prototype._shouldUseImg2Img = function(refShotType, targetShotType) {
+        // Only use img2img when shot types are identical.
+        // Different compositions (even WIDE↔MED) produce too-similar results.
         if (!refShotType || !targetShotType) return false;
-        var ref = String(refShotType).toUpperCase();
-        var tgt = String(targetShotType).toUpperCase();
-        if (ref === tgt) return true;
-        if ((ref === "WIDE" && tgt === "MED") || (ref === "MED" && tgt === "WIDE")) return true;
-        return false;
+        return String(refShotType).toUpperCase() === String(targetShotType).toUpperCase();
     };
 
     /** Maps shot type to Premiere label color index */
