@@ -554,7 +554,7 @@
                     if (heroVersion && heroVersion.imagePath) {
                         var heroType = heroClip.shotType;
                         var myType = clip.shotType;
-                        var denoise = (heroType && myType && heroType === myType) ? 0.5 : 0.75;
+                        var denoise = (heroType && myType && heroType === myType) ? 0.65 : 0.9;
                         regenOptions = { referenceImagePath: heroVersion.imagePath, denoise: denoise };
                     }
                 }

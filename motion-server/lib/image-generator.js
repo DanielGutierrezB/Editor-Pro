@@ -567,7 +567,7 @@ function _runComfyUIImg2ImgWorkflow(baseUrl, clientId, description, modelName, r
       "class_type": "KSampler",
       "inputs": {
         "seed": Math.floor(Math.random() * 2147483647),
-        "steps": 4,
+        "steps": denoise < 1.0 ? 8 : 4,
         "cfg": 1.0,
         "sampler_name": "euler",
         "scheduler": "simple",

@@ -703,7 +703,7 @@
             var heroType = heroProposal ? heroProposal.shotType : null;
             var tgtType = tgtProp ? tgtProp.shotType : null;
             // Same type as Hero → keep more structure; different type → more creative freedom
-            var denoise = (heroType && tgtType && heroType === tgtType) ? 0.5 : 0.75;
+            var denoise = (heroType && tgtType && heroType === tgtType) ? 0.65 : 0.9;
             genOptions = { referenceImagePath: referenceImagePath, denoise: denoise };
         }
 
