@@ -198,6 +198,40 @@
         }
     }
 
+    // Extract transcript text that falls within a given time range
+    function _enrichProposalsWithTranscript(proposals) {
+        var segments = state.segments;
+        if (!segments || segments.length === 0) return;
+
+        for (var i = 0; i < proposals.length; i++) {
+            var p = proposals[i];
+            var pStart = _parseTimecode(p.startTime);
+            var pEnd = _parseTimecode(p.endTime);
+            if (pStart < 0 || pEnd < 0) continue;
+
+            var texts = [];
+            for (var s = 0; s < segments.length; s++) {
+                var seg = segments[s];
+                if (!seg || !seg.text) continue;
+                var segStart = _parseTimecode(seg.startTime);
+                var segEnd = _parseTimecode(seg.endTime);
+                // Check overlap: segment overlaps with proposal time range
+                if (segEnd > pStart && segStart < pEnd) {
+                    texts.push(seg.text.trim());
+                }
+            }
+            p.transcriptText = texts.join(" ") || "";
+        }
+    }
+
+    function _parseTimecode(tc) {
+        if (!tc) return -1;
+        var parts = String(tc).replace(",", ".").split(":");
+        if (parts.length === 3) return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+        if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+        return parseFloat(parts[0]) || -1;
+    }
+
     function _doAnalysis(transcript) {
         // Reset previous results — new analysis = fresh start
         if (broll) {
@@ -235,6 +269,8 @@
                 showToast("No se encontraron momentos de B-roll", "warning");
                 return;
             }
+            // Enrich proposals with transcript text from the matching time range
+            _enrichProposalsWithTranscript(proposals);
             broll.saveState(_sessionKey);
             _renderProposals(proposals);
             // Reveal and expand step 2, collapse others
@@ -550,6 +586,9 @@
                         '<select class="br-version-select" onchange="EditorProUI.broll._switchVersion(\'' + clip.id + '\', this.value)">' + versionOpts + '</select></div>'
                     : '') +
                 '<div class="br-clip-desc">' + esc(clip.description) + '</div>' +
+                (clip.transcriptText
+                    ? '<div class="br-clip-transcript">🎙 <em>' + esc(clip.transcriptText.substring(0, 200)) + (clip.transcriptText.length > 200 ? '…' : '') + '</em></div>'
+                    : '') +
                 '<textarea class="br-feedback-input" id="br-feedback-' + clip.id + '" placeholder="Feedback para regenerar: ej. \'más colorido\', \'sin personas\'..." rows="2"></textarea>' +
                 '<div class="br-clip-actions">' + btnPlace + btnAnimate + btnRegen + '</div>' +
             '</div>';

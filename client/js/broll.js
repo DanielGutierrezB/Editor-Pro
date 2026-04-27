@@ -311,6 +311,7 @@
                 endTime: proposal.endTime,
                 description: proposal.description,
                 rationale: proposal.rationale,
+                transcriptText: proposal.transcriptText || "",
                 versions: [],
                 activeVersion: 0,
                 status: "generating",
