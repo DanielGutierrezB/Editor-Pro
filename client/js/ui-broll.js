@@ -1,6 +1,7 @@
 /**
  * Editor-Pro — B-Roll UI Module
  * Handles all DOM interactions for the B-Roll tab.
+ * v1.8.15: Scene-based cinematographic UI + rhythm analysis + img2img flow
  */
 (function(global) {
     "use strict";
@@ -158,7 +159,7 @@
                 console.warn("[BRoll] getSequenceMarkers timed out after 15s, proceeding without markers");
                 if (window.EPLogger) EPLogger.log("broll", "markers-timeout", "15s exceeded");
                 showToast("Timeout leyendo marcadores — continuando sin filtro", "warning");
-                _doAnalysis(transcript);
+                _proceedWithRhythmAnalysis(transcript);
             }, 15000);
 
             csInterface.evalScript('getSequenceMarkers()', function(res) {
@@ -191,7 +192,50 @@
                 } catch(e) {
                     console.warn("[BRoll] Marker parsing error:", e.message);
                 }
-                _doAnalysis(transcript);
+                _proceedWithRhythmAnalysis(transcript);
+            });
+        } else {
+            _proceedWithRhythmAnalysis(transcript);
+        }
+    }
+
+    // ── Rhythm analysis integration ────────────────────────────────────────────
+
+    function _proceedWithRhythmAnalysis(transcript) {
+        // Enhance transcript with rhythm analysis if transcriptJson is available and server is running
+        if (state.transcriptJson && broll) {
+            broll.checkServer(function(serverOk) {
+                if (!serverOk) {
+                    _doAnalysis(transcript);
+                    return;
+                }
+                try {
+                    var _rhythmDone = false;
+                    var _rhythmTimeout = setTimeout(function() {
+                        if (_rhythmDone) return;
+                        _rhythmDone = true;
+                        console.warn("[BRoll] Rhythm analysis timed out after 10s, proceeding without it");
+                        if (window.EPLogger) EPLogger.log("broll", "rhythm-timeout", "10s exceeded");
+                        _doAnalysis(transcript);
+                    }, 10000);
+
+                    broll._post("/api/rhythm", { transcriptJson: state.transcriptJson }, function(err, rhythmResult) {
+                        if (_rhythmDone) return;
+                        _rhythmDone = true;
+                        clearTimeout(_rhythmTimeout);
+                        if (!err && rhythmResult && rhythmResult.promptText) {
+                            transcript += rhythmResult.promptText;
+                            if (window.EPLogger) EPLogger.log("broll", "rhythm-analysis",
+                                (rhythmResult.summary.pauseCount || 0) + " pauses, " +
+                                (rhythmResult.summary.topicChangeCount || 0) + " topic changes, " +
+                                (rhythmResult.summary.emphasisCount || 0) + " emphasis points");
+                        }
+                        _doAnalysis(transcript);
+                    });
+                } catch(e) {
+                    console.warn("[BRoll] Rhythm analysis failed:", e.message);
+                    _doAnalysis(transcript);
+                }
             });
         } else {
             _doAnalysis(transcript);
@@ -237,6 +281,7 @@
         if (broll) {
             broll.proposals = [];
             broll.clips = [];
+            broll.scenes = [];
             broll.saveState(_sessionKey);
         }
         var step2 = _el("br-proposals-section");
@@ -281,10 +326,26 @@
             if (step2Body) step2Body.classList.remove("hidden");
             var step2Arrow = step2 ? step2.querySelector(".rec-step-arrow") : null;
             if (step2Arrow) step2Arrow.textContent = "▾";
-            _el("br-step-hint-1") && (_el("br-step-hint-1").textContent = proposals.length + " momentos");
-            showToast("Se encontraron " + proposals.length + " momentos de B-roll", "success");
+
+            var scenesCount = broll.scenes.length;
+            var shotsCount = proposals.length;
+            var hintText = scenesCount > 0
+                ? scenesCount + " escenas, " + shotsCount + " planos"
+                : shotsCount + " momentos";
+            _el("br-step-hint-1") && (_el("br-step-hint-1").textContent = hintText);
+            showToast(hintText + " de B-roll encontrados", "success");
         });
     }
+
+    // ── Shot type badge helper ─────────────────────────────────────────────────
+
+    function _shotTypeBadge(shotType) {
+        if (!shotType) return "";
+        var st = String(shotType).toUpperCase();
+        return '<span class="br-shot-type-badge br-shot-' + esc(st.toLowerCase()) + '">' + esc(st) + '</span>';
+    }
+
+    // ── Render proposals (scene-grouped or flat) ───────────────────────────────
 
     function _renderProposals(proposals) {
         var list = _el("br-proposal-list");
@@ -294,45 +355,99 @@
         var count = _el("br-proposal-count");
         if (count) count.textContent = proposals.length;
 
-        for (var i = 0; i < proposals.length; i++) {
-            (function(proposal, idx) {
-                var card = document.createElement("div");
-                card.className = "br-proposal-card";
-                card.dataset.id = proposal.id;
+        // Check if scene-based
+        var hasScenes = broll && broll.hasScenes();
 
-                var checkId = "br-prop-check-" + proposal.id;
-                card.innerHTML =
-                    '<input type="checkbox" id="' + checkId + '" class="br-proposal-check" checked>' +
-                    '<div class="br-proposal-body">' +
-                        '<div class="br-proposal-timecode">' + esc(proposal.startTime) + ' → ' + esc(proposal.endTime) + '</div>' +
-                        '<div class="br-proposal-desc">' + esc(proposal.description) + '</div>' +
-                        '<div class="br-proposal-rationale">' + esc(proposal.rationale) + '</div>' +
-                    '</div>';
+        if (hasScenes) {
+            var sceneGroups = broll.getProposalsByScene();
+            for (var gi = 0; gi < sceneGroups.length; gi++) {
+                var group = sceneGroups[gi];
+                // Scene header
+                var sceneHeader = document.createElement("div");
+                sceneHeader.className = "br-scene-header";
 
-                card.addEventListener("click", function(e) {
-                    if (e.target.type === "checkbox") return;
-                    var cb = document.getElementById(checkId);
-                    if (cb) cb.checked = !cb.checked;
-                    card.classList.toggle("selected", cb ? cb.checked : false);
-                    _updateSelectedCount();
-                });
-                var cb = document.getElementById(checkId);
-                if (cb) {
-                    cb.addEventListener("change", function() {
-                        card.classList.toggle("selected", cb.checked);
-                        _updateSelectedCount();
-                    });
-                    card.classList.add("selected");
+                var totalDuration = 0;
+                for (var di = 0; di < group.proposals.length; di++) {
+                    var pStart = _parseTimecode(group.proposals[di].startTime);
+                    var pEnd = _parseTimecode(group.proposals[di].endTime);
+                    if (pStart >= 0 && pEnd >= 0) totalDuration += (pEnd - pStart);
                 }
 
-                list.appendChild(card);
-            })(proposals[i], i);
+                sceneHeader.innerHTML =
+                    '<div class="br-scene-title">🎬 ' + esc(group.title) + '</div>' +
+                    '<div class="br-scene-meta">' +
+                        '<span class="br-scene-narrative">' + esc(group.narrative) + '</span>' +
+                        ' · ' + group.proposals.length + ' planos · ' + Math.round(totalDuration) + 's' +
+                    '</div>' +
+                    (group.visualWorld ? '<div class="br-scene-world">🌍 ' + esc(group.visualWorld.substring(0, 120)) + (group.visualWorld.length > 120 ? '…' : '') + '</div>' : '');
+
+                list.appendChild(sceneHeader);
+
+                // Shots within this scene
+                for (var si = 0; si < group.proposals.length; si++) {
+                    list.appendChild(_buildProposalCard(group.proposals[si], si));
+                }
+            }
+        } else {
+            // Legacy flat rendering
+            for (var i = 0; i < proposals.length; i++) {
+                list.appendChild(_buildProposalCard(proposals[i], i));
+            }
         }
+
         _updateSelectedCount();
 
         // Show summary bar
         var summary = _el("br-proposals-summary");
         if (summary) summary.classList.remove("hidden");
+    }
+
+    function _buildProposalCard(proposal, idx) {
+        var card = document.createElement("div");
+        card.className = "br-proposal-card";
+        card.dataset.id = proposal.id;
+
+        var checkId = "br-prop-check-" + proposal.id;
+
+        var shotBadge = proposal.shotType ? _shotTypeBadge(proposal.shotType) : "";
+        var orderLabel = proposal.shotOrder ? '<span class="br-shot-order">Plano ' + proposal.shotOrder + '</span>' : '';
+
+        card.innerHTML =
+            '<input type="checkbox" id="' + checkId + '" class="br-proposal-check" checked>' +
+            '<div class="br-proposal-body">' +
+                '<div class="br-proposal-timecode">' +
+                    esc(proposal.startTime) + ' → ' + esc(proposal.endTime) +
+                    (shotBadge ? ' ' + shotBadge : '') +
+                    (orderLabel ? ' ' + orderLabel : '') +
+                '</div>' +
+                '<div class="br-proposal-desc">' + esc(proposal.description) + '</div>' +
+                '<div class="br-proposal-rationale">' + esc(proposal.rationale) + '</div>' +
+                (proposal.transcriptText
+                    ? '<div class="br-proposal-transcript">🎙 <em>' + esc(proposal.transcriptText.substring(0, 150)) + (proposal.transcriptText.length > 150 ? '…' : '') + '</em></div>'
+                    : '') +
+            '</div>';
+
+        card.addEventListener("click", function(e) {
+            if (e.target.type === "checkbox") return;
+            var cb = document.getElementById(checkId);
+            if (cb) cb.checked = !cb.checked;
+            card.classList.toggle("selected", cb ? cb.checked : false);
+            _updateSelectedCount();
+        });
+
+        // Need to set up checkbox listener after appending to DOM
+        setTimeout(function() {
+            var cb = document.getElementById(checkId);
+            if (cb) {
+                cb.addEventListener("change", function() {
+                    card.classList.toggle("selected", cb.checked);
+                    _updateSelectedCount();
+                });
+                card.classList.add("selected");
+            }
+        }, 0);
+
+        return card;
     }
 
     function _updateSelectedCount() {
@@ -436,26 +551,161 @@
             var step3Arrow = step3 ? step3.querySelector(".rec-step-arrow") : null;
             if (step3Arrow) step3Arrow.textContent = "▾";
 
-            _generateNext(selected, 0, function() {
-                broll.generating = false;
-                if (btn) { btn.disabled = false; btn.style.display = ""; }
-                if (stopBtn) stopBtn.style.display = "none";
-                broll.saveState(_sessionKey);
-                if (broll.clips.length > 0) {
-                    showToast(broll.clips.length + " imágenes generadas. Revisa y anima los clips.", "success");
-                    _el("br-step-hint-2") && (_el("br-step-hint-2").textContent = broll.clips.length + " clips");
-                } else {
-                    showToast("No se generaron imágenes — revisa la conexión con ComfyUI", "error");
-                    // Hide step 3 if no clips
-                    var step3 = _el("br-clips-section");
-                    if (step3) step3.style.display = "none";
-                }
-                _clearHeaderProgress();
-                _renderClips();
-            });
+            // Use scene-aware generation if we have scenes
+            if (broll.hasScenes()) {
+                _generateByScenes(selected, function() {
+                    _onGenerationComplete(btn, stopBtn);
+                });
+            } else {
+                _generateNext(selected, 0, function() {
+                    _onGenerationComplete(btn, stopBtn);
+                });
+            }
         });
         }); // _resolveBrollOutputDir
     }
+
+    function _onGenerationComplete(btn, stopBtn) {
+        broll.generating = false;
+        if (btn) { btn.disabled = false; btn.style.display = ""; }
+        if (stopBtn) stopBtn.style.display = "none";
+        broll.saveState(_sessionKey);
+        if (broll.clips.length > 0) {
+            showToast(broll.clips.length + " imágenes generadas. Revisa y anima los clips.", "success");
+            _el("br-step-hint-2") && (_el("br-step-hint-2").textContent = broll.clips.length + " clips");
+        } else {
+            showToast("No se generaron imágenes — revisa la conexión con ComfyUI", "error");
+            var step3 = _el("br-clips-section");
+            if (step3) step3.style.display = "none";
+        }
+        _clearHeaderProgress();
+        _renderClips();
+    }
+
+    // ── Scene-aware generation: shot 1 = txt2img, shots 2+ = img2img ──────────
+
+    function _generateByScenes(selectedIds, done) {
+        // Group selected IDs by scene
+        var sceneOrder = [];
+        var sceneMap = {};
+
+        for (var i = 0; i < selectedIds.length; i++) {
+            var proposal = broll._findProposal(selectedIds[i]);
+            if (!proposal) continue;
+            var sid = proposal.sceneId || "__nosceene__";
+            if (!sceneMap[sid]) {
+                sceneMap[sid] = [];
+                sceneOrder.push(sid);
+            }
+            sceneMap[sid].push(selectedIds[i]);
+        }
+
+        var totalShots = selectedIds.length;
+        var completedShots = 0;
+
+        function nextScene(si) {
+            if (broll.generateCancelRequested || si >= sceneOrder.length) return done();
+            var sid = sceneOrder[si];
+            var shotIds = sceneMap[sid];
+
+            if (sid === "__nosceene__") {
+                // Non-scene proposals — generate normally
+                _generateNext(shotIds, 0, function() { nextScene(si + 1); });
+                return;
+            }
+
+            // Sort shots by shotOrder
+            shotIds.sort(function(a, b) {
+                var pa = broll._findProposal(a);
+                var pb = broll._findProposal(b);
+                return ((pa && pa.shotOrder) || 0) - ((pb && pb.shotOrder) || 0);
+            });
+
+            // Generate shot 1 with txt2img
+            var firstShotId = shotIds[0];
+            _setHeaderProgress(completedShots / totalShots * 100, (completedShots + 1) + "/" + totalShots);
+            _renderClips();
+
+            broll.generateImage(firstShotId,
+                function(pId, status) { _refreshClipCard(pId, status); },
+                function(err) {
+                    if (err) {
+                        if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "scene shot 1: " + err.message);
+                        showToast("Error generando plano 1: " + err.message, "error");
+                    } else {
+                        if (window.EPLogger) EPLogger.log("broll", "generate-image-ok", "scene " + sid + " shot 1");
+                        _renderClips();
+                        broll.saveState(_sessionKey);
+                    }
+                    completedShots++;
+
+                    // Auto-place shot 1
+                    var firstClip = broll._findClip(firstShotId);
+                    var referenceImagePath = null;
+                    if (firstClip && firstClip.versions.length > 0) {
+                        var firstVersion = firstClip.versions[firstClip.activeVersion];
+                        if (firstVersion && firstVersion.imagePath) {
+                            referenceImagePath = firstVersion.imagePath;
+                        }
+                        _placeClip(firstClip.id, function() {
+                            // Generate remaining shots with img2img
+                            _generateSceneShots(shotIds, 1, referenceImagePath, function() {
+                                completedShots += (shotIds.length - 1);
+                                nextScene(si + 1);
+                            });
+                        });
+                    } else {
+                        // Shot 1 failed, still try remaining as txt2img
+                        _generateSceneShots(shotIds, 1, null, function() {
+                            completedShots += (shotIds.length - 1);
+                            nextScene(si + 1);
+                        });
+                    }
+                }
+            );
+        }
+
+        nextScene(0);
+    }
+
+    function _generateSceneShots(shotIds, startIdx, referenceImagePath, done) {
+        if (broll.generateCancelRequested || startIdx >= shotIds.length) return done();
+
+        var shotId = shotIds[startIdx];
+        _renderClips();
+
+        var genOptions = null;
+        if (referenceImagePath) {
+            genOptions = { referenceImagePath: referenceImagePath, denoise: 0.6 };
+        }
+
+        broll.generateImage(shotId,
+            function(pId, status) { _refreshClipCard(pId, status); },
+            function(err) {
+                if (err) {
+                    if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "scene shot " + (startIdx + 1) + ": " + err.message);
+                    showToast("Error generando plano " + (startIdx + 1) + ": " + err.message, "error");
+                } else {
+                    if (window.EPLogger) EPLogger.log("broll", "generate-image-ok", "shot " + (startIdx + 1));
+                    _renderClips();
+                    broll.saveState(_sessionKey);
+                }
+
+                // Auto-place this shot
+                var clip = broll._findClip(shotId);
+                if (clip) {
+                    _placeClip(clip.id, function() {
+                        _generateSceneShots(shotIds, startIdx + 1, referenceImagePath, done);
+                    });
+                } else {
+                    _generateSceneShots(shotIds, startIdx + 1, referenceImagePath, done);
+                }
+            },
+            genOptions
+        );
+    }
+
+    // ── Legacy flat generation (non-scene proposals) ───────────────────────────
 
     function _generateNext(ids, idx, done) {
         if (broll.generateCancelRequested || idx >= ids.length) return done();
@@ -508,12 +758,35 @@
             return;
         }
 
-        var hasVideo = false;
-        for (var i = 0; i < clips.length; i++) {
-            (function(clip, idx) {
-                if (clip.status === "video" || clip.status === "placed") hasVideo = true;
-                list.appendChild(_buildClipCard(clip, idx + 1));
-            })(clips[i], i);
+        var hasScenes = broll.hasScenes();
+
+        if (hasScenes) {
+            // Group clips by scene
+            var sceneGroups = broll.getClipsByScene();
+            var clipNum = 0;
+            for (var gi = 0; gi < sceneGroups.length; gi++) {
+                var group = sceneGroups[gi];
+
+                // Scene header for clips
+                if (group.sceneId) {
+                    var sceneInfo = broll._findScene(group.sceneId);
+                    var sceneHdr = document.createElement("div");
+                    sceneHdr.className = "br-scene-header br-scene-header-clips";
+                    sceneHdr.innerHTML =
+                        '<div class="br-scene-title">🎬 ' + esc(group.title || (sceneInfo && sceneInfo.title) || group.sceneId) + '</div>' +
+                        '<div class="br-scene-meta">' + group.clips.length + ' planos</div>';
+                    list.appendChild(sceneHdr);
+                }
+
+                for (var ci = 0; ci < group.clips.length; ci++) {
+                    clipNum++;
+                    list.appendChild(_buildClipCard(group.clips[ci], clipNum));
+                }
+            }
+        } else {
+            for (var i = 0; i < clips.length; i++) {
+                list.appendChild(_buildClipCard(clips[i], i + 1));
+            }
         }
 
         var countEl = _el("br-clips-count");
@@ -561,6 +834,9 @@
             thumbHtml = '<div class="br-clip-thumb-wrap"><div class="br-clip-thumb-placeholder">🖼</div></div>';
         }
 
+        // Shot type badge
+        var shotBadge = clip.shotType ? _shotTypeBadge(clip.shotType) : "";
+
         // Actions
         var btnPlace = hasImage
             ? '<button class="btn btn-sm btn-success" onclick="EditorProUI.broll._placeClip(\'' + clip.id + '\')">📌 Colocar</button>'
@@ -576,6 +852,7 @@
             '<div class="br-clip-header">' +
                 '<span class="br-clip-num">' + num + '</span>' +
                 '<span class="br-clip-timecode">' + esc(clip.startTime) + ' → ' + esc(clip.endTime) + '</span>' +
+                (shotBadge ? shotBadge : '') +
                 '<span class="br-clip-title">' + esc(clip.description.substring(0, 60)) + '</span>' +
                 '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>' +
             '</div>' +

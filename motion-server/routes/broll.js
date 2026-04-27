@@ -74,9 +74,15 @@ router.post('/generate-image', (req, res) => {
   const {
     proposalId, description, imageProvider = 'placeholder',
     endpointUrl, apiKey, model, outputDir, clipName,
+    referenceImagePath, denoise,
   } = req.body;
 
   if (!description) return res.status(400).json({ error: 'description is required' });
+
+  // Validate reference image if provided
+  if (referenceImagePath && !fs.existsSync(referenceImagePath)) {
+    return res.status(400).json({ error: 'referenceImagePath does not exist: ' + referenceImagePath });
+  }
 
   const sessionDir = outputDir || path.join(os.tmpdir(), 'editorpro-broll');
   if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
@@ -88,10 +94,13 @@ router.post('/generate-image', (req, res) => {
   const outputPath = path.join(sessionDir, fileName + '.png');
 
   const jobId = _newJobId();
-  _setJob(jobId, { type: 'image', status: 'running', proposalId, outputPath });
+  _setJob(jobId, { type: 'image', status: 'running', proposalId, outputPath,
+    isImg2Img: !!referenceImagePath });
 
   generateImage(
-    { provider: imageProvider, description, endpointUrl, apiKey, model },
+    { provider: imageProvider, description, endpointUrl, apiKey, model,
+      referenceImagePath: referenceImagePath || undefined,
+      denoise: denoise || undefined },
     outputPath,
     (err, filePath) => {
       if (err) {

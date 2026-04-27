@@ -433,12 +433,228 @@ function _pollComfyUI(lib, url, promptId, clientId, outputPath, callback) {
   setTimeout(poll, 1000);
 }
 
+// ── ComfyUI img2img (reference-based generation for scene consistency) ───────
+
+/**
+ * Upload an image to ComfyUI's input folder via POST /upload/image.
+ * Returns the filename as stored by ComfyUI (used in LoadImage node).
+ */
+function _uploadToComfyUI(baseUrl, imagePath, callback) {
+  const url = new URL(baseUrl);
+  const isHttps = url.protocol === 'https:';
+  const lib = isHttps ? https : http;
+
+  const imageData = fs.readFileSync(imagePath);
+  const fileName = path.basename(imagePath);
+  const boundary = '----ComfyUIUpload' + Date.now();
+
+  // Build multipart/form-data body
+  const parts = [];
+  parts.push(Buffer.from(
+    '--' + boundary + '\r\n' +
+    'Content-Disposition: form-data; name="image"; filename="' + fileName + '"\r\n' +
+    'Content-Type: image/png\r\n\r\n'
+  ));
+  parts.push(imageData);
+  parts.push(Buffer.from('\r\n--' + boundary + '--\r\n'));
+
+  const body = Buffer.concat(parts);
+
+  const req = lib.request({
+    hostname: url.hostname,
+    port: url.port || (isHttps ? 443 : 80),
+    path: '/upload/image',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'multipart/form-data; boundary=' + boundary,
+      'Content-Length': body.length,
+    },
+  }, (res) => {
+    let data = '';
+    res.on('data', (c) => { data += c; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.name) {
+          console.log('[ComfyUI] Uploaded reference image:', parsed.name);
+          callback(null, parsed.name);
+        } else {
+          callback(new Error('ComfyUI upload: no filename in response: ' + data.substring(0, 200)));
+        }
+      } catch (e) {
+        callback(new Error('ComfyUI upload parse error: ' + e.message));
+      }
+    });
+  });
+  req.on('error', (e) => callback(new Error('ComfyUI upload error: ' + e.message)));
+  req.setTimeout(30000, () => { req.destroy(); callback(new Error('ComfyUI upload timeout')); });
+  req.write(body);
+  req.end();
+}
+
+/**
+ * Generate image using img2img workflow — loads a reference image,
+ * encodes it to latent space, and uses KSampler with reduced denoise.
+ */
+function _generateComfyUIImg2Img(description, referenceImagePath, denoise, endpointUrl, outputPath, callback) {
+  const baseUrl = endpointUrl || 'http://127.0.0.1:8188';
+  const clientId = 'editorpro_i2i_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+
+  if (!fs.existsSync(referenceImagePath)) {
+    return callback(new Error('Reference image not found: ' + referenceImagePath));
+  }
+
+  // Step 1: Upload reference image to ComfyUI
+  _uploadToComfyUI(baseUrl, referenceImagePath, (uploadErr, uploadedFilename) => {
+    if (uploadErr) return callback(uploadErr);
+
+    // Step 2: Detect model and run img2img workflow
+    _detectFluxModel(baseUrl, (modelName) => {
+      _runComfyUIImg2ImgWorkflow(baseUrl, clientId, description, modelName, uploadedFilename, denoise, outputPath, callback);
+    });
+  });
+}
+
+function _runComfyUIImg2ImgWorkflow(baseUrl, clientId, description, modelName, referenceFilename, denoise, outputPath, callback) {
+  console.log('[ComfyUI] img2img — model:', modelName, 'reference:', referenceFilename, 'denoise:', denoise);
+
+  // img2img workflow: LoadImage → VAEEncode → KSampler (reduced denoise) → VAEDecode → SaveImage
+  // Replaces EmptyLatentImage (node 27) with LoadImage + VAEEncode
+  const workflow = {
+    "6": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": description,
+        "clip": ["11", 0]
+      }
+    },
+    "8": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["13", 0],
+        "vae": ["10", 0]
+      }
+    },
+    "9": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "filename_prefix": clientId,
+        "images": ["8", 0]
+      }
+    },
+    "10": {
+      "class_type": "VAELoader",
+      "inputs": {
+        "vae_name": "ae.safetensors"
+      }
+    },
+    "11": {
+      "class_type": "DualCLIPLoader",
+      "inputs": {
+        "clip_name1": "clip_l.safetensors",
+        "clip_name2": "t5xxl_fp16.safetensors",
+        "type": "flux"
+      }
+    },
+    "12": {
+      "class_type": "UNETLoader",
+      "inputs": {
+        "unet_name": modelName,
+        "weight_dtype": "default"
+      }
+    },
+    "13": {
+      "class_type": "KSampler",
+      "inputs": {
+        "seed": Math.floor(Math.random() * 2147483647),
+        "steps": 4,
+        "cfg": 1.0,
+        "sampler_name": "euler",
+        "scheduler": "simple",
+        "denoise": denoise,
+        "model": ["12", 0],
+        "positive": ["6", 0],
+        "negative": ["33", 0],
+        "latent_image": ["28", 0]  // ← from VAEEncode instead of EmptyLatentImage
+      }
+    },
+    // LoadImage node — loads the uploaded reference image
+    "27": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": referenceFilename,
+        "upload": "image"
+      }
+    },
+    // VAEEncode node — encodes reference image to latent space
+    "28": {
+      "class_type": "VAEEncode",
+      "inputs": {
+        "pixels": ["27", 0],
+        "vae": ["10", 0]
+      }
+    },
+    "33": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "",
+        "clip": ["11", 0]
+      }
+    }
+  };
+
+  const promptBody = JSON.stringify({
+    prompt: workflow,
+    client_id: clientId,
+  });
+
+  const url = new URL(baseUrl);
+  const isHttps = url.protocol === 'https:';
+  const lib = isHttps ? https : http;
+
+  const req = lib.request({
+    hostname: url.hostname,
+    port: url.port || (isHttps ? 443 : 80),
+    path: '/prompt',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(promptBody) },
+  }, (res) => {
+    let data = '';
+    res.on('data', (c) => { data += c; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.error) {
+          const errMsg = typeof parsed.error === 'object' ? JSON.stringify(parsed.error) : String(parsed.error);
+          console.error('[ComfyUI img2img] Prompt error:', errMsg);
+          if (parsed.node_errors) console.error('[ComfyUI img2img] Node errors:', JSON.stringify(parsed.node_errors));
+          return callback(new Error('ComfyUI img2img error: ' + errMsg + (parsed.node_errors ? ' | nodes: ' + JSON.stringify(parsed.node_errors) : '')));
+        }
+        const promptId = parsed.prompt_id;
+        if (!promptId) return callback(new Error('No prompt_id from ComfyUI (img2img)'));
+        _pollComfyUI(lib, url, promptId, clientId, outputPath, callback);
+      } catch (e) {
+        callback(new Error('ComfyUI img2img parse error: ' + e.message));
+      }
+    });
+  });
+  req.on('error', (e) => callback(new Error('ComfyUI img2img connection error: ' + e.message)));
+  req.setTimeout(30000, () => { req.destroy(); callback(new Error('ComfyUI img2img prompt timeout')); });
+  req.write(promptBody);
+  req.end();
+}
+
 // ── Main entry point ─────────────────────────────────────────────────────────
 
 function generateImage(options, outputPath, callback) {
-  const { provider, description, endpointUrl, apiKey, model } = options;
+  const { provider, description, endpointUrl, apiKey, model, referenceImagePath, denoise } = options;
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  // If a reference image is provided, use img2img workflow (ComfyUI only)
+  if (referenceImagePath && provider === 'comfyui') {
+    return _generateComfyUIImg2Img(description, referenceImagePath, denoise || 0.6, endpointUrl, outputPath, callback);
+  }
 
   switch (provider) {
     case 'comfyui':    return _generateComfyUI(description, endpointUrl, outputPath, callback);

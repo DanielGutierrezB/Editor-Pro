@@ -1,6 +1,7 @@
 /**
  * BRoll — B-Roll Image-to-Video Pipeline for Editor-Pro
  * Server lifecycle (reuses motion-server port 3847), image gen, video gen, versioning
+ * v1.8.15: Scene-based cinematographic analysis + img2img reference workflow
  */
 (function(global) {
     "use strict";
@@ -24,8 +25,9 @@
     // ── Constructor ────────────────────────────────────────────────────────────
 
     function BRoll() {
-        this.proposals = [];  // [{id, startTime, endTime, description, rationale}]
-        this.clips = [];      // [{id, proposalId, startTime, endTime, description, versions[], activeVersion, status, placedInTimeline}]
+        this.proposals = [];  // [{id, startTime, endTime, description, rationale, sceneId?, shotType?, shotOrder?, visualWorld?}]
+        this.clips = [];      // [{id, proposalId, startTime, endTime, description, versions[], activeVersion, status, placedInTimeline, sceneId?, shotType?, shotOrder?, visualWorld?}]
+        this.scenes = [];     // [{id, title, narrative, visualWorld, shots[]}] — new scene-based structure
         this.analyzing = false;
         this.generating = false;
         this.generateCancelRequested = false;
@@ -86,7 +88,8 @@
             });
             localStorage.setItem(key, JSON.stringify({
                 proposals: this.proposals,
-                clips: clipsClean
+                clips: clipsClean,
+                scenes: this.scenes
             }));
         } catch(e) {
             console.warn("[BRoll] saveState failed:", e.message);
@@ -101,6 +104,7 @@
             var data = JSON.parse(raw);
             this.proposals = data.proposals || [];
             this.clips = data.clips || [];
+            this.scenes = data.scenes || [];
             return true;
         } catch(e) {
             return false;
@@ -110,6 +114,7 @@
     BRoll.prototype.clearState = function(sessionKey) {
         this.proposals = [];
         this.clips = [];
+        this.scenes = [];
         try {
             var key = STORAGE_KEY + (sessionKey ? "_" + sessionKey : "");
             localStorage.removeItem(key);
@@ -234,6 +239,84 @@
         } catch(e) {}
     }
 
+    // ── Scene-based parsing helpers ──────────────────────────────────────────
+
+    /**
+     * Parse LLM response: supports both scenes[] (new) and proposals[]/array (legacy).
+     * Always produces flat proposals[] for backward compat, but also populates scenes[] when available.
+     * Returns { proposals: [], scenes: [] }
+     */
+    function _parseLLMResponse(result) {
+        var scenes = [];
+        var proposals = [];
+
+        // result is already parsed JSON from ai-analyzer
+        var data = result;
+
+        // Try scenes format first (new cinematographic format)
+        if (data && data.scenes && Array.isArray(data.scenes) && data.scenes.length > 0) {
+            scenes = data.scenes;
+            // Flatten scenes → proposals with scene metadata
+            for (var si = 0; si < scenes.length; si++) {
+                var scene = scenes[si];
+                var sceneId = scene.id || ("scene_" + String(si + 1).padStart(3, "0"));
+                scene.id = sceneId;
+                var shots = scene.shots || [];
+                for (var shi = 0; shi < shots.length; shi++) {
+                    var shot = shots[shi];
+                    var shotId = sceneId + "_shot_" + String(shi + 1).padStart(2, "0");
+                    proposals.push({
+                        id: shotId,
+                        startTime: shot.startTime,
+                        endTime: shot.endTime,
+                        description: String(shot.description || "").trim(),
+                        rationale: String(shot.rationale || "").trim(),
+                        sceneId: sceneId,
+                        sceneTitle: scene.title || "",
+                        sceneNarrative: scene.narrative || "",
+                        shotType: (shot.shotType || "MED").toUpperCase(),
+                        shotOrder: shi + 1,
+                        visualWorld: scene.visualWorld || ""
+                    });
+                }
+            }
+            return { proposals: proposals, scenes: scenes };
+        }
+
+        // Legacy format: flat array of proposals
+        var rawProposals = Array.isArray(data) ? data : (data && (data.proposals || data.moments || []));
+        if (!Array.isArray(rawProposals) || rawProposals.length === 0) {
+            // Fallback: extract JSON array from stringified result
+            var str = JSON.stringify(data);
+            var start = str.indexOf("[");
+            var end = str.lastIndexOf("]");
+            if (start !== -1 && end !== -1) {
+                try {
+                    rawProposals = JSON.parse(str.substring(start, end + 1));
+                } catch(e) {
+                    rawProposals = [];
+                }
+            }
+        }
+
+        if (Array.isArray(rawProposals)) {
+            proposals = rawProposals
+                .filter(function(p) { return p && p.startTime && p.endTime && p.description; })
+                .map(function(p, i) {
+                    return {
+                        id: "broll_" + Date.now() + "_" + i,
+                        startTime: p.startTime,
+                        endTime: p.endTime,
+                        description: String(p.description).trim(),
+                        rationale: String(p.rationale || "").trim()
+                        // No sceneId — legacy format
+                    };
+                });
+        }
+
+        return { proposals: proposals, scenes: [] };
+    }
+
     // ── Step 1: Analyze transcript → proposals (direct LLM, no server needed) ─
 
     BRoll.prototype.analyze = function(transcript, aiSettings, callback) {
@@ -248,7 +331,7 @@
 
         self.analyzing = true;
         var userPrompt = "Analyze the following transcript and identify B-roll opportunities.\n\n" + transcript +
-            '\n\nReturn ONLY a valid JSON array. No explanation text.';
+            '\n\nReturn ONLY valid JSON. No explanation text.';
 
         analyzer._send(BROLL_SYSTEM_PROMPT, userPrompt, function(result) {
             self.analyzing = false;
@@ -256,33 +339,14 @@
             if (result.error) return callback(new Error(result.error));
 
             try {
-                // _send's _parseResponse already JSON.parse'd the response
-                // Result is either an array directly, or an object wrapping it
-                var proposals = Array.isArray(result) ? result : (result.proposals || result.moments || []);
+                var parsed = _parseLLMResponse(result);
 
-                if (!Array.isArray(proposals) || proposals.length === 0) {
-                    // Fallback: try to extract from stringified result
-                    var str = JSON.stringify(result);
-                    var start = str.indexOf("[");
-                    var end = str.lastIndexOf("]");
-                    if (start !== -1 && end !== -1) {
-                        proposals = JSON.parse(str.substring(start, end + 1));
-                    }
+                if (!parsed.proposals || parsed.proposals.length === 0) {
+                    throw new Error("No proposals found in LLM response");
                 }
 
-                if (!Array.isArray(proposals)) throw new Error("Expected JSON array");
-
-                self.proposals = proposals
-                    .filter(function(p) { return p && p.startTime && p.endTime && p.description; })
-                    .map(function(p, i) {
-                        return {
-                            id: "broll_" + Date.now() + "_" + i,
-                            startTime: p.startTime,
-                            endTime: p.endTime,
-                            description: String(p.description).trim(),
-                            rationale: String(p.rationale || "").trim()
-                        };
-                    });
+                self.proposals = parsed.proposals;
+                self.scenes = parsed.scenes;
 
                 callback(null, self.proposals);
             } catch(e) {
@@ -293,13 +357,17 @@
 
     // ── Step 2: Generate image for a proposal ────────────────────────────────
 
-    BRoll.prototype.generateImage = function(proposalId, onProgress, callback) {
+    BRoll.prototype.generateImage = function(proposalId, onProgress, callback, options) {
         var self = this;
         var proposal = self._findProposal(proposalId);
         if (!proposal) return callback(new Error("Propuesta no encontrada: " + proposalId));
 
         var settings = self._settings;
         var outputDir = settings.outputDir || (os && pathMod ? pathMod.join(os.tmpdir(), "editorpro-broll") : "/tmp/editorpro-broll");
+
+        // img2img options — passed when generating scene shots 2+
+        var referenceImagePath = (options && options.referenceImagePath) || null;
+        var denoise = (options && options.denoise) || 0.6;
 
         // Update or create clip entry
         var clip = self._findClip(proposalId);
@@ -312,6 +380,10 @@
                 description: proposal.description,
                 rationale: proposal.rationale,
                 transcriptText: proposal.transcriptText || "",
+                sceneId: proposal.sceneId || null,
+                shotType: proposal.shotType || null,
+                shotOrder: proposal.shotOrder || null,
+                visualWorld: proposal.visualWorld || "",
                 versions: [],
                 activeVersion: 0,
                 status: "generating",
@@ -332,7 +404,8 @@
         var seqPrefix = (self._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
         var clipName = seqPrefix + "_BRoll_" + String(proposalIndex + 1).padStart(2, "0");
 
-        self._post("/api/broll/generate-image", {
+        // Build request body
+        var requestBody = {
             proposalId: proposalId,
             description: proposal.description,
             imageProvider: settings.imageProvider,
@@ -341,7 +414,15 @@
             model: settings.imageFalModel,
             outputDir: outputDir,
             clipName: clipName
-        }, function(err, result) {
+        };
+
+        // Add img2img parameters when reference image is available
+        if (referenceImagePath) {
+            requestBody.referenceImagePath = referenceImagePath;
+            requestBody.denoise = denoise;
+        }
+
+        self._post("/api/broll/generate-image", requestBody, function(err, result) {
             if (err) {
                 // Remove the failed clip entry — don't leave error ghosts
                 self.clips = self.clips.filter(function(c) { return c.id !== clip.id; });
@@ -461,11 +542,23 @@
             existing.description = enhancedDesc;
         }
 
+        // If this is shot 2+ in a scene and we have a reference image from shot 1, use img2img
+        var regenOptions = null;
+        if (clip.sceneId && clip.shotOrder && clip.shotOrder > 1) {
+            var refClip = self._findFirstShotClip(clip.sceneId);
+            if (refClip) {
+                var refVersion = refClip.versions[refClip.activeVersion];
+                if (refVersion && refVersion.imagePath) {
+                    regenOptions = { referenceImagePath: refVersion.imagePath, denoise: 0.6 };
+                }
+            }
+        }
+
         self.generateImage(clip.proposalId, onProgress, function(err, updatedClip) {
             clip.description = originalDesc;
             existing.description = savedDesc;
             callback(err, updatedClip);
-        });
+        }, regenOptions);
     };
 
     // ── Place clip in timeline (PNG or MP4) ───────────────────────────────────
@@ -561,6 +654,84 @@
         next(0);
     };
 
+    // ── Scene helpers ──────────────────────────────────────────────────────────
+
+    /**
+     * Get proposals grouped by scene. Returns [{sceneId, title, narrative, visualWorld, proposals[]}]
+     * For legacy (non-scene) proposals, returns a single group with sceneId=null.
+     */
+    BRoll.prototype.getProposalsByScene = function() {
+        var grouped = [];
+        var sceneMap = {};
+
+        for (var i = 0; i < this.proposals.length; i++) {
+            var p = this.proposals[i];
+            var sid = p.sceneId || null;
+            if (!sceneMap[sid]) {
+                var sceneInfo = sid ? this._findScene(sid) : null;
+                sceneMap[sid] = {
+                    sceneId: sid,
+                    title: (sceneInfo && sceneInfo.title) || p.sceneTitle || "",
+                    narrative: (sceneInfo && sceneInfo.narrative) || p.sceneNarrative || "",
+                    visualWorld: (sceneInfo && sceneInfo.visualWorld) || p.visualWorld || "",
+                    proposals: []
+                };
+                grouped.push(sceneMap[sid]);
+            }
+            sceneMap[sid].proposals.push(p);
+        }
+
+        return grouped;
+    };
+
+    /**
+     * Get clips grouped by scene. Returns [{sceneId, title, clips[]}]
+     */
+    BRoll.prototype.getClipsByScene = function() {
+        var grouped = [];
+        var sceneMap = {};
+
+        for (var i = 0; i < this.clips.length; i++) {
+            var c = this.clips[i];
+            var sid = c.sceneId || null;
+            if (!sceneMap[sid]) {
+                var sceneInfo = sid ? this._findScene(sid) : null;
+                sceneMap[sid] = {
+                    sceneId: sid,
+                    title: (sceneInfo && sceneInfo.title) || "",
+                    clips: []
+                };
+                grouped.push(sceneMap[sid]);
+            }
+            sceneMap[sid].clips.push(c);
+        }
+
+        return grouped;
+    };
+
+    /**
+     * Find the first shot's clip for a given scene (for img2img reference).
+     */
+    BRoll.prototype._findFirstShotClip = function(sceneId) {
+        if (!sceneId) return null;
+        var firstShot = null;
+        for (var i = 0; i < this.clips.length; i++) {
+            var c = this.clips[i];
+            if (c.sceneId === sceneId && c.shotOrder === 1 && c.status !== "error") {
+                // Prefer clips with completed images
+                if (c.versions.length > 0) return c;
+                if (!firstShot) firstShot = c;
+            }
+        }
+        return firstShot;
+    };
+
+    /** Check if proposals have scene-based structure */
+    BRoll.prototype.hasScenes = function() {
+        return this.scenes.length > 0 ||
+            (this.proposals.length > 0 && !!this.proposals[0].sceneId);
+    };
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     BRoll.prototype.setOutputDir = function(dir) {
@@ -584,6 +755,13 @@
     BRoll.prototype._findClipById = function(id) {
         for (var i = 0; i < this.clips.length; i++) {
             if (this.clips[i].id === id) return this.clips[i];
+        }
+        return null;
+    };
+
+    BRoll.prototype._findScene = function(sceneId) {
+        for (var i = 0; i < this.scenes.length; i++) {
+            if (this.scenes[i].id === sceneId) return this.scenes[i];
         }
         return null;
     };
