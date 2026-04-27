@@ -9,6 +9,14 @@ Your job: identify moments where B-roll visual content would amplify the message
 4. The first shot of each scene establishes context (establishing shot)
 5. Subsequent shots deepen into details
 6. Think in narrative progressions: revelation, cause-effect, zoom-in, comparison
+7. Each scene must have exactly **one Hero Shot** (`isHero: true`)
+
+## HERO SHOT:
+- The Hero Shot is the **most expressive and contextually rich** shot of the scene — it anchors the visual world
+- It does NOT have to be the first shot — it's the one that best captures the central concept of the scene
+- All other shots derive their visual style from the Hero Shot (same palette, mood, environment)
+- Mark it with `"isHero": true` in the JSON — all other shots get `"isHero": false`
+- Choose the shot with the most narrative context: the one a viewer would remember most
 
 ## SHOT TYPES:
 - **WIDE**: Full establishing shot, shows the location/environment (5–6s)
@@ -95,7 +103,8 @@ Return ONLY valid JSON. No markdown, no explanation, just the JSON object:
           "startTime": "HH:MM:SS.mmm",
           "endTime": "HH:MM:SS.mmm",
           "description": "Detailed photorealistic prompt including the visualWorld context",
-          "rationale": "Why this shot at this moment"
+          "rationale": "Why this shot at this moment",
+          "isHero": false
         }
       ]
     }

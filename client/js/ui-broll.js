@@ -1,7 +1,7 @@
 /**
  * Editor-Pro — B-Roll UI Module
  * Handles all DOM interactions for the B-Roll tab.
- * v1.8.16: Smart img2img routing by shot-type compatibility + color-coded timeline labels
+ * v1.8.20: Hero Shot system — one txt2img Hero per scene, all others img2img from Hero
  */
 (function(global) {
     "use strict";
@@ -411,6 +411,7 @@
 
         var shotBadge = proposal.shotType ? _shotTypeBadge(proposal.shotType) : "";
         var orderLabel = proposal.shotOrder ? '<span class="br-shot-order">Plano ' + proposal.shotOrder + '</span>' : '';
+        var heroBadge = proposal.isHero ? '<span class="br-hero-badge">⭐ Hero</span>' : '';
 
         // Build clip name for display
         var proposalSeqPrefix = (broll._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -422,6 +423,7 @@
                 '<div class="br-proposal-timecode">' +
                     '<span class="br-timecode-link" data-time="' + escAttr(proposal.startTime) + '">' + esc(proposal.startTime) + '</span>' +
                     (shotBadge ? ' ' + shotBadge : '') +
+                    (heroBadge ? ' ' + heroBadge : '') +
                     (orderLabel ? ' ' + orderLabel : '') +
                     '<span class="br-clip-name-label">' + esc(proposalClipName) + '</span>' +
                 '</div>' +
@@ -593,7 +595,7 @@
         _renderClips();
     }
 
-    // ── Scene-aware generation: shot 1 = txt2img, shots 2+ = img2img ──────────
+    // ── Scene-aware generation: Hero Shot = txt2img, all others = img2img from Hero ─
 
     function _generateByScenes(selectedIds, done) {
         // Group selected IDs by scene
@@ -603,7 +605,7 @@
         for (var i = 0; i < selectedIds.length; i++) {
             var proposal = broll._findProposal(selectedIds[i]);
             if (!proposal) continue;
-            var sid = proposal.sceneId || "__nosceene__";
+            var sid = proposal.sceneId || "__noscene__";
             if (!sceneMap[sid]) {
                 sceneMap[sid] = [];
                 sceneOrder.push(sid);
@@ -619,8 +621,7 @@
             var sid = sceneOrder[si];
             var shotIds = sceneMap[sid];
 
-            if (sid === "__nosceene__") {
-                // Non-scene proposals — generate normally
+            if (sid === "__noscene__") {
                 _generateNext(shotIds, 0, function() { nextScene(si + 1); });
                 return;
             }
@@ -632,43 +633,53 @@
                 return ((pa && pa.shotOrder) || 0) - ((pb && pb.shotOrder) || 0);
             });
 
-            // Generate shot 1 with txt2img
-            var firstShotId = shotIds[0];
+            // Find Hero Shot: isHero:true, fallback to first by shotOrder
+            var heroShotId = null;
+            var heroProposal = null;
+            for (var hi = 0; hi < shotIds.length; hi++) {
+                var hp = broll._findProposal(shotIds[hi]);
+                if (hp && hp.isHero) { heroShotId = shotIds[hi]; heroProposal = hp; break; }
+            }
+            if (!heroShotId) { heroShotId = shotIds[0]; heroProposal = broll._findProposal(heroShotId); }
+
+            // Remaining shots (non-hero), preserving shotOrder sequence
+            var remainingIds = shotIds.filter(function(id) { return id !== heroShotId; });
+
             _setHeaderProgress(completedShots / totalShots * 100, (completedShots + 1) + "/" + totalShots);
             _renderClips();
 
-            broll.generateImage(firstShotId,
+            // Generate Hero Shot first with txt2img (full creative freedom)
+            broll.generateImage(heroShotId,
                 function(pId, status) { _refreshClipCard(pId, status); },
                 function(err) {
                     if (err) {
-                        if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "scene shot 1: " + err.message);
-                        showToast("Error generando plano 1: " + err.message, "error");
+                        if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "hero shot: " + err.message);
+                        showToast("Error generando Hero Shot: " + err.message, "error");
                     } else {
-                        if (window.EPLogger) EPLogger.log("broll", "generate-image-ok", "scene " + sid + " shot 1");
+                        if (window.EPLogger) EPLogger.log("broll", "generate-image-ok", "scene " + sid + " hero shot");
                         _renderClips();
                         broll.saveState(_sessionKey);
                     }
                     completedShots++;
 
-                    // Auto-place shot 1
-                    var firstClip = broll._findClip(firstShotId);
+                    var heroClip = broll._findClip(heroShotId);
                     var referenceImagePath = null;
-                    if (firstClip && firstClip.versions.length > 0) {
-                        var firstVersion = firstClip.versions[firstClip.activeVersion];
-                        if (firstVersion && firstVersion.imagePath) {
-                            referenceImagePath = firstVersion.imagePath;
+                    if (heroClip && heroClip.versions.length > 0) {
+                        var heroVersion = heroClip.versions[heroClip.activeVersion];
+                        if (heroVersion && heroVersion.imagePath) {
+                            referenceImagePath = heroVersion.imagePath;
                         }
-                        _placeClip(firstClip.id, function() {
-                            // Generate remaining shots with img2img
-                            _generateSceneShots(shotIds, 1, referenceImagePath, function() {
-                                completedShots += (shotIds.length - 1);
+                        _placeClip(heroClip.id, function() {
+                            // Generate remaining shots with img2img from Hero
+                            _generateSceneShots(remainingIds, 0, referenceImagePath, heroProposal, function() {
+                                completedShots += remainingIds.length;
                                 nextScene(si + 1);
                             });
                         });
                     } else {
-                        // Shot 1 failed, still try remaining as txt2img
-                        _generateSceneShots(shotIds, 1, null, function() {
-                            completedShots += (shotIds.length - 1);
+                        // Hero failed — generate remaining as txt2img
+                        _generateSceneShots(remainingIds, 0, null, heroProposal, function() {
+                            completedShots += remainingIds.length;
                             nextScene(si + 1);
                         });
                     }
@@ -679,7 +690,8 @@
         nextScene(0);
     }
 
-    function _generateSceneShots(shotIds, startIdx, referenceImagePath, done) {
+    // heroProposal — used to determine denoise strength by shot type similarity
+    function _generateSceneShots(shotIds, startIdx, referenceImagePath, heroProposal, done) {
         if (broll.generateCancelRequested || startIdx >= shotIds.length) return done();
 
         var shotId = shotIds[startIdx];
@@ -687,13 +699,12 @@
 
         var genOptions = null;
         if (referenceImagePath) {
-            var refProp = broll._findProposal(shotIds[0]);
             var tgtProp = broll._findProposal(shotId);
-            var refType = refProp ? refProp.shotType : null;
+            var heroType = heroProposal ? heroProposal.shotType : null;
             var tgtType = tgtProp ? tgtProp.shotType : null;
-            if (broll._shouldUseImg2Img(refType, tgtType)) {
-                genOptions = { referenceImagePath: referenceImagePath, denoise: 0.6 };
-            }
+            // Same type as Hero → keep more structure; different type → more creative freedom
+            var denoise = (heroType && tgtType && heroType === tgtType) ? 0.5 : 0.75;
+            genOptions = { referenceImagePath: referenceImagePath, denoise: denoise };
         }
 
         broll.generateImage(shotId,
@@ -708,14 +719,13 @@
                     broll.saveState(_sessionKey);
                 }
 
-                // Auto-place this shot
                 var clip = broll._findClip(shotId);
                 if (clip) {
                     _placeClip(clip.id, function() {
-                        _generateSceneShots(shotIds, startIdx + 1, referenceImagePath, done);
+                        _generateSceneShots(shotIds, startIdx + 1, referenceImagePath, heroProposal, done);
                     });
                 } else {
-                    _generateSceneShots(shotIds, startIdx + 1, referenceImagePath, done);
+                    _generateSceneShots(shotIds, startIdx + 1, referenceImagePath, heroProposal, done);
                 }
             },
             genOptions
@@ -868,8 +878,9 @@
             thumbHtml = '<div class="br-clip-thumb-wrap"><div class="br-clip-thumb-placeholder">🖼</div></div>';
         }
 
-        // Shot type badge
+        // Shot type badge + hero badge
         var shotBadge = clip.shotType ? _shotTypeBadge(clip.shotType) : "";
+        var heroBadge = clip.isHero ? '<span class="br-hero-badge">⭐ Hero</span>' : '';
 
         // Actions
         var btnPlace = hasImage
@@ -891,6 +902,7 @@
                 '<span class="br-clip-num">' + num + '</span>' +
                 '<span class="br-clip-timecode br-timecode-link" data-time="' + escAttr(clip.startTime) + '">' + esc(clip.startTime) + '</span>' +
                 (shotBadge ? shotBadge : '') +
+                (heroBadge ? heroBadge : '') +
                 '<span class="br-clip-name-label">' + esc(clipDisplayName) + '</span>' +
                 '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>' +
             '</div>' +

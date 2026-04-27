@@ -1,7 +1,7 @@
 /**
  * BRoll — B-Roll Image-to-Video Pipeline for Editor-Pro
  * Server lifecycle (reuses motion-server port 3847), image gen, video gen, versioning
- * v1.8.16: Smart img2img routing by shot-type compatibility + color-coded timeline labels
+ * v1.8.20: Hero Shot system — one txt2img Hero per scene, all others img2img from Hero
  */
 (function(global) {
     "use strict";
@@ -25,8 +25,8 @@
     // ── Constructor ────────────────────────────────────────────────────────────
 
     function BRoll() {
-        this.proposals = [];  // [{id, startTime, endTime, description, rationale, sceneId?, shotType?, shotOrder?, visualWorld?}]
-        this.clips = [];      // [{id, proposalId, startTime, endTime, description, versions[], activeVersion, status, placedInTimeline, sceneId?, shotType?, shotOrder?, visualWorld?}]
+        this.proposals = [];  // [{id, startTime, endTime, description, rationale, sceneId?, shotType?, shotOrder?, visualWorld?, isHero?}]
+        this.clips = [];      // [{id, proposalId, startTime, endTime, description, versions[], activeVersion, status, placedInTimeline, sceneId?, shotType?, shotOrder?, visualWorld?, isHero?}]
         this.scenes = [];     // [{id, title, narrative, visualWorld, shots[]}] — new scene-based structure
         this.analyzing = false;
         this.generating = false;
@@ -276,7 +276,8 @@
                         sceneNarrative: scene.narrative || "",
                         shotType: (shot.shotType || "MED").toUpperCase(),
                         shotOrder: shi + 1,
-                        visualWorld: scene.visualWorld || ""
+                        visualWorld: scene.visualWorld || "",
+                        isHero: !!shot.isHero
                     });
                 }
             }
@@ -384,6 +385,7 @@
                 shotType: proposal.shotType || null,
                 shotOrder: proposal.shotOrder || null,
                 visualWorld: proposal.visualWorld || "",
+                isHero: !!proposal.isHero,
                 versions: [],
                 activeVersion: 0,
                 status: "generating",
@@ -542,16 +544,22 @@
             existing.description = enhancedDesc;
         }
 
-        // img2img only when shot types are visually compatible — incompatible types use txt2img
+        // Hero shot → txt2img; non-hero → img2img from hero with variable denoise
         var regenOptions = null;
-        if (clip.sceneId && clip.shotOrder && clip.shotOrder > 1) {
-            var refClip = self._findFirstShotClip(clip.sceneId);
-            if (refClip) {
-                var refVersion = refClip.versions[refClip.activeVersion];
-                if (refVersion && refVersion.imagePath && self._shouldUseImg2Img(refClip.shotType, clip.shotType)) {
-                    regenOptions = { referenceImagePath: refVersion.imagePath, denoise: 0.6 };
+        if (clip.sceneId) {
+            if (!clip.isHero) {
+                var heroClip = self._findHeroShotClip(clip.sceneId);
+                if (heroClip) {
+                    var heroVersion = heroClip.versions[heroClip.activeVersion];
+                    if (heroVersion && heroVersion.imagePath) {
+                        var heroType = heroClip.shotType;
+                        var myType = clip.shotType;
+                        var denoise = (heroType && myType && heroType === myType) ? 0.5 : 0.75;
+                        regenOptions = { referenceImagePath: heroVersion.imagePath, denoise: denoise };
+                    }
                 }
             }
+            // Hero shot: regenOptions stays null → txt2img
         }
 
         self.generateImage(clip.proposalId, onProgress, function(err, updatedClip) {
@@ -710,20 +718,29 @@
     };
 
     /**
-     * Find the first shot's clip for a given scene (for img2img reference).
+     * Find the Hero Shot clip for a scene — isHero:true, or lowest shotOrder as fallback.
+     * Used as img2img reference for all non-hero shots in the scene.
      */
-    BRoll.prototype._findFirstShotClip = function(sceneId) {
+    BRoll.prototype._findHeroShotClip = function(sceneId) {
         if (!sceneId) return null;
-        var firstShot = null;
+        var fallback = null;
         for (var i = 0; i < this.clips.length; i++) {
             var c = this.clips[i];
-            if (c.sceneId === sceneId && c.shotOrder === 1 && c.status !== "error") {
-                // Prefer clips with completed images
-                if (c.versions.length > 0) return c;
-                if (!firstShot) firstShot = c;
+            if (c.sceneId !== sceneId || c.status === "error") continue;
+            if (c.isHero && c.versions.length > 0) return c;
+            if (!fallback || (c.shotOrder && (!fallback.shotOrder || c.shotOrder < fallback.shotOrder))) {
+                if (c.versions.length > 0) fallback = c;
             }
         }
-        return firstShot;
+        return fallback;
+    };
+
+    /**
+     * @deprecated Hero Shot system replaced shot-type compatibility checks.
+     * Kept for reference; no longer called in the active generation flow.
+     */
+    BRoll.prototype._findFirstShotClip = function(sceneId) {
+        return this._findHeroShotClip(sceneId);
     };
 
     /** Check if proposals have scene-based structure */
@@ -766,13 +783,8 @@
         return null;
     };
 
-    /** Returns true only when ref and target shot types are compatible for img2img transfer */
-    BRoll.prototype._shouldUseImg2Img = function(refShotType, targetShotType) {
-        // Only use img2img when shot types are identical.
-        // Different compositions (even WIDE↔MED) produce too-similar results.
-        if (!refShotType || !targetShotType) return false;
-        return String(refShotType).toUpperCase() === String(targetShotType).toUpperCase();
-    };
+    /** @deprecated Replaced by Hero Shot system. Hero → txt2img; non-hero → img2img from hero. */
+    BRoll.prototype._shouldUseImg2Img = function() { return false; };
 
     /** Maps shot type to Premiere label color index */
     BRoll.prototype._shotTypeToLabelColor = function(shotType) {
