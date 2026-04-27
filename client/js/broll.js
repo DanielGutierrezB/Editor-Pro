@@ -1,7 +1,7 @@
 /**
  * BRoll — B-Roll Image-to-Video Pipeline for Editor-Pro
  * Server lifecycle (reuses motion-server port 3847), image gen, video gen, versioning
- * v1.8.15: Scene-based cinematographic analysis + img2img reference workflow
+ * v1.8.16: Smart img2img routing by shot-type compatibility + color-coded timeline labels
  */
 (function(global) {
     "use strict";
@@ -542,13 +542,13 @@
             existing.description = enhancedDesc;
         }
 
-        // If this is shot 2+ in a scene and we have a reference image from shot 1, use img2img
+        // img2img only when shot types are visually compatible — incompatible types use txt2img
         var regenOptions = null;
         if (clip.sceneId && clip.shotOrder && clip.shotOrder > 1) {
             var refClip = self._findFirstShotClip(clip.sceneId);
             if (refClip) {
                 var refVersion = refClip.versions[refClip.activeVersion];
-                if (refVersion && refVersion.imagePath) {
+                if (refVersion && refVersion.imagePath && self._shouldUseImg2Img(refClip.shotType, clip.shotType)) {
                     regenOptions = { referenceImagePath: refVersion.imagePath, denoise: 0.6 };
                 }
             }
@@ -606,7 +606,7 @@
                 clipName: clipName,
                 startTimeSecs: startSecs,
                 durationSecs: durationSecs,
-                labelColor: 3, // Violet
+                labelColor: self._shotTypeToLabelColor(clip.shotType),
                 trackIndex: trackIndex >= 0 ? trackIndex : undefined
             }]
         };
@@ -764,6 +764,29 @@
             if (this.scenes[i].id === sceneId) return this.scenes[i];
         }
         return null;
+    };
+
+    /** Returns true only when ref and target shot types are compatible for img2img transfer */
+    BRoll.prototype._shouldUseImg2Img = function(refShotType, targetShotType) {
+        if (!refShotType || !targetShotType) return false;
+        var ref = String(refShotType).toUpperCase();
+        var tgt = String(targetShotType).toUpperCase();
+        if (ref === tgt) return true;
+        if ((ref === "WIDE" && tgt === "MED") || (ref === "MED" && tgt === "WIDE")) return true;
+        return false;
+    };
+
+    /** Maps shot type to Premiere label color index */
+    BRoll.prototype._shotTypeToLabelColor = function(shotType) {
+        if (!shotType) return 3;
+        switch (String(shotType).toUpperCase()) {
+            case "WIDE": return 4;  // Cerulean/blue
+            case "MED":  return 5;  // Forest/green
+            case "CU":   return 7;  // Mango/orange
+            case "DET":  return 1;  // Iris/purple
+            case "OTS":  return 8;  // Teal
+            default:     return 3;  // Violet
+        }
     };
 
     BRoll.prototype._timeToSeconds = function(timeStr) {

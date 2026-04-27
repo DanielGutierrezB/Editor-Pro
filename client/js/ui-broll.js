@@ -1,7 +1,7 @@
 /**
  * Editor-Pro — B-Roll UI Module
  * Handles all DOM interactions for the B-Roll tab.
- * v1.8.15: Scene-based cinematographic UI + rhythm analysis + img2img flow
+ * v1.8.16: Smart img2img routing by shot-type compatibility + color-coded timeline labels
  */
 (function(global) {
     "use strict";
@@ -676,7 +676,13 @@
 
         var genOptions = null;
         if (referenceImagePath) {
-            genOptions = { referenceImagePath: referenceImagePath, denoise: 0.6 };
+            var refProp = broll._findProposal(shotIds[0]);
+            var tgtProp = broll._findProposal(shotId);
+            var refType = refProp ? refProp.shotType : null;
+            var tgtType = tgtProp ? tgtProp.shotType : null;
+            if (broll._shouldUseImg2Img(refType, tgtType)) {
+                genOptions = { referenceImagePath: referenceImagePath, denoise: 0.6 };
+            }
         }
 
         broll.generateImage(shotId,
