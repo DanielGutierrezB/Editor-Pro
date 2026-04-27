@@ -201,6 +201,24 @@
     flex-shrink: 0;
 }
 
+.br-timecode-link {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+}
+.br-timecode-link:hover {
+    color: #fff;
+    text-decoration-style: solid;
+}
+
+.br-clip-name-label {
+    font-size: 9px;
+    color: var(--text-secondary);
+    margin-left: 6px;
+    opacity: 0.7;
+}
+
 .br-clip-title {
     flex: 1;
     font-size: 11px;

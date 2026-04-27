@@ -412,13 +412,18 @@
         var shotBadge = proposal.shotType ? _shotTypeBadge(proposal.shotType) : "";
         var orderLabel = proposal.shotOrder ? '<span class="br-shot-order">Plano ' + proposal.shotOrder + '</span>' : '';
 
+        // Build clip name for display
+        var proposalSeqPrefix = (broll._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
+        var proposalClipName = proposalSeqPrefix + "_BRoll_" + String(idx + 1).toString().padStart(2, "0");
+
         card.innerHTML =
             '<input type="checkbox" id="' + checkId + '" class="br-proposal-check" checked>' +
             '<div class="br-proposal-body">' +
                 '<div class="br-proposal-timecode">' +
-                    esc(proposal.startTime) + ' → ' + esc(proposal.endTime) +
+                    '<span class="br-timecode-link" data-time="' + escAttr(proposal.startTime) + '">' + esc(proposal.startTime) + '</span>' +
                     (shotBadge ? ' ' + shotBadge : '') +
                     (orderLabel ? ' ' + orderLabel : '') +
+                    '<span class="br-clip-name-label">' + esc(proposalClipName) + '</span>' +
                 '</div>' +
                 '<div class="br-proposal-desc">' + esc(proposal.description) + '</div>' +
                 '<div class="br-proposal-rationale">' + esc(proposal.rationale) + '</div>' +
@@ -429,6 +434,12 @@
 
         card.addEventListener("click", function(e) {
             if (e.target.type === "checkbox") return;
+            // If clicking the timecode link, navigate to that time
+            if (e.target.classList.contains("br-timecode-link")) {
+                e.stopPropagation();
+                _navigateToTime(e.target.dataset.time);
+                return;
+            }
             var cb = document.getElementById(checkId);
             if (cb) cb.checked = !cb.checked;
             card.classList.toggle("selected", cb ? cb.checked : false);
@@ -795,6 +806,23 @@
             }
         }
 
+        // Add click delegation for timecode links in clips
+        list.addEventListener("click", function(e) {
+            var link = e.target.closest ? e.target.closest(".br-timecode-link") : null;
+            if (!link) {
+                // Manual fallback for older CEP WebKit
+                var t = e.target;
+                while (t && t !== list) {
+                    if (t.classList && t.classList.contains("br-timecode-link")) { link = t; break; }
+                    t = t.parentElement;
+                }
+            }
+            if (link && link.dataset.time) {
+                e.stopPropagation();
+                _navigateToTime(link.dataset.time);
+            }
+        });
+
         var countEl = _el("br-clips-count");
         if (countEl) countEl.textContent = clips.length;
 
@@ -828,7 +856,7 @@
                 '<img class="br-clip-thumb" src="' + escAttr(version.imageBase64) + '" alt="preview">' +
                 '<div class="br-clip-thumb-overlay">' +
                     (hasVideo ? "🎬 Video listo" : "📸 Imagen") +
-                    ' · ' + esc(clip.startTime) + ' → ' + esc(clip.endTime) +
+                    ' · ' + esc(clip.startTime) +
                 '</div>' +
             '</div>';
         } else if (clip.status === "generating" || clip.status === "animating") {
@@ -854,12 +882,16 @@
             ? '<button class="btn btn-sm btn-ghost" onclick="EditorProUI.broll._regenClip(\'' + clip.id + '\')">🔄 Regenerar</button>'
             : '';
 
+        // Build display clip name
+        var clipSeqPrefix = (broll._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
+        var clipDisplayName = clipSeqPrefix + "_BRoll_" + num;
+
         div.innerHTML =
             '<div class="br-clip-header">' +
                 '<span class="br-clip-num">' + num + '</span>' +
-                '<span class="br-clip-timecode">' + esc(clip.startTime) + ' → ' + esc(clip.endTime) + '</span>' +
+                '<span class="br-clip-timecode br-timecode-link" data-time="' + escAttr(clip.startTime) + '">' + esc(clip.startTime) + '</span>' +
                 (shotBadge ? shotBadge : '') +
-                '<span class="br-clip-title">' + esc(clip.description.substring(0, 60)) + '</span>' +
+                '<span class="br-clip-name-label">' + esc(clipDisplayName) + '</span>' +
                 '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>' +
             '</div>' +
             thumbHtml +
@@ -904,6 +936,12 @@
         clip.activeVersion = parseInt(versionIdx, 10);
         broll.saveState(_sessionKey);
         _renderClips();
+    }
+
+    function _navigateToTime(timeStr) {
+        if (!csInterface || !timeStr) return;
+        var secs = broll._timeToSeconds(timeStr);
+        csInterface.evalScript('movePlayhead(' + secs + ')', function() {});
     }
 
     function _placeClip(clipId, callback) {
