@@ -32,14 +32,21 @@ All image descriptions MUST describe **photorealistic scenes with real people in
 - Split screens or collages
 
 ## DESCRIPTION RULES:
-- Each shot description MUST include the scene's visual world context for consistency
-- Include lighting, camera angle, and mood
-- Be specific enough for an AI image generator to produce a photorealistic result
+- **PRIORITY: The description must visualize what the narrator is SAYING**, not just a generic setting
+- Each description is a standalone AI image prompt — it must work WITHOUT seeing other shots
+- Structure: **SUBJECT FIRST** (what we see), then style/lighting/mood as secondary context
+- The subject must directly relate to the transcript content at that timestamp
+- Include camera angle, framing, and enough visual detail for the AI to produce a unique composition
+- Different shot types MUST describe DIFFERENT subjects/compositions — not the same scene reframed
 
-Good: "Wide shot of a modern open-plan office at night, multiple monitors glowing blue-white, a developer silhouetted against the screens, warm desk lamp creating contrast, cinematic shallow depth of field"
-Good: "Close-up of hands on a mechanical keyboard, terminal with green code scrolling on screen, same blue-white office lighting from the wide shot, bokeh background"
-Bad: "Animated diagram showing data flow"
-Bad: "3D floating icons representing security concepts"
+**CRITICAL: Each shot must show something DIFFERENT.** If the transcript mentions "82% of businesses go bankrupt", don't show an office 3 times. Show: (1) a thriving store, (2) an empty cash register, (3) a person staring at bills. Tell a visual STORY.
+
+Good: "Close-up of weathered hands counting a thin stack of Colombian peso bills on a wooden desk, warm side lighting, shallow depth of field, stress visible in the grip"
+Good: "Medium shot of an entrepreneur in a white shirt staring at a laptop screen showing red numbers, dim office at night, blue monitor glow on face, worried expression"
+Good: "Detail shot of a printed financial statement with 'PÉRDIDA' circled in red marker, shallow DOF, overhead angle, warm desk lamp"
+Bad: "Wide shot of a modern office at sunset" (too generic, doesn't connect to transcript)
+Bad: "Office with monitors" (same composition as establishing shot)
+Bad: "Business environment with warm lighting" (vague, could be any shot)
 
 ## RHYTHM-AWARE EDITING:
 Match your editing rhythm to the speaker's rhythm. The transcript may include RHYTHM DATA with speech rate, pauses, and natural segments.
