@@ -157,7 +157,7 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
   // Model-specific input params for resolution
   if (/grok-imagine/i.test(falModel)) {
     input.aspect_ratio = '16:9';
-    input.resolution = '1k'; // 1080p
+    input.resolution = '2k'; // 2752×1504 — Premiere auto-scales to frame size
     input.num_images = 1;
   } else if (/nano-banana|gemini|gpt-image|seedream/i.test(falModel)) {
     input.aspect_ratio = '16:9';
