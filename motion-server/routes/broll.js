@@ -91,7 +91,8 @@ router.post('/generate-image', (req, res) => {
   const fileName = clipName
     ? clipName.replace(/[^a-z0-9_-]/gi, '_')
     : (proposalId || Date.now()).toString().replace(/[^a-z0-9_-]/gi, '_');
-  // Use .jpg for providers that may return JPEG (extension will be corrected after download if needed)
+  // Extension may be corrected by image-generator after download (e.g. FAL returns .jpg)
+  // Use a generic extension; the actual file will have the correct one
   const outputPath = path.join(sessionDir, fileName + '.png');
 
   const jobId = _newJobId();
@@ -110,6 +111,11 @@ router.post('/generate-image', (req, res) => {
       } else {
         _jobs[jobId].status = 'complete';
         _jobs[jobId].filePath = filePath;
+        console.log('[BRoll] Image done:', filePath);
+        // Clean up stale .png if extension was corrected to .jpg/.webp
+        if (filePath !== outputPath && fs.existsSync(outputPath)) {
+          try { fs.unlinkSync(outputPath); } catch (_e) {}
+        }
         // Generate base64 thumbnail (for UI preview)
         try {
           const buf = fs.readFileSync(filePath);
