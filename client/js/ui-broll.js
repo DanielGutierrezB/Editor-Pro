@@ -795,6 +795,7 @@
 
             var sceneInfo = broll._findScene ? broll._findScene(sid) : null;
             var sceneTitle = (sceneInfo && sceneInfo.title) ? sceneInfo.title : (sid !== "__noscene__" ? sid : "");
+            _genProgress.current = completedShots;
             _setHeaderProgress(completedShots / totalShots * 100, (completedShots + 1) + "/" + totalShots);
             _setInlineProgress(completedShots + 1, totalShots, sceneTitle, Math.round((Date.now() - _genProgress.startMs) / 1000));
             _renderClips();
@@ -818,6 +819,8 @@
                         _updateStep3CountLive();
                     }
                     completedShots++;
+                    _genProgress.current = completedShots;
+                    _setInlineProgress(completedShots, totalShots, sceneTitle, Math.round((Date.now() - _genProgress.startMs) / 1000));
 
                     var heroClip = broll._findClip(heroShotId);
                     var referenceImagePath = null;
@@ -831,6 +834,8 @@
                             setTimeout(function() {
                                 _generateSceneShots(remainingIds, 0, referenceImagePath, heroProposal, function() {
                                     completedShots += remainingIds.length;
+                                    _genProgress.current = completedShots;
+                                    _setInlineProgress(completedShots, totalShots, sceneTitle, Math.round((Date.now() - _genProgress.startMs) / 1000));
                                     // Retry failed shots from this scene
                                     _retryFailedSceneShots(sid, shotIds, referenceImagePath, heroProposal, function() {
                                         // clips keep original timing — no redistribution
@@ -844,6 +849,8 @@
                         setTimeout(function() {
                             _generateSceneShots(remainingIds, 0, null, heroProposal, function() {
                                 completedShots += remainingIds.length;
+                                _genProgress.current = completedShots;
+                                _setInlineProgress(completedShots, totalShots, sceneTitle, Math.round((Date.now() - _genProgress.startMs) / 1000));
                                 _retryFailedSceneShots(sid, shotIds, null, heroProposal, function() {
                                     // clips keep original timing — no redistribution
                                     nextScene(si + 1);
@@ -897,6 +904,9 @@
             // Same type as Hero → keep more structure; different type → more creative freedom
             var denoise = (heroType && tgtType && heroType === tgtType) ? 0.65 : 0.9;
             genOptions = { referenceImagePath: referenceImagePath, denoise: denoise };
+            if (heroProposal && heroProposal.description) {
+                genOptions.heroDescription = heroProposal.description;
+            }
         }
 
         broll.generateImage(shotId,
@@ -1108,6 +1118,9 @@
         var btnRegen = hasImage
             ? '<button class="btn btn-sm btn-ghost" onclick="EditorProUI.broll._regenClip(\'' + clip.id + '\')">🔄 Regenerar</button>'
             : '';
+        var btnRegenChildren = (clip.isHero && hasImage)
+            ? '<button class="btn btn-sm btn-ghost" onclick="EditorProUI.broll._regenChildren(\'' + clip.id + '\')">🔄 Regenerar Hijos</button>'
+            : '';
 
         // Build display clip name
         var clipSeqPrefix = (broll._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -1134,7 +1147,7 @@
                     ? '<div class="br-clip-transcript">🎙 <em>' + esc(clip.transcriptText.substring(0, 200)) + (clip.transcriptText.length > 200 ? '…' : '') + '</em></div>'
                     : '') +
                 '<textarea class="br-feedback-input" id="br-feedback-' + clip.id + '" placeholder="Feedback para regenerar: ej. \'más colorido\', \'sin personas\'..." rows="2"></textarea>' +
-                '<div class="br-clip-actions">' + btnPlace + btnAnimate + btnRegen + '</div>' +
+                '<div class="br-clip-actions">' + btnPlace + btnAnimate + btnRegen + btnRegenChildren + '</div>' +
             '</div>';
 
         // Sync card selected class and count on checkbox change
@@ -1287,6 +1300,72 @@
                     _renderClips();
                 }
             );
+        });
+    }
+
+    function _regenChildren(heroClipId) {
+        if (!broll) return;
+
+        var heroClip = broll._findClipById(heroClipId);
+        if (!heroClip || !heroClip.sceneId) {
+            showToast("No se encontró el clip hero o no pertenece a una escena", "error");
+            return;
+        }
+
+        var heroVersion = heroClip.versions[heroClip.activeVersion];
+        if (!heroVersion || !heroVersion.imagePath) {
+            showToast("El Hero Shot no tiene imagen generada", "error");
+            return;
+        }
+
+        var children = broll.clips.filter(function(c) {
+            return c.sceneId === heroClip.sceneId && c.id !== heroClipId && !c.isHero;
+        });
+
+        if (children.length === 0) {
+            showToast("No hay clips hijos en esta escena", "warning");
+            return;
+        }
+
+        broll.checkServer(function(ok) {
+            if (!ok) { showToast("Inicia el servidor Motion-Pro primero", "error"); return; }
+
+            var heroProposal = broll._findProposal(heroClip.proposalId);
+            var heroContext = heroClip.description;
+            if (heroClip.visualWorld) heroContext += " | " + heroClip.visualWorld;
+            if (heroProposal && heroProposal.visualStyle) heroContext += " | style: " + heroProposal.visualStyle;
+
+            var total = children.length;
+            var done = 0;
+
+            function regenNext(idx) {
+                if (idx >= children.length) {
+                    _renderClips();
+                    showToast("✅ " + done + "/" + total + " hijos regenerados", "success");
+                    return;
+                }
+
+                showToast("Regenerando hijo " + (idx + 1) + "/" + total + "...", "info");
+
+                var child = children[idx];
+                broll.regenerateImage(
+                    child.id, "",
+                    function(pId, status, elapsed) { _refreshClipCard(pId, status, elapsed); },
+                    function(err) {
+                        if (err) {
+                            if (window.EPLogger) EPLogger.error("broll", "regen-children-error", err.message);
+                            showToast("Error regenerando hijo " + (idx + 1) + ": " + err.message, "error");
+                        } else {
+                            done++;
+                            broll.saveState(_sessionKey);
+                        }
+                        setTimeout(function() { regenNext(idx + 1); }, 2000);
+                    },
+                    heroContext
+                );
+            }
+
+            regenNext(0);
         });
     }
 
@@ -1661,6 +1740,7 @@
         _placeClip: _placeClip,
         _animateClip: _animateClip,
         _regenClip: _regenClip,
+        _regenChildren: _regenChildren,
         _switchVersion: _switchVersion,
         _expandImage: _expandImage,
     };

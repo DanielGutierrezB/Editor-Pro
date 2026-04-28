@@ -583,6 +583,11 @@
             styledDescription = _stylePrefix[proposal.visualStyle] + styledDescription;
         }
 
+        // Prepend hero description for visual consistency across scene shots
+        if (options && options.heroDescription) {
+            styledDescription = '[Visual reference — maintain consistency with this scene: ' + options.heroDescription + '] ' + styledDescription;
+        }
+
         // Build request body
         var requestBody = {
             proposalId: proposalId,
@@ -706,7 +711,7 @@
 
     // ── Regenerate image with feedback ─────────────────────────────────────────
 
-    BRoll.prototype.regenerateImage = function(clipId, feedback, onProgress, callback) {
+    BRoll.prototype.regenerateImage = function(clipId, feedback, onProgress, callback, heroContext) {
         var self = this;
         var clip = self._findClipById(clipId);
         if (!clip) return callback(new Error("Clip no encontrado"));
@@ -718,6 +723,10 @@
         var enhancedDesc = feedback
             ? clip.description + ". Additional guidance: " + feedback
             : clip.description;
+
+        if (heroContext) {
+            enhancedDesc = '[Visual reference — maintain consistency with this scene: ' + heroContext + '] ' + enhancedDesc;
+        }
 
         // Patch description for this generation and use same flow
         var originalDesc = clip.description;
