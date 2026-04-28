@@ -270,21 +270,18 @@
 /* Thumbnail area */
 .br-clip-thumb {
     width: 100%;
-    max-height: 120px;
-    object-fit: contain;
+    height: 100%;
+    object-fit: cover;
     display: block;
     background: var(--bg-raised);
 }
 .br-clip-thumb-wrap {
     position: relative;
     width: 100%;
-    max-height: 120px;
+    height: 140px;
     background: var(--bg-raised);
     border-bottom: 1px solid var(--border);
     overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     cursor: pointer;
 }
 

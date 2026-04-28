@@ -796,8 +796,8 @@
             var sceneInfo = broll._findScene ? broll._findScene(sid) : null;
             var sceneTitle = (sceneInfo && sceneInfo.title) ? sceneInfo.title : (sid !== "__noscene__" ? sid : "");
             _genProgress.current = completedShots;
-            _setHeaderProgress(completedShots / totalShots * 100, (completedShots + 1) + "/" + totalShots);
-            _setInlineProgress(completedShots + 1, totalShots, sceneTitle, Math.round((Date.now() - _genProgress.startMs) / 1000));
+            _setHeaderProgress(completedShots / totalShots * 100, completedShots + "/" + totalShots);
+            _setInlineProgress(completedShots, totalShots, sceneTitle, Math.round((Date.now() - _genProgress.startMs) / 1000));
             _renderClips();
 
             // Generate Hero Shot first with txt2img (full creative freedom)
@@ -805,7 +805,7 @@
                 function(pId, status, elapsed) {
                     _refreshClipCard(pId, status, elapsed);
                     if (status === "generating" && elapsed > 0) {
-                        _setInlineProgress(completedShots + 1, totalShots, sceneTitle, elapsed);
+                        _setInlineProgress(completedShots, totalShots, sceneTitle, elapsed);
                     }
                 },
                 function(err) {
@@ -1331,9 +1331,8 @@
             if (!ok) { showToast("Inicia el servidor Motion-Pro primero", "error"); return; }
 
             var heroProposal = broll._findProposal(heroClip.proposalId);
-            var heroContext = heroClip.description;
-            if (heroClip.visualWorld) heroContext += " | " + heroClip.visualWorld;
-            if (heroProposal && heroProposal.visualStyle) heroContext += " | style: " + heroProposal.visualStyle;
+            var heroStyle = heroProposal && heroProposal.visualStyle ? heroProposal.visualStyle : "photorealistic";
+            var heroContext = "Maintain this artistic style and color palette: " + heroStyle.replace(/_/g, " ") + ". Visual world: " + (heroClip.visualWorld || "") + ". Do NOT repeat the hero composition — show something different following the transcript.";
 
             var total = children.length;
             var done = 0;

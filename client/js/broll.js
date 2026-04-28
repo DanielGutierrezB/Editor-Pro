@@ -356,8 +356,9 @@
             var shots = sceneGroups[key];
             if (shots.length < 2) continue;
 
-            // Sort by startTime
+            // Sort by shotOrder (narrative sequence), fallback to startTime
             shots.sort(function(a, b) {
+                if (a.shotOrder && b.shotOrder) return a.shotOrder - b.shotOrder;
                 return _timeToSecs(a.startTime) - _timeToSecs(b.startTime);
             });
 
@@ -585,7 +586,7 @@
 
         // Prepend hero description for visual consistency across scene shots
         if (options && options.heroDescription) {
-            styledDescription = '[Visual reference — maintain consistency with this scene: ' + options.heroDescription + '] ' + styledDescription;
+            styledDescription = '[STYLE REFERENCE ONLY — Use the same artistic style, color palette, and rendering technique. Do NOT repeat the hero composition — generate a COMPLETELY DIFFERENT subject as described below. Reference style: ' + options.heroDescription + '] ' + styledDescription;
         }
 
         // Build request body
