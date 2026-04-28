@@ -1186,9 +1186,24 @@
         _setInputVal("br-vid-gemini-key", s.videoGeminiApiKey);
         _setSelectVal("br-track-select", s.trackIndex);
         _refreshSettingsVisibility();
-        // Load FAL models if FAL is selected (after selects are visible)
-        if (s.imageProvider === "fal") _loadFalModels("text-to-image", "br-img-fal-model", s.imageFalModel);
-        if (s.videoProvider === "fal") _loadFalModels("image-to-video", "br-vid-fal-model", s.videoFalModel);
+
+        // Show saved model as placeholder while list loads
+        if (s.imageProvider === "fal" && s.imageFalModel) {
+            var imgSel = _el("br-img-fal-model");
+            if (imgSel) imgSel.innerHTML = '<option value="' + s.imageFalModel + '">' + s.imageFalModel + ' (cargando lista...)</option>';
+        }
+        if (s.videoProvider === "fal" && s.videoFalModel) {
+            var vidSel = _el("br-vid-fal-model");
+            if (vidSel) vidSel.innerHTML = '<option value="' + s.videoFalModel + '">' + s.videoFalModel + ' (cargando lista...)</option>';
+        }
+
+        // Delay FAL model loading until server is likely ready (2s after init)
+        if (s.imageProvider === "fal" || s.videoProvider === "fal") {
+            setTimeout(function() {
+                if (s.imageProvider === "fal") _loadFalModels("text-to-image", "br-img-fal-model", s.imageFalModel);
+                if (s.videoProvider === "fal") _loadFalModels("image-to-video", "br-vid-fal-model", s.videoFalModel);
+            }, 2500);
+        }
     }
 
     // ── FAL.ai dynamic model loading ───────────────────────────────────────────
@@ -1219,8 +1234,13 @@
                         _loadFalModels(category, selectId, savedValue, attempt + 1);
                     }, 3000);
                 } else {
-                    sel.innerHTML = '<option value="">Error cargando modelos</option>';
-                    _setFalModelStatus(selectId, "⚠ Error");
+                    // Keep saved value usable even if list failed
+                    if (savedValue) {
+                        sel.innerHTML = '<option value="' + savedValue + '">' + savedValue + '</option>';
+                    } else {
+                        sel.innerHTML = '<option value="">Error cargando modelos</option>';
+                    }
+                    _setFalModelStatus(selectId, "⚠ Error — pulsa ↺");
                 }
                 return;
             }
