@@ -185,7 +185,7 @@
 
     // ── Poll a B-roll job ──────────────────────────────────────────────────────
 
-    BRoll.prototype._pollJob = function(jobId, onDone) {
+    BRoll.prototype._pollJob = function(jobId, onDone, onTick) {
         var self = this;
         var polls = 0;
         var maxPolls = 200; // 200 × 2s = ~6 min
@@ -208,6 +208,7 @@
                     delete self._pollTimers[jobId];
                     return onDone(new Error(job.error || "Job failed"), null);
                 }
+                if (job.status === "running" && onTick) onTick(job);
                 self._pollTimers[jobId] = setTimeout(tick, 2000);
             });
         }
@@ -443,7 +444,7 @@
                 return callback(new Error(result.error));
             }
             var jobId = result.jobId;
-            if (onProgress) onProgress(proposalId, "generating", 30);
+            if (onProgress) onProgress(proposalId, "generating", 0);
 
             self._pollJob(jobId, function(pollErr, job) {
                 if (pollErr) {
@@ -465,6 +466,8 @@
                 clip.status = "image";
                 if (onProgress) onProgress(proposalId, "image", 100);
                 callback(null, clip);
+            }, function(job) {
+                if (onProgress) onProgress(proposalId, "generating", job.elapsedMs ? Math.round(job.elapsedMs / 1000) : 0);
             });
         });
     };
@@ -510,7 +513,7 @@
                 clip.status = "image";
                 return callback(new Error(result.error));
             }
-            if (onProgress) onProgress(clipId, "animating", 40);
+            if (onProgress) onProgress(clipId, "animating", 0);
 
             self._pollJob(result.jobId, function(pollErr, job) {
                 if (pollErr) {
@@ -523,6 +526,8 @@
                 clip.status = "video";
                 if (onProgress) onProgress(clipId, "video", 100);
                 callback(null, clip);
+            }, function(job) {
+                if (onProgress) onProgress(clipId, "animating", job.elapsedMs ? Math.round(job.elapsedMs / 1000) : 0);
             });
         });
     };

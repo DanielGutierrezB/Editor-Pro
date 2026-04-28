@@ -95,7 +95,7 @@ router.post('/generate-image', (req, res) => {
 
   const jobId = _newJobId();
   _setJob(jobId, { type: 'image', status: 'running', proposalId, outputPath,
-    isImg2Img: !!referenceImagePath });
+    isImg2Img: !!referenceImagePath, startTime: Date.now() });
 
   generateImage(
     { provider: imageProvider, description, endpointUrl, apiKey, model,
@@ -141,7 +141,7 @@ router.post('/animate', (req, res) => {
   const outputPath = path.join(sessionDir, safeId + '_v' + Date.now() + '.mp4');
 
   const jobId = _newJobId();
-  _setJob(jobId, { type: 'video', status: 'running', proposalId, outputPath });
+  _setJob(jobId, { type: 'video', status: 'running', proposalId, outputPath, startTime: Date.now() });
 
   generateVideo(
     { provider: videoProvider, imagePath, durationSecs, prompt, endpointUrl, apiKey, model },
@@ -165,7 +165,9 @@ router.post('/animate', (req, res) => {
 router.get('/status/:jobId', (req, res) => {
   const job = _jobs[req.params.jobId];
   if (!job) return res.status(404).json({ error: 'Job not found: ' + req.params.jobId });
-  res.json(job);
+  const response = Object.assign({}, job);
+  if (job.status === 'running' && job.startTime) response.elapsedMs = Date.now() - job.startTime;
+  res.json(response);
 });
 
 // ── GET /api/broll/comfyui-debug?url=... ──────────────────────────────────────

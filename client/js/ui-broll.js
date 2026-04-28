@@ -697,7 +697,7 @@
 
             // Generate Hero Shot first with txt2img (full creative freedom)
             broll.generateImage(heroShotId,
-                function(pId, status) { _refreshClipCard(pId, status); },
+                function(pId, status, elapsed) { _refreshClipCard(pId, status, elapsed); },
                 function(err) {
                     if (err) {
                         if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "hero shot: " + err.message);
@@ -755,7 +755,7 @@
         }
 
         broll.generateImage(shotId,
-            function(pId, status) { _refreshClipCard(pId, status); },
+            function(pId, status, elapsed) { _refreshClipCard(pId, status, elapsed); },
             function(err) {
                 if (err) {
                     if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "scene shot " + (startIdx + 1) + ": " + err.message);
@@ -789,8 +789,8 @@
         _setHeaderProgress(idx / ids.length * 100, (idx + 1) + "/" + ids.length);
 
         broll.generateImage(proposalId,
-            function(pId, status) {
-                _refreshClipCard(pId, status);
+            function(pId, status, elapsed) {
+                _refreshClipCard(pId, status, elapsed);
             },
             function(err) {
                 if (err) {
@@ -978,13 +978,19 @@
         return labels[status] || status;
     }
 
-    function _refreshClipCard(proposalId, status) {
+    function _refreshClipCard(proposalId, status, elapsedSecs) {
         var clip = broll._findClip(proposalId);
         if (!clip) return;
         var existing = _el("br-clip-card-" + clip.id);
         if (existing) {
             var badge = existing.querySelector(".br-status-badge");
-            if (badge) { badge.dataset.status = status; badge.textContent = _statusLabel(status); }
+            if (badge) {
+                badge.dataset.status = status;
+                var label = _statusLabel(status);
+                if (elapsedSecs > 0 && status === "generating") label = "⏳ Generando... (" + elapsedSecs + "s)";
+                else if (elapsedSecs > 0 && status === "animating") label = "🎬 Animando... (" + elapsedSecs + "s)";
+                badge.textContent = label;
+            }
         }
     }
 
@@ -1058,7 +1064,7 @@
             if (badge) { badge.dataset.status = "animating"; badge.textContent = _statusLabel("animating"); }
         }
         broll.animateClip(clipId,
-            function(cId, status) { _refreshClipCard(cId, status); },
+            function(cId, status, elapsed) { _refreshClipCard(cId, status, elapsed); },
             function(err, clip) {
                 if (err) { if (window.EPLogger) EPLogger.error("broll", "animate-error", err.message); showToast("Error al animar: " + err.message, "error"); }
                 else { showToast("Video generado", "success"); }
@@ -1076,7 +1082,7 @@
         broll.checkServer(function(ok) {
             if (!ok) { showToast("Inicia el servidor Motion-Pro primero", "error"); return; }
             broll.regenerateImage(clipId, feedback,
-                function(pId, status) { _refreshClipCard(pId, status); },
+                function(pId, status, elapsed) { _refreshClipCard(pId, status, elapsed); },
                 function(err, clip) {
                     if (err) { if (window.EPLogger) EPLogger.error("broll", "regen-error", err.message); showToast("Error al regenerar: " + err.message, "error"); return; }
                     broll.saveState(_sessionKey);
@@ -1094,7 +1100,7 @@
             var btn = _el("btn-br-animate-all");
             if (btn) btn.disabled = true;
             broll.animateAll(
-                function(cId, status) { _refreshClipCard(cId, status); },
+                function(cId, status, elapsed) { _refreshClipCard(cId, status, elapsed); },
                 function(idx, total, cId) {
                     _setHeaderProgress(idx / total * 100, (idx + 1) + "/" + total + " animando");
                 },
@@ -1135,27 +1141,52 @@
 
     var _falModelsLoaded = {};  // cache: { "text-to-image": [{id, name}], ... }
 
-    function _loadFalModels(category, selectId, savedValue) {
+    function _loadFalModels(category, selectId, savedValue, attempt) {
         var sel = _el(selectId);
         if (!sel) return;
+        attempt = attempt || 1;
 
         // Serve from memory cache if available
         if (_falModelsLoaded[category]) {
             _populateFalSelect(sel, _falModelsLoaded[category], savedValue);
+            _setFalModelStatus(selectId, null);
             return;
         }
 
         sel.innerHTML = '<option value="">Cargando modelos...</option>';
+        _setFalModelStatus(selectId, "⏳ Cargando" + (attempt > 1 ? " (intento " + attempt + "/3)" : "") + "...");
 
         if (!broll) return;
         broll._get("/api/broll/fal-models?category=" + encodeURIComponent(category), function(err, result) {
             if (err || !result || !result.models || result.models.length === 0) {
-                sel.innerHTML = '<option value="">Error cargando modelos</option>';
+                if (attempt < 3) {
+                    _setFalModelStatus(selectId, "⚠ Reintentando... (" + attempt + "/3)");
+                    setTimeout(function() {
+                        _loadFalModels(category, selectId, savedValue, attempt + 1);
+                    }, 3000);
+                } else {
+                    sel.innerHTML = '<option value="">Error cargando modelos</option>';
+                    _setFalModelStatus(selectId, "⚠ Error");
+                }
                 return;
             }
             _falModelsLoaded[category] = result.models;
             _populateFalSelect(sel, result.models, savedValue);
+            _setFalModelStatus(selectId, "✅ " + result.models.length + " modelos");
         });
+    }
+
+    function _setFalModelStatus(selectId, text) {
+        var el = _el(selectId + "-status");
+        if (!el) return;
+        el.textContent = text || "";
+        el.style.display = text ? "" : "none";
+    }
+
+    function _reloadFalModels(category, selectId) {
+        delete _falModelsLoaded[category];
+        var savedValue = broll ? (category === "text-to-image" ? broll.getSettings().imageFalModel : broll.getSettings().videoFalModel) : "";
+        _loadFalModels(category, selectId, savedValue, 1);
     }
 
     function _populateFalSelect(sel, models, savedValue) {
@@ -1317,11 +1348,25 @@
             });
         });
 
-        // Settings toggle
+        // Settings toggle — auto-retry empty FAL model lists when panel opens
         on("br-settings-toggle", "click", function() {
             var body = _el("br-settings-body");
-            if (body) body.classList.toggle("hidden");
+            if (!body) return;
+            var wasHidden = body.classList.contains("hidden");
+            body.classList.toggle("hidden");
+            if (wasHidden) {
+                var s = broll ? broll.getSettings() : {};
+                if (s.imageProvider === "fal" && !_falModelsLoaded["text-to-image"]) {
+                    _loadFalModels("text-to-image", "br-img-fal-model", s.imageFalModel);
+                }
+                if (s.videoProvider === "fal" && !_falModelsLoaded["image-to-video"]) {
+                    _loadFalModels("image-to-video", "br-vid-fal-model", s.videoFalModel);
+                }
+            }
         });
+
+        on("btn-br-img-fal-reload", "click", function() { _reloadFalModels("text-to-image", "br-img-fal-model"); });
+        on("btn-br-vid-fal-reload", "click", function() { _reloadFalModels("image-to-video", "br-vid-fal-model"); });
 
         // Subscribe to EventBus — self-contained, no need to wire in sequence-controller
         if (window.EventBus) {
