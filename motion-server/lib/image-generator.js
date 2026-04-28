@@ -199,8 +199,15 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
         if (!imgUrl && parsed.image) imgUrl = parsed.image.url;
         if (!imgUrl && parsed.output) imgUrl = parsed.output.url || (Array.isArray(parsed.output) && parsed.output[0] && parsed.output[0].url);
         if (!imgUrl) return callback(new Error('No image URL in FAL result: ' + data.substring(0, 300)));
-        console.log('[FAL] Got image URL, downloading...');
-        _downloadToFile(imgUrl, outputPath, callback);
+        // Fix extension to match actual format from URL (e.g. Grok returns .jpg not .png)
+        const urlExt = path.extname(new URL(imgUrl).pathname).toLowerCase();
+        let finalPath = outputPath;
+        if (urlExt && urlExt !== path.extname(outputPath).toLowerCase()) {
+          finalPath = outputPath.replace(/\.[^.]+$/, urlExt);
+          console.log('[FAL] Correcting extension:', path.extname(outputPath), '→', urlExt);
+        }
+        console.log('[FAL] Got image URL, downloading to:', path.basename(finalPath));
+        _downloadToFile(imgUrl, finalPath, callback);
       } catch (e) {
         callback(new Error('FAL parse error: ' + e.message + ' | bytes=' + data.length));
       }

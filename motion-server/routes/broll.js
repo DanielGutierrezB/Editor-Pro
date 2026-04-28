@@ -91,6 +91,7 @@ router.post('/generate-image', (req, res) => {
   const fileName = clipName
     ? clipName.replace(/[^a-z0-9_-]/gi, '_')
     : (proposalId || Date.now()).toString().replace(/[^a-z0-9_-]/gi, '_');
+  // Use .jpg for providers that may return JPEG (extension will be corrected after download if needed)
   const outputPath = path.join(sessionDir, fileName + '.png');
 
   const jobId = _newJobId();
@@ -112,7 +113,9 @@ router.post('/generate-image', (req, res) => {
         // Generate base64 thumbnail (for UI preview)
         try {
           const buf = fs.readFileSync(filePath);
-          _jobs[jobId].base64 = 'data:image/png;base64,' + buf.toString('base64');
+          const ext = path.extname(filePath).toLowerCase();
+          const mime = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.webp' ? 'image/webp' : 'image/png';
+          _jobs[jobId].base64 = 'data:' + mime + ';base64,' + buf.toString('base64');
         } catch (_e) {}
       }
     }
