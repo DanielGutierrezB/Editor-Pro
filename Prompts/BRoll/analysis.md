@@ -100,6 +100,10 @@ Use these to describe how shots within a scene progress narratively.
 - Change scale between shots (never cut from medium to medium)
 - Visual consistency within the scene (same palette, same "world")
 - Total scenes: 3–6 per video (be selective, not exhaustive)
+- **NO GAPS within a scene** — shots must be back-to-back (endTime of shot N = startTime of shot N+1). Cut directly from one shot to the next.
+- **Each shot must advance the visual narrative** — don't repeat the same composition. Shot 1 establishes, Shot 2 deepens, Shot 3 reveals the detail. Every cut must show something NEW.
+- **Tight timing to transcript** — endTime/startTime must align with actual words in the transcript. Don't place B-roll in silence or between sentences unless it's a deliberate scene transition pause.
+- Between scenes, a small gap (1-3s) is acceptable as a natural scene transition aligned with a topic change in the narration.
 
 ## Output format:
 Return ONLY valid JSON. No markdown, no explanation, just the JSON object:
