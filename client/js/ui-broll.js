@@ -805,7 +805,7 @@
                                     completedShots += remainingIds.length;
                                     // Retry failed shots from this scene
                                     _retryFailedSceneShots(sid, shotIds, referenceImagePath, heroProposal, function() {
-                                        broll.redistributeSceneClips(sid);
+                                        // clips keep original timing — no redistribution
                                         nextScene(si + 1);
                                     });
                                 });
@@ -817,7 +817,7 @@
                             _generateSceneShots(remainingIds, 0, null, heroProposal, function() {
                                 completedShots += remainingIds.length;
                                 _retryFailedSceneShots(sid, shotIds, null, heroProposal, function() {
-                                    broll.redistributeSceneClips(sid);
+                                    // clips keep original timing — no redistribution
                                     nextScene(si + 1);
                                 });
                             });
