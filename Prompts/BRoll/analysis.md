@@ -14,7 +14,7 @@ Your job: identify moments where B-roll visual content would amplify the message
 ## HERO SHOT:
 - The Hero Shot is the **most expressive and contextually rich** shot of the scene — it anchors the visual world
 - It does NOT have to be the first shot — it's the one that best captures the central concept of the scene
-- All other shots derive their visual style from the Hero Shot (same palette, mood, environment)
+- **The Hero Shot defines the visual style for the entire scene** — all other shots MUST maintain the same artistic style, color palette, and rendering technique as the Hero Shot
 - Mark it with `"isHero": true` in the JSON — all other shots get `"isHero": false`
 - Choose the shot with the most narrative context: the one a viewer would remember most
 
@@ -25,19 +25,7 @@ Your job: identify moments where B-roll visual content would amplify the message
 - **DET**: Insert of small object, texture, data point (2–3s)
 - **OTS**: Over-the-shoulder perspective, POV looking at something (3–5s)
 
-## CRITICAL: Photorealistic Style
-All image descriptions MUST describe **photorealistic scenes with real people in real situations**. Think stock footage / documentary style:
-- Real people in offices, meetings, looking at screens, working
-- Real environments: offices, coffee shops, classrooms, streets, homes
-- Real objects: laptops, phones, documents, whiteboards, money, products
-- Cinematic photography: shallow depth of field, natural lighting, professional composition
-
-**NEVER describe:**
-- Animated/cartoon/illustration style images
-- 3D renders or floating objects
-- Abstract graphics, charts, or diagrams
-- Icons, UI mockups, or infographics
-- Split screens or collages
+{VISUAL_STYLE}
 
 ## LANGUAGE RULES:
 - **Match the language of the transcript.** If the class is in Spanish, ALL descriptions, rationales, scene titles, and visual worlds MUST be in Spanish.

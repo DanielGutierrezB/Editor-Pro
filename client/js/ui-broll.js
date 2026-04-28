@@ -1250,6 +1250,7 @@
     function _loadSettingsUI() {
         if (!broll) return;
         var s = broll.getSettings();
+        _setSelectVal("br-visual-style", s.visualStyle);
         _setSelectVal("br-img-provider", s.imageProvider);
         _setInputVal("br-img-endpoint", s.imageEndpointUrl);
         _setInputVal("br-img-gemini-key", s.imageGeminiApiKey);
@@ -1379,6 +1380,7 @@
     function saveSettings() {
         if (!broll) return;
         broll.saveSettings({
+            visualStyle:       _getSelectVal("br-visual-style"),
             imageProvider:     _getSelectVal("br-img-provider"),
             imageEndpointUrl:  _getInputVal("br-img-endpoint"),
             imageGeminiApiKey: _getInputVal("br-img-gemini-key"),

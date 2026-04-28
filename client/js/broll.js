@@ -2,6 +2,7 @@
  * BRoll — B-Roll Image-to-Video Pipeline for Editor-Pro
  * Server lifecycle (reuses motion-server port 3847), image gen, video gen, versioning
  * v1.9.0: Gemini Flash Image provider + feedback reference + Gemini-aware denoise skip
+ * v1.8.48: Visual style selector — photorealistic, comic sketch, blueprint, courtroom
  */
 (function(global) {
     "use strict";
@@ -39,6 +40,7 @@
 
     BRoll.prototype._loadSettings = function() {
         var defaults = {
+            visualStyle: "photorealistic",
             imageProvider: "comfyui",
             imageEndpointUrl: "http://localhost:8188",
             imageFalModel: "",
@@ -229,6 +231,86 @@
         '[{ "startTime": "HH:MM:SS.mmm", "endTime": "HH:MM:SS.mmm", "description": "...", "rationale": "..." }]'
     ].join("\n");
 
+    var _STYLE_DEFS = {
+        photorealistic: [
+            "## CRITICAL: Photorealistic Style",
+            "All image descriptions MUST describe **photorealistic scenes with real people in real situations**. Think stock footage / documentary style:",
+            "- Real people in offices, meetings, looking at screens, working",
+            "- Real environments: offices, coffee shops, classrooms, streets, homes",
+            "- Real objects: laptops, phones, documents, whiteboards, money, products",
+            "- Cinematic photography: shallow depth of field, natural lighting, professional composition",
+            "",
+            "**NEVER describe:**",
+            "- Animated/cartoon/illustration style images",
+            "- 3D renders or floating objects",
+            "- Abstract graphics, charts, or diagrams",
+            "- Icons, UI mockups, or infographics",
+            "- Split screens or collages"
+        ].join("\n"),
+
+        comic_sketch: [
+            "## CRITICAL: Comic Sketch Style",
+            "All image descriptions MUST follow this artistic style: Rough illustrative comic sketch style, unfinished drawing aesthetic, loose and imperfect linework, slightly wobbly bold outlines, hand-drawn feel, sketchy composition, minimal refinement, low-saturation color palette with a strong green dominance, muted tones, subtle color variation, raw and expressive strokes.",
+            "",
+            "**DESCRIBE:**",
+            "- Loose sketchy figures and environments rendered in a raw hand-drawn comic style",
+            "- Rough, wobbly outlines with visible pencil/ink strokes and imperfect shapes",
+            "- Low-saturation muted palette dominated by greens and earth tones",
+            "- Expressive, gestural compositions with an unfinished sketch aesthetic",
+            "",
+            "**NEVER describe:**",
+            "- Photorealistic or polished illustration styles",
+            "- Clean digital art, 3D renders, or vector graphics",
+            "- High-saturation or neon color palettes",
+            "- Smooth, precise, or professionally finished linework",
+            "",
+            "Maintain this artistic style consistently across all shots in a scene."
+        ].join("\n"),
+
+        blueprint: [
+            "## CRITICAL: Blueprint Style",
+            "All image descriptions MUST follow this artistic style: Black background with glowing white linework, blueprint-style aesthetic, chalkboard drawing look, technical sketch appearance, clean luminous outlines, high contrast, minimal color (monochrome white on black), soft glow effect, schematic and diagram-like style, precise yet hand-drawn feel, subtle dust or chalk texture.",
+            "",
+            "**DESCRIBE:**",
+            "- Dark/black backgrounds with crisp glowing white technical linework",
+            "- Blueprint, chalkboard, or architectural schematic aesthetic",
+            "- High-contrast monochrome (white on black) with subtle chalk or dust texture",
+            "- Precise structural outlines with a soft luminous glow",
+            "",
+            "**NEVER describe:**",
+            "- Colorful, photorealistic, or warm-toned images",
+            "- Organic textures, natural environments, or soft gradients",
+            "- Bright or light backgrounds",
+            "- Painterly or loose artistic styles",
+            "",
+            "Maintain this artistic style consistently across all shots in a scene."
+        ].join("\n"),
+
+        courtroom: [
+            "## CRITICAL: Courtroom Sketch Style",
+            "All image descriptions MUST follow this artistic style: Courtroom sketch illustration style, traditional media look, expressive and gestural linework, loose yet controlled strokes, hand-drawn ink and colored pencil aesthetic, soft shading with layered strokes, slightly rough textures, muted and natural color palette (earth tones, subdued blues, browns, and reds), subtle paper grain, observational drawing style, dynamic but imperfect proportions, reportage illustration feel.",
+            "",
+            "**DESCRIBE:**",
+            "- Expressive, gestural figures and scenes in a reportage/courtroom sketch style",
+            "- Ink and colored pencil textures with layered, soft shading strokes",
+            "- Muted earth-tone palette: browns, subdued blues, reds, natural colors",
+            "- Paper grain texture and imperfect, observational proportions with dynamic energy",
+            "",
+            "**NEVER describe:**",
+            "- Photorealistic or digitally polished images",
+            "- Clean vector, cartoon, or animation styles",
+            "- Bright, saturated, or neon color palettes",
+            "- Symmetrical or overly precise compositions",
+            "",
+            "Maintain this artistic style consistently across all shots in a scene."
+        ].join("\n")
+    };
+
+    function _buildStyledPrompt(promptTemplate, style) {
+        var styleDef = _STYLE_DEFS[style] || _STYLE_DEFS.photorealistic;
+        return promptTemplate.replace("{VISUAL_STYLE}", styleDef);
+    }
+
     var _brollPromptLoaded = false;
     function _ensureBrollPrompt() {
         if (_brollPromptLoaded) return;
@@ -408,7 +490,10 @@
         var userPrompt = "Analyze the following transcript and identify B-roll opportunities.\n\n" + transcript +
             '\n\nReturn ONLY valid JSON. No explanation text.';
 
-        analyzer._send(BROLL_SYSTEM_PROMPT, userPrompt, function(result) {
+        var visualStyle = self._settings.visualStyle || "photorealistic";
+        var systemPrompt = _buildStyledPrompt(BROLL_SYSTEM_PROMPT, visualStyle);
+
+        analyzer._send(systemPrompt, userPrompt, function(result) {
             self.analyzing = false;
             if (!result) return callback(new Error("La IA no devolvió respuesta"));
             if (result.error) return callback(new Error(result.error));

@@ -39,6 +39,73 @@ Return ONLY a valid JSON array:
   }
 ]`;
 
+const STYLE_DEFINITIONS = {
+  photorealistic: `## CRITICAL: Photorealistic Style
+All image descriptions MUST describe **photorealistic scenes with real people in real situations**. Think stock footage / documentary style:
+- Real people in offices, meetings, looking at screens, working
+- Real environments: offices, coffee shops, classrooms, streets, homes
+- Real objects: laptops, phones, documents, whiteboards, money, products
+- Cinematic photography: shallow depth of field, natural lighting, professional composition
+
+**NEVER describe:**
+- Animated/cartoon/illustration style images
+- 3D renders or floating objects
+- Abstract graphics, charts, or diagrams
+- Icons, UI mockups, or infographics
+- Split screens or collages`,
+
+  comic_sketch: `## CRITICAL: Comic Sketch Style
+All image descriptions MUST follow this artistic style: Rough illustrative comic sketch style, unfinished drawing aesthetic, loose and imperfect linework, slightly wobbly bold outlines, hand-drawn feel, sketchy composition, minimal refinement, low-saturation color palette with a strong green dominance, muted tones, subtle color variation, raw and expressive strokes.
+
+**DESCRIBE:**
+- Loose sketchy figures and environments rendered in a raw hand-drawn comic style
+- Rough, wobbly outlines with visible pencil/ink strokes and imperfect shapes
+- Low-saturation muted palette dominated by greens and earth tones
+- Expressive, gestural compositions with an unfinished sketch aesthetic
+
+**NEVER describe:**
+- Photorealistic or polished illustration styles
+- Clean digital art, 3D renders, or vector graphics
+- High-saturation or neon color palettes
+- Smooth, precise, or professionally finished linework
+
+Maintain this artistic style consistently across all shots in a scene.`,
+
+  blueprint: `## CRITICAL: Blueprint Style
+All image descriptions MUST follow this artistic style: Black background with glowing white linework, blueprint-style aesthetic, chalkboard drawing look, technical sketch appearance, clean luminous outlines, high contrast, minimal color (monochrome white on black), soft glow effect, schematic and diagram-like style, precise yet hand-drawn feel, subtle dust or chalk texture.
+
+**DESCRIBE:**
+- Dark/black backgrounds with crisp glowing white technical linework
+- Blueprint, chalkboard, or architectural schematic aesthetic
+- High-contrast monochrome (white on black) with subtle chalk or dust texture
+- Precise structural outlines with a soft luminous glow
+
+**NEVER describe:**
+- Colorful, photorealistic, or warm-toned images
+- Organic textures, natural environments, or soft gradients
+- Bright or light backgrounds
+- Painterly or loose artistic styles
+
+Maintain this artistic style consistently across all shots in a scene.`,
+
+  courtroom: `## CRITICAL: Courtroom Sketch Style
+All image descriptions MUST follow this artistic style: Courtroom sketch illustration style, traditional media look, expressive and gestural linework, loose yet controlled strokes, hand-drawn ink and colored pencil aesthetic, soft shading with layered strokes, slightly rough textures, muted and natural color palette (earth tones, subdued blues, browns, and reds), subtle paper grain, observational drawing style, dynamic but imperfect proportions, reportage illustration feel.
+
+**DESCRIBE:**
+- Expressive, gestural figures and scenes in a reportage/courtroom sketch style
+- Ink and colored pencil textures with layered, soft shading strokes
+- Muted earth-tone palette: browns, subdued blues, reds, natural colors
+- Paper grain texture and imperfect, observational proportions with dynamic energy
+
+**NEVER describe:**
+- Photorealistic or digitally polished images
+- Clean vector, cartoon, or animation styles
+- Bright, saturated, or neon color palettes
+- Symmetrical or overly precise compositions
+
+Maintain this artistic style consistently across all shots in a scene.`
+};
+
 const GENERATOR_CAPABILITY_HINTS = `
 ## IMAGE GENERATOR CAPABILITIES (use these to write better descriptions):
 - **Subject consistency**: If you describe the same person or location across different shots in a scene, they will look visually consistent. Reuse character details (age, clothing, face type) and location details (office color, furniture) across shots in the same scene.
@@ -46,10 +113,11 @@ const GENERATOR_CAPABILITY_HINTS = `
 - **World knowledge**: Be specific about what the narrator is saying at each moment. The generator understands concepts like financial dashboards, balance sheets, courtrooms, operating rooms, construction blueprints, etc. Name them explicitly.
 - **Photorealism**: Descriptions of real people in real environments always produce the best results. Avoid abstract or symbolic descriptions.`;
 
-function getAnalysisSystemPrompt() {
+function getAnalysisSystemPrompt(style) {
   const p = path.join(PROMPTS_DIR, 'analysis.md');
-  if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
-  return DEFAULT_ANALYSIS_SYSTEM;
+  let prompt = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : DEFAULT_ANALYSIS_SYSTEM;
+  const styleDef = STYLE_DEFINITIONS[style] || STYLE_DEFINITIONS.photorealistic;
+  return prompt.replace('{VISUAL_STYLE}', styleDef);
 }
 
 function buildAnalysisPrompt(transcript) {
