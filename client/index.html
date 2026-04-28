@@ -1340,6 +1340,7 @@
                                 <span class="br-settings-label">Proveedor</span>
                                 <select id="br-img-provider" class="select-input">
                                     <option value="comfyui" selected>⚡ ComfyUI + Flux (local)</option>
+                                    <option value="fal">🌐 FAL.ai (cloud)</option>
                                     <option value="gemini_image">🤖 Gemini Flash Image (Google AI)</option>
                                     <option value="placeholder">🧪 Placeholder (sin API)</option>
                                 </select>
@@ -1352,10 +1353,17 @@
                                 <span class="br-settings-label">Google AI API Key</span>
                                 <input type="password" id="br-img-gemini-key" class="text-input" placeholder="AIza...">
                             </div>
-                            <!-- FAL.ai settings hidden — not currently installed -->
-                            <div id="br-img-fal-row" style="display:none">
-                                <input type="hidden" id="br-img-fal-model" value="">
-                                <input type="hidden" id="br-img-fal-key" value="">
+                            <div class="br-settings-row" id="br-img-fal-key-row" style="display:none">
+                                <span class="br-settings-label">FAL.ai API Key</span>
+                                <input type="password" id="br-img-fal-key" class="text-input" placeholder="...">
+                            </div>
+                            <div class="br-settings-row" id="br-img-fal-model-row" style="display:none">
+                                <span class="br-settings-label">Modelo imagen</span>
+                                <select id="br-img-fal-model" class="select-input">
+                                    <option value="fal-ai/flux/schnell">Flux Schnell (rápido)</option>
+                                    <option value="fal-ai/flux-2-flex">Flux 2 Flex (mejor calidad)</option>
+                                    <option value="fal-ai/recraft/v4/pro/text-to-image">Recraft v4 Pro (profesional)</option>
+                                </select>
                             </div>
 
                             <div class="br-settings-title" style="margin-top:10px">Generación de Video (Animación)</div>
@@ -1363,9 +1371,21 @@
                                 <span class="br-settings-label">Proveedor</span>
                                 <select id="br-vid-provider" class="select-input">
                                     <option value="placeholder" selected>🧪 Placeholder (ffmpeg estático)</option>
+                                    <option value="fal">🌐 FAL.ai (Kling/Seedance)</option>
                                 </select>
                             </div>
-                            <!-- LTX/Kling settings hidden — not currently installed -->
+                            <div class="br-settings-row" id="br-vid-fal-key-row" style="display:none">
+                                <span class="br-settings-label">FAL.ai API Key</span>
+                                <input type="password" id="br-vid-fal-key" class="text-input" placeholder="...">
+                            </div>
+                            <div class="br-settings-row" id="br-vid-fal-model-row" style="display:none">
+                                <span class="br-settings-label">Modelo video</span>
+                                <select id="br-vid-fal-model" class="select-input">
+                                    <option value="fal-ai/kling-video/v2/master/image-to-video">Kling 2.0 Master (mejor calidad)</option>
+                                    <option value="fal-ai/kling-video/v2.5-turbo/pro/image-to-video">Kling 3.0 Pro (más rápido)</option>
+                                </select>
+                            </div>
+                            <!-- Legacy hidden fields for LTX/Kling direct API (not exposed in UI) -->
                             <div id="br-vid-endpoint-row" style="display:none"><input type="hidden" id="br-vid-endpoint" value=""></div>
                             <div id="br-vid-kling-row" style="display:none"><input type="hidden" id="br-vid-kling-key" value=""></div>
 

@@ -68,7 +68,7 @@
                 ok ? "Motion Server (:3847)" : "Motion Server — detenido");
         });
 
-        // 2. Image provider check — ComfyUI, Gemini, or none
+        // 2. Image provider check — ComfyUI, Gemini, FAL, or none
         var settings = broll.getSettings();
         var comfyRow = _el("br-dep-comfy-row");
         if (settings.imageProvider === "comfyui") {
@@ -88,6 +88,11 @@
             var hasKey = !!(settings.imageGeminiApiKey && settings.imageGeminiApiKey.trim());
             _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", hasKey,
                 hasKey ? "Gemini Flash Image — API key configurada" : "Gemini Flash Image — falta API key");
+        } else if (settings.imageProvider === "fal") {
+            if (comfyRow) comfyRow.style.display = "";
+            var hasFalKey = !!(settings.imageFalApiKey && settings.imageFalApiKey.trim());
+            _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", hasFalKey,
+                hasFalKey ? "FAL.ai — API key configurada" : "FAL.ai — falta API key");
         } else {
             _setDotStatus("br-dep-comfy-dot", "br-dep-comfy-text", false, "ComfyUI — no seleccionado");
             if (comfyRow) comfyRow.style.display = "none";
@@ -1096,19 +1101,27 @@
         _setSelectVal("br-img-provider", s.imageProvider);
         _setInputVal("br-img-endpoint", s.imageEndpointUrl);
         _setInputVal("br-img-gemini-key", s.imageGeminiApiKey);
-        _setInputVal("br-img-fal-model", s.imageFalModel);
+        _setSelectVal("br-img-fal-model", s.imageFalModel);
         _setInputVal("br-img-fal-key", s.imageFalApiKey);
         _setSelectVal("br-vid-provider", s.videoProvider);
         _setInputVal("br-vid-endpoint", s.videoEndpointUrl);
         _setInputVal("br-vid-kling-key", s.videoKlingApiKey);
+        _setSelectVal("br-vid-fal-model", s.videoFalModel);
+        _setInputVal("br-vid-fal-key", s.videoFalApiKey);
         _setSelectVal("br-track-select", s.trackIndex);
         _refreshSettingsVisibility();
     }
 
     function _refreshSettingsVisibility() {
         var imgProv = _getSelectVal("br-img-provider");
-        _toggleEl("br-img-endpoint-row",  imgProv === "comfyui");
-        _toggleEl("br-img-gemini-key-row", imgProv === "gemini_image");
+        _toggleEl("br-img-endpoint-row",    imgProv === "comfyui");
+        _toggleEl("br-img-gemini-key-row",  imgProv === "gemini_image");
+        _toggleEl("br-img-fal-key-row",     imgProv === "fal");
+        _toggleEl("br-img-fal-model-row",   imgProv === "fal");
+
+        var vidProv = _getSelectVal("br-vid-provider");
+        _toggleEl("br-vid-fal-key-row",     vidProv === "fal");
+        _toggleEl("br-vid-fal-model-row",   vidProv === "fal");
     }
 
     function saveSettings() {
@@ -1117,11 +1130,13 @@
             imageProvider:     _getSelectVal("br-img-provider"),
             imageEndpointUrl:  _getInputVal("br-img-endpoint"),
             imageGeminiApiKey: _getInputVal("br-img-gemini-key"),
-            imageFalModel:     _getInputVal("br-img-fal-model"),
+            imageFalModel:     _getSelectVal("br-img-fal-model"),
             imageFalApiKey:    _getInputVal("br-img-fal-key"),
             videoProvider:     _getSelectVal("br-vid-provider"),
             videoEndpointUrl:  _getInputVal("br-vid-endpoint"),
             videoKlingApiKey:  _getInputVal("br-vid-kling-key"),
+            videoFalModel:     _getSelectVal("br-vid-fal-model"),
+            videoFalApiKey:    _getInputVal("br-vid-fal-key"),
             trackIndex:        _getSelectVal("br-track-select")
         });
         showToast("Configuración B-Roll guardada", "success");

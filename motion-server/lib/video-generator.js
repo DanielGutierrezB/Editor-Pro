@@ -189,16 +189,129 @@ function _pollKlingTask(taskId, apiKey, outputPath, callback) {
   setTimeout(poll, 5000);
 }
 
+// ── FAL.ai queue API (image-to-video) ─────────────────────────────────────────
+
+function _generateFalVideo(imagePath, durationSecs, prompt, apiKey, model, outputPath, callback) {
+  if (!apiKey) return callback(new Error('FAL.ai API key required'));
+
+  const imageBuffer = fs.readFileSync(imagePath);
+  const imageBase64 = imageBuffer.toString('base64');
+  const imageUrl = 'data:image/png;base64,' + imageBase64;
+
+  const falModel = model || 'fal-ai/kling-video/v2/master/image-to-video';
+  const body = JSON.stringify({
+    prompt: prompt || 'Smooth cinematic motion, high quality video, professional look',
+    image_url: imageUrl,
+    duration: '5',
+    aspect_ratio: '16:9',
+  });
+
+  const req = https.request({
+    hostname: 'queue.fal.run',
+    path: '/' + falModel,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+      'Authorization': 'Key ' + apiKey,
+    },
+  }, (res) => {
+    let data = '';
+    res.on('data', (c) => { data += c; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.detail || parsed.error) {
+          return callback(new Error('FAL submit error: ' + (parsed.detail || parsed.error)));
+        }
+        const requestId = parsed.request_id;
+        if (!requestId) return callback(new Error('No request_id from FAL: ' + data.substring(0, 300)));
+        _pollFalQueue(falModel, requestId, apiKey, outputPath, callback);
+      } catch (e) {
+        callback(new Error('FAL submit parse error: ' + e.message));
+      }
+    });
+  });
+  req.on('error', callback);
+  req.setTimeout(30000, () => { req.destroy(); callback(new Error('FAL submit timeout')); });
+  req.write(body);
+  req.end();
+}
+
+function _pollFalQueue(model, requestId, apiKey, outputPath, callback) {
+  let polls = 0;
+  const maxPolls = 120; // 120 × 5s = 10 min
+  function poll() {
+    polls++;
+    if (polls > maxPolls) return callback(new Error('FAL queue timeout'));
+    const req = https.request({
+      hostname: 'queue.fal.run',
+      path: '/' + model + '/requests/' + requestId + '/status',
+      method: 'GET',
+      headers: { 'Authorization': 'Key ' + apiKey },
+    }, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          const status = parsed.status;
+          if (status === 'COMPLETED') {
+            return _fetchFalResult(model, requestId, apiKey, outputPath, callback);
+          }
+          if (status === 'FAILED') {
+            return callback(new Error('FAL task failed: ' + JSON.stringify(parsed)));
+          }
+          // IN_QUEUE or IN_PROGRESS — keep polling
+          setTimeout(poll, 5000);
+        } catch (e) {
+          callback(new Error('FAL poll parse error: ' + e.message));
+        }
+      });
+    });
+    req.on('error', callback);
+    req.setTimeout(15000, () => { req.destroy(); setTimeout(poll, 5000); });
+    req.end();
+  }
+  setTimeout(poll, 5000);
+}
+
+function _fetchFalResult(model, requestId, apiKey, outputPath, callback) {
+  const req = https.request({
+    hostname: 'queue.fal.run',
+    path: '/' + model + '/requests/' + requestId + '/response',
+    method: 'GET',
+    headers: { 'Authorization': 'Key ' + apiKey },
+  }, (res) => {
+    let data = '';
+    res.on('data', (c) => { data += c; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        const videoUrl = parsed.video && parsed.video.url;
+        if (!videoUrl) return callback(new Error('No video URL in FAL result: ' + data.substring(0, 300)));
+        _downloadToFile(videoUrl, outputPath, callback);
+      } catch (e) {
+        callback(new Error('FAL result parse error: ' + e.message));
+      }
+    });
+  });
+  req.on('error', callback);
+  req.setTimeout(30000, () => { req.destroy(); callback(new Error('FAL result fetch timeout')); });
+  req.end();
+}
+
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 function generateVideo(options, outputPath, callback) {
-  const { provider, imagePath, durationSecs, prompt, endpointUrl, apiKey } = options;
+  const { provider, imagePath, durationSecs, prompt, endpointUrl, apiKey, model } = options;
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
   switch (provider) {
     case 'ltx_local': return _generateLtxLocal(imagePath, durationSecs, prompt, endpointUrl, outputPath, callback);
     case 'kling':     return _generateKling(imagePath, durationSecs, prompt, apiKey, outputPath, callback);
+    case 'fal':       return _generateFalVideo(imagePath, durationSecs, prompt, apiKey, model, outputPath, callback);
     case 'placeholder':
     default:          return _generatePlaceholderVideo(imagePath, durationSecs, outputPath, callback);
   }

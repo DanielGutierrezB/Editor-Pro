@@ -47,6 +47,8 @@
             videoProvider: "placeholder",
             videoEndpointUrl: "",
             videoKlingApiKey: "",
+            videoFalModel: "",
+            videoFalApiKey: "",
             trackIndex: "auto",
             outputDir: ""
         };
@@ -483,6 +485,8 @@
         clip.status = "animating";
         if (onProgress) onProgress(clipId, "animating", 0);
 
+        var videoApiKey = settings.videoProvider === "fal" ? settings.videoFalApiKey : settings.videoKlingApiKey;
+        var videoModel = settings.videoProvider === "fal" ? settings.videoFalModel : undefined;
         self._post("/api/broll/animate", {
             proposalId: clip.proposalId,
             imagePath: version.imagePath,
@@ -490,7 +494,8 @@
             prompt: clip.description,
             videoProvider: settings.videoProvider,
             endpointUrl: settings.videoEndpointUrl,
-            apiKey: settings.videoKlingApiKey,
+            apiKey: videoApiKey,
+            model: videoModel,
             outputDir: pathMod ? pathMod.dirname(version.imagePath) : null
         }, function(err, result) {
             if (err) {

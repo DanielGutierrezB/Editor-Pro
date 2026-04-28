@@ -129,7 +129,7 @@ router.post('/animate', (req, res) => {
   const {
     proposalId, imagePath, durationSecs = 5,
     prompt, videoProvider = 'placeholder',
-    endpointUrl, apiKey, outputDir,
+    endpointUrl, apiKey, model, outputDir,
   } = req.body;
 
   if (!imagePath || !fs.existsSync(imagePath)) {
@@ -144,7 +144,7 @@ router.post('/animate', (req, res) => {
   _setJob(jobId, { type: 'video', status: 'running', proposalId, outputPath });
 
   generateVideo(
-    { provider: videoProvider, imagePath, durationSecs, prompt, endpointUrl, apiKey },
+    { provider: videoProvider, imagePath, durationSecs, prompt, endpointUrl, apiKey, model },
     outputPath,
     (err, filePath) => {
       if (err) {
