@@ -190,8 +190,10 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
         }
         const requestId = parsed.request_id;
         if (!requestId) return callback(new Error('No request_id from FAL: ' + data.substring(0, 300)));
-        console.log('[FAL] Submitted — model:', falModel, 'requestId:', requestId);
-        _pollFalImage(falModel, requestId, apiKey, outputPath, callback);
+        const statusUrl = parsed.status_url || ('https://queue.fal.run/' + falModel + '/requests/' + requestId + '/status');
+        const responseUrl = parsed.response_url || ('https://queue.fal.run/' + falModel + '/requests/' + requestId + '/response');
+        console.log('[FAL] Submitted — model:', falModel, 'requestId:', requestId, 'statusUrl:', statusUrl, 'responseUrl:', responseUrl);
+        _pollFalImage(statusUrl, responseUrl, apiKey, outputPath, callback);
       } catch (e) {
         callback(new Error('FAL parse error: ' + e.message));
       }
@@ -203,15 +205,16 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
   req.end();
 }
 
-function _pollFalImage(model, requestId, apiKey, outputPath, callback) {
+function _pollFalImage(statusUrl, responseUrl, apiKey, outputPath, callback) {
   let polls = 0;
   const maxPolls = 60; // 60 × 3s = 3 min
+  const parsedStatusUrl = new URL(statusUrl);
   function poll() {
     polls++;
     if (polls > maxPolls) return callback(new Error('FAL image queue timeout'));
     const req = https.request({
-      hostname: 'queue.fal.run',
-      path: '/' + model + '/requests/' + requestId + '/status',
+      hostname: parsedStatusUrl.hostname,
+      path: parsedStatusUrl.pathname + parsedStatusUrl.search,
       method: 'GET',
       headers: { 'Authorization': 'Key ' + apiKey },
     }, (res) => {
@@ -220,9 +223,9 @@ function _pollFalImage(model, requestId, apiKey, outputPath, callback) {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
-          console.log('[FAL] Poll #' + polls + ' — status:', parsed.status, 'model:', model);
+          console.log('[FAL] Poll #' + polls + ' — status:', parsed.status);
           if (parsed.status === 'COMPLETED') {
-            return _fetchFalImageResult(model, requestId, apiKey, outputPath, callback);
+            return _fetchFalImageResult(responseUrl, apiKey, outputPath, callback);
           }
           if (parsed.status === 'FAILED') {
             return callback(new Error('FAL image failed: ' + JSON.stringify(parsed)));
@@ -240,10 +243,11 @@ function _pollFalImage(model, requestId, apiKey, outputPath, callback) {
   setTimeout(poll, 2000);
 }
 
-function _fetchFalImageResult(model, requestId, apiKey, outputPath, callback) {
+function _fetchFalImageResult(responseUrl, apiKey, outputPath, callback) {
+  const parsedUrl = new URL(responseUrl);
   const req = https.request({
-    hostname: 'queue.fal.run',
-    path: '/' + model + '/requests/' + requestId + '/response',
+    hostname: parsedUrl.hostname,
+    path: parsedUrl.pathname + parsedUrl.search,
     method: 'GET',
     headers: { 'Authorization': 'Key ' + apiKey },
   }, (res) => {

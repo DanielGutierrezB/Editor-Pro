@@ -226,7 +226,10 @@ function _generateFalVideo(imagePath, durationSecs, prompt, apiKey, model, outpu
         }
         const requestId = parsed.request_id;
         if (!requestId) return callback(new Error('No request_id from FAL: ' + data.substring(0, 300)));
-        _pollFalQueue(falModel, requestId, apiKey, outputPath, callback);
+        const statusUrl = parsed.status_url || ('https://queue.fal.run/' + falModel + '/requests/' + requestId + '/status');
+        const responseUrl = parsed.response_url || ('https://queue.fal.run/' + falModel + '/requests/' + requestId + '/response');
+        console.log('[FAL Video] Submitted — model:', falModel, 'requestId:', requestId);
+        _pollFalQueue(statusUrl, responseUrl, apiKey, outputPath, callback);
       } catch (e) {
         callback(new Error('FAL submit parse error: ' + e.message));
       }
@@ -238,15 +241,16 @@ function _generateFalVideo(imagePath, durationSecs, prompt, apiKey, model, outpu
   req.end();
 }
 
-function _pollFalQueue(model, requestId, apiKey, outputPath, callback) {
+function _pollFalQueue(statusUrl, responseUrl, apiKey, outputPath, callback) {
   let polls = 0;
   const maxPolls = 120; // 120 × 5s = 10 min
+  const parsedStatusUrl = new URL(statusUrl);
   function poll() {
     polls++;
     if (polls > maxPolls) return callback(new Error('FAL queue timeout'));
     const req = https.request({
-      hostname: 'queue.fal.run',
-      path: '/' + model + '/requests/' + requestId + '/status',
+      hostname: parsedStatusUrl.hostname,
+      path: parsedStatusUrl.pathname + parsedStatusUrl.search,
       method: 'GET',
       headers: { 'Authorization': 'Key ' + apiKey },
     }, (res) => {
@@ -256,8 +260,9 @@ function _pollFalQueue(model, requestId, apiKey, outputPath, callback) {
         try {
           const parsed = JSON.parse(data);
           const status = parsed.status;
+          console.log('[FAL Video] Poll #' + polls + ' — status:', status);
           if (status === 'COMPLETED') {
-            return _fetchFalResult(model, requestId, apiKey, outputPath, callback);
+            return _fetchFalResult(responseUrl, apiKey, outputPath, callback);
           }
           if (status === 'FAILED') {
             return callback(new Error('FAL task failed: ' + JSON.stringify(parsed)));
@@ -276,10 +281,11 @@ function _pollFalQueue(model, requestId, apiKey, outputPath, callback) {
   setTimeout(poll, 5000);
 }
 
-function _fetchFalResult(model, requestId, apiKey, outputPath, callback) {
+function _fetchFalResult(responseUrl, apiKey, outputPath, callback) {
+  const parsedUrl = new URL(responseUrl);
   const req = https.request({
-    hostname: 'queue.fal.run',
-    path: '/' + model + '/requests/' + requestId + '/response',
+    hostname: parsedUrl.hostname,
+    path: parsedUrl.pathname + parsedUrl.search,
     method: 'GET',
     headers: { 'Authorization': 'Key ' + apiKey },
   }, (res) => {
