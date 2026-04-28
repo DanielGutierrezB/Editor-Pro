@@ -147,7 +147,7 @@ function _generateFluxLocal(description, endpointUrl, outputPath, callback) {
 
 // ── FAL.ai ───────────────────────────────────────────────────────────────────
 
-function _generateFal(description, apiKey, model, outputPath, callback) {
+function _generateFal(description, apiKey, model, outputPath, callback, _retryCount) {
   if (!apiKey) return callback(new Error('FAL.ai API key required'));
   const falModel = model || 'fal-ai/flux/schnell';
 
@@ -188,6 +188,15 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
     res.on('end', () => {
       const data = Buffer.concat(chunks).toString('utf8');
       console.log('[FAL] Response — status:', res.statusCode, 'bytes:', data.length);
+      if (res.statusCode === 429) {
+        // Rate limited — retry with backoff
+        _retryCount = (_retryCount || 0) + 1;
+        if (_retryCount <= 5) {
+          const wait = Math.min(3000 * _retryCount, 15000);
+          console.log('[FAL] Rate limited (429), retry #' + _retryCount + ' in ' + (wait/1000) + 's...');
+          return setTimeout(() => _generateFal(description, apiKey, model, outputPath, callback, _retryCount), wait);
+        }
+      }
       if (res.statusCode !== 200) {
         return callback(new Error('FAL error HTTP ' + res.statusCode + ': ' + data.substring(0, 300)));
       }
