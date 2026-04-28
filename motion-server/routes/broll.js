@@ -91,9 +91,8 @@ router.post('/generate-image', (req, res) => {
   const fileName = clipName
     ? clipName.replace(/[^a-z0-9_-]/gi, '_')
     : (proposalId || Date.now()).toString().replace(/[^a-z0-9_-]/gi, '_');
-  // Extension may be corrected by image-generator after download (e.g. FAL returns .jpg)
-  // Use a generic extension; the actual file will have the correct one
-  const outputPath = path.join(sessionDir, fileName + '.png');
+  // Use no extension — image-generator will add the correct one based on actual format
+  const outputPath = path.join(sessionDir, fileName);
 
   const jobId = _newJobId();
   _setJob(jobId, { type: 'image', status: 'running', proposalId, outputPath,

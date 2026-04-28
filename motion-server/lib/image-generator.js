@@ -201,14 +201,16 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
         if (!imgUrl && parsed.image) imgUrl = parsed.image.url;
         if (!imgUrl && parsed.output) imgUrl = parsed.output.url || (Array.isArray(parsed.output) && parsed.output[0] && parsed.output[0].url);
         if (!imgUrl) return callback(new Error('No image URL in FAL result: ' + data.substring(0, 300)));
-        // Fix extension to match actual format from URL (e.g. Grok returns .jpg not .png)
-        const urlExt = path.extname(new URL(imgUrl).pathname).toLowerCase();
+        // Always use the correct extension from the image URL
+        const urlExt = path.extname(new URL(imgUrl).pathname).toLowerCase() || '.png';
         let finalPath = outputPath;
-        if (urlExt && urlExt !== path.extname(outputPath).toLowerCase()) {
+        // Add or replace extension to match actual format
+        if (path.extname(outputPath)) {
           finalPath = outputPath.replace(/\.[^.]+$/, urlExt);
-          console.log('[FAL] Correcting extension:', path.extname(outputPath), '→', urlExt);
+        } else {
+          finalPath = outputPath + urlExt;
         }
-        console.log('[FAL] Got image URL, downloading to:', path.basename(finalPath));
+        console.log('[FAL] Downloading to:', path.basename(finalPath), '(format:', urlExt, ')');
         _downloadToFile(imgUrl, finalPath, callback);
       } catch (e) {
         callback(new Error('FAL parse error: ' + e.message + ' | bytes=' + data.length));
@@ -745,6 +747,10 @@ function _generateGeminiImage(description, apiKey, referenceImages, outputPath, 
 
 function generateImage(options, outputPath, callback) {
   const { provider, description, endpointUrl, apiKey, model, referenceImagePath, denoise } = options;
+  // Ensure outputPath has an extension for providers that need it (FAL handles its own)
+  if (options.provider !== 'fal' && !path.extname(outputPath)) {
+    outputPath = outputPath + '.png';
+  }
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
