@@ -190,6 +190,7 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
         }
         const requestId = parsed.request_id;
         if (!requestId) return callback(new Error('No request_id from FAL: ' + data.substring(0, 300)));
+        console.log('[FAL] Submitted — model:', falModel, 'requestId:', requestId);
         _pollFalImage(falModel, requestId, apiKey, outputPath, callback);
       } catch (e) {
         callback(new Error('FAL parse error: ' + e.message));
@@ -219,6 +220,7 @@ function _pollFalImage(model, requestId, apiKey, outputPath, callback) {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
+          console.log('[FAL] Poll #' + polls + ' — status:', parsed.status, 'model:', model);
           if (parsed.status === 'COMPLETED') {
             return _fetchFalImageResult(model, requestId, apiKey, outputPath, callback);
           }
@@ -245,9 +247,23 @@ function _fetchFalImageResult(model, requestId, apiKey, outputPath, callback) {
     method: 'GET',
     headers: { 'Authorization': 'Key ' + apiKey },
   }, (res) => {
-    let data = '';
-    res.on('data', (c) => { data += c; });
-    res.on('end', () => {
+    // Handle gzip/deflate if server sends compressed response
+    const encoding = res.headers['content-encoding'];
+    let stream = res;
+    if (encoding === 'gzip') {
+      stream = res.pipe(require('zlib').createGunzip());
+    } else if (encoding === 'deflate') {
+      stream = res.pipe(require('zlib').createInflate());
+    }
+
+    const chunks = [];
+    stream.on('data', (c) => { chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)); });
+    stream.on('end', () => {
+      const data = Buffer.concat(chunks).toString('utf8');
+      console.log('[FAL] Result response — status:', res.statusCode, 'encoding:', encoding || 'none', 'bytes:', data.length, 'preview:', data.substring(0, 200));
+      if (res.statusCode !== 200) {
+        return callback(new Error('FAL result HTTP ' + res.statusCode + ': ' + data.substring(0, 300)));
+      }
       try {
         const parsed = JSON.parse(data);
         // Most models: images[0].url
@@ -258,12 +274,13 @@ function _fetchFalImageResult(model, requestId, apiKey, outputPath, callback) {
         if (!imgUrl) return callback(new Error('No image URL in FAL result: ' + data.substring(0, 300)));
         _downloadToFile(imgUrl, outputPath, callback);
       } catch (e) {
-        callback(new Error('FAL result parse error: ' + e.message));
+        callback(new Error('FAL result parse error: ' + e.message + ' | bytes=' + data.length + ' | tail=' + data.substring(Math.max(0, data.length - 100))));
       }
     });
+    stream.on('error', (e) => callback(new Error('FAL result stream error: ' + e.message)));
   });
   req.on('error', callback);
-  req.setTimeout(30000, () => { req.destroy(); callback(new Error('FAL result fetch timeout')); });
+  req.setTimeout(60000, () => { req.destroy(); callback(new Error('FAL result fetch timeout')); });
   req.end();
 }
 
