@@ -374,6 +374,33 @@
     transition: width 0.3s;
 }
 
+/* ── Inline generation progress (Step 2) ────────────────────────────────────── */
+.br-gen-progress {
+    margin: 6px 0 4px;
+    padding: 7px 10px;
+    background: rgba(99, 102, 241, 0.07);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: 5px;
+}
+.br-gen-progress-bar {
+    height: 3px;
+    background: var(--bg-active);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 5px;
+}
+.br-gen-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+}
+.br-gen-progress-text {
+    font-size: 10px;
+    color: var(--accent);
+    line-height: 1.4;
+}
+
 /* ── Settings section ────────────────────────────────────────────────────────── */
 .br-settings {
     background: var(--bg-surface);

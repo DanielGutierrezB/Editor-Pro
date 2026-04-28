@@ -1,7 +1,7 @@
 /**
  * Editor-Pro — B-Roll UI Module
  * Handles all DOM interactions for the B-Roll tab.
- * v1.9.0: Gemini Flash Image provider — settings UI, status check, save/load
+ * v1.8.31: inline generation progress in Step 2
  */
 (function(global) {
     "use strict";
@@ -15,6 +15,7 @@
     var refreshSequenceInfo, bindCollapsibles, refreshAllHeaderProgress;
 
     var _sessionKey = "";
+    var _genProgress = { current: 0, total: 0, startMs: 0 };
 
     function _initRefs() {
         state       = global._epState;
@@ -603,13 +604,21 @@
             broll.generating = true;
             broll.generateCancelRequested = false;
 
-            _collapseAllSteps();
+            // Collapse Step 1 only — keep Step 2 open to show inline progress
+            var step1Body = _el("br-step-body-1");
+            if (step1Body) step1Body.classList.add("hidden");
+            var step1Hdr = document.querySelector("[data-br-step='1'].rec-step-header");
+            if (step1Hdr) { var a1 = step1Hdr.querySelector(".rec-step-arrow"); if (a1) a1.textContent = "▸"; }
+
+            // Show Step 3 (hidden initially — clips count will update in real-time)
             var step3 = _el("br-clips-section");
             if (step3) step3.style.display = "";
-            var step3Body = _el("br-step-body-3");
-            if (step3Body) step3Body.classList.remove("hidden");
-            var step3Arrow = step3 ? step3.querySelector(".rec-step-arrow") : null;
-            if (step3Arrow) step3Arrow.textContent = "▾";
+
+            // Initialize inline progress tracker
+            _genProgress.current = 0;
+            _genProgress.total = selected.length;
+            _genProgress.startMs = Date.now();
+            _setInlineProgress(0, selected.length, "", 0);
 
             // Use scene-aware generation if we have scenes
             if (broll.hasScenes()) {
@@ -630,15 +639,38 @@
         if (btn) { btn.disabled = false; btn.style.display = ""; }
         if (stopBtn) stopBtn.style.display = "none";
         broll.saveState(_sessionKey);
+
+        _hideInlineProgress();
+        _clearHeaderProgress();
+
         if (broll.clips.length > 0) {
-            showToast(broll.clips.length + " imágenes generadas. Revisa y anima los clips.", "success");
-            _el("br-step-hint-2") && (_el("br-step-hint-2").textContent = broll.clips.length + " clips");
+            var clipCount = broll.clips.length;
+            showToast(clipCount + " imágenes generadas. Revisa y anima los clips.", "success");
+            var hint2 = _el("br-step-hint-2");
+            if (hint2) hint2.textContent = "✅ " + clipCount + " clips generados";
+
+            // Collapse Step 2, expand Step 3
+            var step2Body = _el("br-step-body-2");
+            if (step2Body) step2Body.classList.add("hidden");
+            var step2Hdr = document.querySelector("[data-br-step='2'].rec-step-header");
+            if (step2Hdr) { var a2 = step2Hdr.querySelector(".rec-step-arrow"); if (a2) a2.textContent = "▸"; }
+
+            var step3 = _el("br-clips-section");
+            if (step3) step3.style.display = "";
+            var step3Body = _el("br-step-body-3");
+            if (step3Body) step3Body.classList.remove("hidden");
+            var step3Hdr = document.querySelector("[data-br-step='3'].rec-step-header");
+            if (step3Hdr) { var a3 = step3Hdr.querySelector(".rec-step-arrow"); if (a3) a3.textContent = "▾"; }
+
+            var hint3 = _el("br-step-hint-3");
+            if (hint3) hint3.textContent = clipCount + " clips";
         } else {
             showToast("No se generaron imágenes — revisa la conexión con ComfyUI", "error");
-            var step3 = _el("br-clips-section");
-            if (step3) step3.style.display = "none";
+            var hint2Err = _el("br-step-hint-2");
+            if (hint2Err) hint2Err.textContent = "⚠ Sin clips";
+            var step3Err = _el("br-clips-section");
+            if (step3Err) step3Err.style.display = "none";
         }
-        _clearHeaderProgress();
         _renderClips();
     }
 
@@ -692,12 +724,20 @@
             // Remaining shots (non-hero), preserving shotOrder sequence
             var remainingIds = shotIds.filter(function(id) { return id !== heroShotId; });
 
+            var sceneInfo = broll._findScene ? broll._findScene(sid) : null;
+            var sceneTitle = (sceneInfo && sceneInfo.title) ? sceneInfo.title : (sid !== "__noscene__" ? sid : "");
             _setHeaderProgress(completedShots / totalShots * 100, (completedShots + 1) + "/" + totalShots);
+            _setInlineProgress(completedShots + 1, totalShots, sceneTitle, Math.round((Date.now() - _genProgress.startMs) / 1000));
             _renderClips();
 
             // Generate Hero Shot first with txt2img (full creative freedom)
             broll.generateImage(heroShotId,
-                function(pId, status, elapsed) { _refreshClipCard(pId, status, elapsed); },
+                function(pId, status, elapsed) {
+                    _refreshClipCard(pId, status, elapsed);
+                    if (status === "generating" && elapsed > 0) {
+                        _setInlineProgress(completedShots + 1, totalShots, sceneTitle, elapsed);
+                    }
+                },
                 function(err) {
                     if (err) {
                         if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "hero shot: " + err.message);
@@ -706,6 +746,7 @@
                         if (window.EPLogger) EPLogger.log("broll", "generate-image-ok", "scene " + sid + " hero shot");
                         _renderClips();
                         broll.saveState(_sessionKey);
+                        _updateStep3CountLive();
                     }
                     completedShots++;
 
@@ -755,7 +796,12 @@
         }
 
         broll.generateImage(shotId,
-            function(pId, status, elapsed) { _refreshClipCard(pId, status, elapsed); },
+            function(pId, status, elapsed) {
+                _refreshClipCard(pId, status, elapsed);
+                if (status === "generating" && elapsed > 0) {
+                    _setInlineProgress(_genProgress.current + 1, _genProgress.total, "", elapsed);
+                }
+            },
             function(err) {
                 if (err) {
                     if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "scene shot " + (startIdx + 1) + ": " + err.message);
@@ -764,6 +810,7 @@
                     if (window.EPLogger) EPLogger.log("broll", "generate-image-ok", "shot " + (startIdx + 1));
                     _renderClips();
                     broll.saveState(_sessionKey);
+                    _updateStep3CountLive();
                 }
 
                 var clip = broll._findClip(shotId);
@@ -786,13 +833,19 @@
         var proposalId = ids[idx];
         _renderClips(); // show current state
 
-        _setHeaderProgress(idx / ids.length * 100, (idx + 1) + "/" + ids.length);
+        var pct = idx / ids.length * 100;
+        _setHeaderProgress(pct, (idx + 1) + "/" + ids.length);
+        _setInlineProgress(idx + 1, ids.length, "", Math.round((Date.now() - _genProgress.startMs) / 1000));
 
         broll.generateImage(proposalId,
             function(pId, status, elapsed) {
                 _refreshClipCard(pId, status, elapsed);
+                if (status === "generating" && elapsed > 0) {
+                    _setInlineProgress(idx + 1, ids.length, "", elapsed);
+                }
             },
             function(err) {
+                _genProgress.current = idx + 1;
                 if (err) {
                     if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "clip " + (idx + 1) + ": " + err.message);
                     showToast("Error generando " + (idx + 1) + ": " + err.message, "error");
@@ -801,6 +854,7 @@
                     if (window.EPLogger) EPLogger.log("broll", "generate-image-ok", "clip " + (idx + 1) + "/" + ids.length);
                     _renderClips();
                     broll.saveState(_sessionKey);
+                    _updateStep3CountLive();
                     // Auto-place in timeline immediately after generation
                     var clip = broll._findClip(proposalId);
                     if (clip) {
@@ -1269,6 +1323,35 @@
         var wrap = _el("br-progress-header");
         if (wrap) wrap.classList.add("hidden");
         if (refreshAllHeaderProgress) refreshAllHeaderProgress();
+    }
+
+    function _setInlineProgress(current, total, sceneName, elapsedSecs) {
+        var wrap = _el("br-gen-progress");
+        var fill = _el("br-gen-progress-fill");
+        var text = _el("br-gen-progress-text");
+        if (!wrap) return;
+        wrap.style.display = "";
+        var pct = total > 0 ? Math.round(current / total * 100) : 0;
+        if (fill) fill.style.width = pct + "%";
+        var line = "Generando plano " + current + "/" + total;
+        if (sceneName) line += " — Escena: " + sceneName;
+        if (elapsedSecs > 0) line += " — ⏳ " + elapsedSecs + "s";
+        if (text) text.textContent = line;
+        var hint = _el("br-step-hint-2");
+        if (hint) hint.textContent = "⏳ Generando " + current + "/" + total + "…";
+    }
+
+    function _hideInlineProgress() {
+        var wrap = _el("br-gen-progress");
+        if (wrap) wrap.style.display = "none";
+    }
+
+    function _updateStep3CountLive() {
+        var count = broll ? broll.clips.length : 0;
+        var countEl = _el("br-clips-count");
+        if (countEl) countEl.textContent = count;
+        var hint3 = _el("br-step-hint-3");
+        if (hint3 && count > 0) hint3.textContent = count + " clips";
     }
 
     function refreshHeaderProgressVisibility() {
