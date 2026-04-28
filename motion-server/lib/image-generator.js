@@ -169,9 +169,10 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
 
   const body = JSON.stringify(input);
 
-  // Use queue API (works for all models, handles both fast and slow ones)
+  // Use fal.run direct endpoint (synchronous — result in same HTTP response)
+  console.log('[FAL] Direct run — model:', falModel, 'prompt:', description.substring(0, 80));
   const req = https.request({
-    hostname: 'queue.fal.run',
+    hostname: 'fal.run',
     path: '/' + falModel,
     method: 'POST',
     headers: {
@@ -180,117 +181,38 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
       'Authorization': 'Key ' + apiKey,
     },
   }, (res) => {
-    let data = '';
-    res.on('data', (c) => { data += c; });
+    const chunks = [];
+    res.on('data', (c) => { chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)); });
     res.on('end', () => {
+      const data = Buffer.concat(chunks).toString('utf8');
+      console.log('[FAL] Response — status:', res.statusCode, 'bytes:', data.length);
+      if (res.statusCode !== 200) {
+        return callback(new Error('FAL error HTTP ' + res.statusCode + ': ' + data.substring(0, 300)));
+      }
       try {
         const parsed = JSON.parse(data);
         if (parsed.detail || parsed.error) {
-          return callback(new Error('FAL submit error: ' + (parsed.detail || parsed.error)));
+          return callback(new Error('FAL error: ' + (parsed.detail || parsed.error)));
         }
-        const requestId = parsed.request_id;
-        if (!requestId) return callback(new Error('No request_id from FAL: ' + data.substring(0, 300)));
-        const statusUrl = parsed.status_url || ('https://queue.fal.run/' + falModel + '/requests/' + requestId + '/status');
-        // FAL docs: result endpoint is /requests/{id} (NOT /requests/{id}/response)
-        const responseUrl = 'https://queue.fal.run/' + falModel + '/requests/' + requestId;
-        console.log('[FAL] Submitted — model:', falModel, 'requestId:', requestId);
-        _pollFalImage(statusUrl, responseUrl, apiKey, outputPath, callback);
+        // Extract image URL — most models: images[0].url
+        let imgUrl = parsed.images && parsed.images[0] && parsed.images[0].url;
+        if (!imgUrl && parsed.image) imgUrl = parsed.image.url;
+        if (!imgUrl && parsed.output) imgUrl = parsed.output.url || (Array.isArray(parsed.output) && parsed.output[0] && parsed.output[0].url);
+        if (!imgUrl) return callback(new Error('No image URL in FAL result: ' + data.substring(0, 300)));
+        console.log('[FAL] Got image URL, downloading...');
+        _downloadToFile(imgUrl, outputPath, callback);
       } catch (e) {
-        callback(new Error('FAL parse error: ' + e.message));
+        callback(new Error('FAL parse error: ' + e.message + ' | bytes=' + data.length));
       }
     });
   });
   req.on('error', callback);
-  req.setTimeout(30000, () => { req.destroy(); callback(new Error('FAL submit timeout')); });
+  req.setTimeout(120000, () => { req.destroy(); callback(new Error('FAL generation timeout (120s)')); });
   req.write(body);
   req.end();
 }
 
-function _pollFalImage(statusUrl, responseUrl, apiKey, outputPath, callback) {
-  let polls = 0;
-  const maxPolls = 60; // 60 × 3s = 3 min
-  const parsedStatusUrl = new URL(statusUrl);
-  function poll() {
-    polls++;
-    if (polls > maxPolls) return callback(new Error('FAL image queue timeout'));
-    const req = https.request({
-      hostname: parsedStatusUrl.hostname,
-      path: parsedStatusUrl.pathname + parsedStatusUrl.search,
-      method: 'GET',
-      headers: { 'Authorization': 'Key ' + apiKey },
-    }, (res) => {
-      let data = '';
-      res.on('data', (c) => { data += c; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          console.log('[FAL] Poll #' + polls + ' — status:', parsed.status, 'response_url:', parsed.response_url || 'none');
-          if (parsed.status === 'COMPLETED') {
-            // Prefer response_url from status response (most reliable)
-            const resultUrl = parsed.response_url || responseUrl;
-            return _fetchFalImageResult(resultUrl, apiKey, outputPath, callback);
-          }
-          if (parsed.status === 'FAILED') {
-            return callback(new Error('FAL image failed: ' + JSON.stringify(parsed)));
-          }
-          setTimeout(poll, 3000);
-        } catch (e) {
-          callback(new Error('FAL poll parse error: ' + e.message));
-        }
-      });
-    });
-    req.on('error', callback);
-    req.setTimeout(15000, () => { req.destroy(); setTimeout(poll, 3000); });
-    req.end();
-  }
-  setTimeout(poll, 2000);
-}
-
-function _fetchFalImageResult(responseUrl, apiKey, outputPath, callback) {
-  const parsedUrl = new URL(responseUrl);
-  console.log('[FAL] Fetching result from:', responseUrl);
-  const req = https.request({
-    hostname: parsedUrl.hostname,
-    path: parsedUrl.pathname + parsedUrl.search,
-    method: 'GET',
-    headers: { 'Authorization': 'Key ' + apiKey },
-  }, (res) => {
-    // Handle gzip/deflate if server sends compressed response
-    const encoding = res.headers['content-encoding'];
-    let stream = res;
-    if (encoding === 'gzip') {
-      stream = res.pipe(require('zlib').createGunzip());
-    } else if (encoding === 'deflate') {
-      stream = res.pipe(require('zlib').createInflate());
-    }
-
-    const chunks = [];
-    stream.on('data', (c) => { chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)); });
-    stream.on('end', () => {
-      const data = Buffer.concat(chunks).toString('utf8');
-      console.log('[FAL] Result response — status:', res.statusCode, 'encoding:', encoding || 'none', 'bytes:', data.length, 'preview:', data.substring(0, 200));
-      if (res.statusCode !== 200) {
-        return callback(new Error('FAL result HTTP ' + res.statusCode + ': ' + data.substring(0, 300)));
-      }
-      try {
-        const parsed = JSON.parse(data);
-        // Most models: images[0].url
-        let imgUrl = parsed.images && parsed.images[0] && parsed.images[0].url;
-        // Some models (GPT Image, Grok): image.url or output.url
-        if (!imgUrl && parsed.image) imgUrl = parsed.image.url;
-        if (!imgUrl && parsed.output) imgUrl = parsed.output.url || (Array.isArray(parsed.output) && parsed.output[0] && parsed.output[0].url);
-        if (!imgUrl) return callback(new Error('No image URL in FAL result: ' + data.substring(0, 300)));
-        _downloadToFile(imgUrl, outputPath, callback);
-      } catch (e) {
-        callback(new Error('FAL result parse error: ' + e.message + ' | bytes=' + data.length + ' | tail=' + data.substring(Math.max(0, data.length - 100))));
-      }
-    });
-    stream.on('error', (e) => callback(new Error('FAL result stream error: ' + e.message)));
-  });
-  req.on('error', callback);
-  req.setTimeout(60000, () => { req.destroy(); callback(new Error('FAL result fetch timeout')); });
-  req.end();
-}
+// Queue-based polling removed — using fal.run direct endpoint instead
 
 function _downloadToFile(url, outputPath, callback) {
   const parsed = new URL(url);
