@@ -1233,6 +1233,10 @@
                         <span id="br-dep-comfy-dot" class="br-server-dot br-dot-off"></span>
                         <span id="br-dep-comfy-text" class="br-server-label">Verificando ComfyUI...</span>
                     </div>
+                    <div class="br-dep-row" id="br-dep-vid-row" style="display:none">
+                        <span id="br-dep-vid-dot" class="br-server-dot br-dot-off"></span>
+                        <span id="br-dep-vid-text" class="br-server-label">Video provider</span>
+                    </div>
                     <div class="br-dep-row" id="br-dep-ffmpeg-row">
                         <span id="br-dep-ffmpeg-dot" class="br-server-dot br-dot-off"></span>
                         <span id="br-dep-ffmpeg-text" class="br-server-label">Verificando ffmpeg...</span>
@@ -1370,7 +1374,12 @@
                                 <select id="br-vid-provider" class="select-input">
                                     <option value="placeholder" selected>🧪 Placeholder (ffmpeg estático)</option>
                                     <option value="fal">🌐 FAL.ai (Kling/Seedance)</option>
+                                    <option value="gemini_video">🤖 Gemini Veo (Google AI)</option>
                                 </select>
+                            </div>
+                            <div class="br-settings-row" id="br-vid-gemini-key-row" style="display:none">
+                                <span class="br-settings-label">Google AI API Key</span>
+                                <input type="password" id="br-vid-gemini-key" class="text-input" placeholder="AIza...">
                             </div>
                             <div class="br-settings-row" id="br-vid-fal-key-row" style="display:none">
                                 <span class="br-settings-label">FAL.ai API Key</span>

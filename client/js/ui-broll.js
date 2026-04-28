@@ -98,7 +98,24 @@
             if (comfyRow) comfyRow.style.display = "none";
         }
 
-        // 3. ffmpeg
+        // 3. Video provider check (gemini_video and fal need API keys)
+        var vidRow = _el("br-dep-vid-row");
+        var vidProv2 = settings.videoProvider;
+        if (vidProv2 === "gemini_video") {
+            if (vidRow) vidRow.style.display = "";
+            var hasVidKey = !!(settings.videoGeminiApiKey && settings.videoGeminiApiKey.trim());
+            _setDotStatus("br-dep-vid-dot", "br-dep-vid-text", hasVidKey,
+                hasVidKey ? "Gemini Veo — API key configurada" : "Gemini Veo — falta API key");
+        } else if (vidProv2 === "fal") {
+            if (vidRow) vidRow.style.display = "";
+            var hasVidFalKey = !!(settings.videoFalApiKey && settings.videoFalApiKey.trim());
+            _setDotStatus("br-dep-vid-dot", "br-dep-vid-text", hasVidFalKey,
+                hasVidFalKey ? "FAL.ai video — API key configurada" : "FAL.ai video — falta API key");
+        } else {
+            if (vidRow) vidRow.style.display = "none";
+        }
+
+        // 4. ffmpeg
         try {
             var exec = require("child_process").exec;
             exec("ffmpeg -version 2>/dev/null || /opt/homebrew/bin/ffmpeg -version 2>/dev/null", { timeout: 3000 }, function(err) {
@@ -1106,6 +1123,7 @@
         _setInputVal("br-vid-endpoint", s.videoEndpointUrl);
         _setInputVal("br-vid-kling-key", s.videoKlingApiKey);
         _setInputVal("br-vid-fal-key", s.videoFalApiKey);
+        _setInputVal("br-vid-gemini-key", s.videoGeminiApiKey);
         _setSelectVal("br-track-select", s.trackIndex);
         _refreshSettingsVisibility();
         // Load FAL models if FAL is selected (after selects are visible)
@@ -1169,6 +1187,7 @@
         }
 
         var vidProv = _getSelectVal("br-vid-provider");
+        _toggleEl("br-vid-gemini-key-row",  vidProv === "gemini_video");
         _toggleEl("br-vid-fal-key-row",     vidProv === "fal");
         _toggleEl("br-vid-fal-model-row",   vidProv === "fal");
 
@@ -1185,11 +1204,12 @@
             imageGeminiApiKey: _getInputVal("br-img-gemini-key"),
             imageFalModel:     _getSelectVal("br-img-fal-model"),
             imageFalApiKey:    _getInputVal("br-img-fal-key"),
-            videoProvider:     _getSelectVal("br-vid-provider"),
-            videoEndpointUrl:  _getInputVal("br-vid-endpoint"),
-            videoKlingApiKey:  _getInputVal("br-vid-kling-key"),
-            videoFalModel:     _getSelectVal("br-vid-fal-model"),
-            videoFalApiKey:    _getInputVal("br-vid-fal-key"),
+            videoProvider:      _getSelectVal("br-vid-provider"),
+            videoEndpointUrl:   _getInputVal("br-vid-endpoint"),
+            videoKlingApiKey:   _getInputVal("br-vid-kling-key"),
+            videoFalModel:      _getSelectVal("br-vid-fal-model"),
+            videoFalApiKey:     _getInputVal("br-vid-fal-key"),
+            videoGeminiApiKey:  _getInputVal("br-vid-gemini-key"),
             trackIndex:        _getSelectVal("br-track-select")
         });
         showToast("Configuración B-Roll guardada", "success");

@@ -301,6 +301,66 @@ function _fetchFalResult(model, requestId, apiKey, outputPath, callback) {
   req.end();
 }
 
+// ── Gemini Veo (Google AI image-to-video) ─────────────────────────────────────
+
+function _generateGeminiVideo(imagePath, prompt, apiKey, outputPath, callback) {
+  if (!apiKey) return callback(new Error('Google AI API key required for gemini_video provider'));
+
+  const imageBuffer = fs.readFileSync(imagePath);
+  const imageBase64 = imageBuffer.toString('base64');
+
+  const body = JSON.stringify({
+    contents: [{
+      parts: [
+        { inlineData: { mimeType: 'image/png', data: imageBase64 } },
+        { text: prompt || 'Create a short video with smooth cinematic camera motion from this image, high quality, professional look' },
+      ],
+    }],
+    generationConfig: { responseModalities: ['VIDEO'] },
+  });
+
+  const req = https.request({
+    hostname: 'generativelanguage.googleapis.com',
+    path: '/v1beta/models/gemini-2.5-flash-preview-image-generation:generateContent?key=' + encodeURIComponent(apiKey),
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+    },
+  }, (res) => {
+    let data = '';
+    res.on('data', (c) => { data += c; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.error) {
+          return callback(new Error('Gemini Veo API error: ' + (parsed.error.message || JSON.stringify(parsed.error))));
+        }
+        const candidate = parsed.candidates && parsed.candidates[0];
+        if (!candidate || !candidate.content || !candidate.content.parts) {
+          return callback(new Error('Gemini Veo: no candidates in response'));
+        }
+        const videoPart = candidate.content.parts.find(
+          (p) => p.inlineData && p.inlineData.mimeType && p.inlineData.mimeType.startsWith('video/')
+        );
+        if (!videoPart) {
+          const textPart = candidate.content.parts.find((p) => p.text);
+          const msg = textPart ? textPart.text.substring(0, 300) : 'no video in response';
+          return callback(new Error('Gemini Veo returned no video: ' + msg));
+        }
+        const videoBuf = Buffer.from(videoPart.inlineData.data, 'base64');
+        fs.writeFile(outputPath, videoBuf, (err) => callback(err, outputPath));
+      } catch (e) {
+        callback(new Error('Gemini Veo parse error: ' + e.message + ' raw: ' + data.substring(0, 300)));
+      }
+    });
+  });
+  req.on('error', callback);
+  req.setTimeout(120000, () => { req.destroy(); callback(new Error('Gemini Veo timeout (120s)')); });
+  req.write(body);
+  req.end();
+}
+
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 function generateVideo(options, outputPath, callback) {
@@ -309,11 +369,12 @@ function generateVideo(options, outputPath, callback) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
   switch (provider) {
-    case 'ltx_local': return _generateLtxLocal(imagePath, durationSecs, prompt, endpointUrl, outputPath, callback);
-    case 'kling':     return _generateKling(imagePath, durationSecs, prompt, apiKey, outputPath, callback);
-    case 'fal':       return _generateFalVideo(imagePath, durationSecs, prompt, apiKey, model, outputPath, callback);
+    case 'ltx_local':    return _generateLtxLocal(imagePath, durationSecs, prompt, endpointUrl, outputPath, callback);
+    case 'kling':        return _generateKling(imagePath, durationSecs, prompt, apiKey, outputPath, callback);
+    case 'fal':          return _generateFalVideo(imagePath, durationSecs, prompt, apiKey, model, outputPath, callback);
+    case 'gemini_video': return _generateGeminiVideo(imagePath, prompt, apiKey, outputPath, callback);
     case 'placeholder':
-    default:          return _generatePlaceholderVideo(imagePath, durationSecs, outputPath, callback);
+    default:             return _generatePlaceholderVideo(imagePath, durationSecs, outputPath, callback);
   }
 }
 

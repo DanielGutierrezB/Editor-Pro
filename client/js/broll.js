@@ -49,6 +49,7 @@
             videoKlingApiKey: "",
             videoFalModel: "",
             videoFalApiKey: "",
+            videoGeminiApiKey: "",
             trackIndex: "auto",
             outputDir: ""
         };
@@ -485,7 +486,9 @@
         clip.status = "animating";
         if (onProgress) onProgress(clipId, "animating", 0);
 
-        var videoApiKey = settings.videoProvider === "fal" ? settings.videoFalApiKey : settings.videoKlingApiKey;
+        var videoApiKey = settings.videoProvider === "fal" ? settings.videoFalApiKey
+            : settings.videoProvider === "gemini_video" ? settings.videoGeminiApiKey
+            : settings.videoKlingApiKey;
         var videoModel = settings.videoProvider === "fal" ? settings.videoFalModel : undefined;
         self._post("/api/broll/animate", {
             proposalId: clip.proposalId,
