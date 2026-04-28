@@ -150,14 +150,28 @@ function _generateFluxLocal(description, endpointUrl, outputPath, callback) {
 function _generateFal(description, apiKey, model, outputPath, callback) {
   if (!apiKey) return callback(new Error('FAL.ai API key required'));
   const falModel = model || 'fal-ai/flux/schnell';
-  const body = JSON.stringify({
-    prompt: description,
-    image_size: { width: 1920, height: 1080 },
-    num_images: 1,
-    output_format: 'png',
-  });
+
+  // Build input — most models accept prompt + image_size
+  const input = { prompt: description };
+
+  // Nano Banana / Gemini models use aspect_ratio instead of image_size
+  if (/nano-banana|gemini|gpt-image|grok-imagine|seedream/i.test(falModel)) {
+    input.aspect_ratio = '16:9';
+  } else {
+    input.image_size = { width: 1920, height: 1080 };
+  }
+
+  // Most models support these
+  if (!/gpt-image|grok-imagine/i.test(falModel)) {
+    input.num_images = 1;
+    input.output_format = 'png';
+  }
+
+  const body = JSON.stringify(input);
+
+  // Use queue API (works for all models, handles both fast and slow ones)
   const req = https.request({
-    hostname: 'fal.run',
+    hostname: 'queue.fal.run',
     path: '/' + falModel,
     method: 'POST',
     headers: {
@@ -171,18 +185,85 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
     res.on('end', () => {
       try {
         const parsed = JSON.parse(data);
-        if (parsed.detail) return callback(new Error('FAL error: ' + parsed.detail));
-        const imgUrl = parsed.images && parsed.images[0] && parsed.images[0].url;
-        if (!imgUrl) return callback(new Error('No image URL in FAL response'));
-        _downloadToFile(imgUrl, outputPath, callback);
+        if (parsed.detail || parsed.error) {
+          return callback(new Error('FAL submit error: ' + (parsed.detail || parsed.error)));
+        }
+        const requestId = parsed.request_id;
+        if (!requestId) return callback(new Error('No request_id from FAL: ' + data.substring(0, 300)));
+        _pollFalImage(falModel, requestId, apiKey, outputPath, callback);
       } catch (e) {
         callback(new Error('FAL parse error: ' + e.message));
       }
     });
   });
   req.on('error', callback);
-  req.setTimeout(120000, () => { req.destroy(); callback(new Error('FAL timeout')); });
+  req.setTimeout(30000, () => { req.destroy(); callback(new Error('FAL submit timeout')); });
   req.write(body);
+  req.end();
+}
+
+function _pollFalImage(model, requestId, apiKey, outputPath, callback) {
+  let polls = 0;
+  const maxPolls = 60; // 60 × 3s = 3 min
+  function poll() {
+    polls++;
+    if (polls > maxPolls) return callback(new Error('FAL image queue timeout'));
+    const req = https.request({
+      hostname: 'queue.fal.run',
+      path: '/' + model + '/requests/' + requestId + '/status',
+      method: 'GET',
+      headers: { 'Authorization': 'Key ' + apiKey },
+    }, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.status === 'COMPLETED') {
+            return _fetchFalImageResult(model, requestId, apiKey, outputPath, callback);
+          }
+          if (parsed.status === 'FAILED') {
+            return callback(new Error('FAL image failed: ' + JSON.stringify(parsed)));
+          }
+          setTimeout(poll, 3000);
+        } catch (e) {
+          callback(new Error('FAL poll parse error: ' + e.message));
+        }
+      });
+    });
+    req.on('error', callback);
+    req.setTimeout(15000, () => { req.destroy(); setTimeout(poll, 3000); });
+    req.end();
+  }
+  setTimeout(poll, 2000);
+}
+
+function _fetchFalImageResult(model, requestId, apiKey, outputPath, callback) {
+  const req = https.request({
+    hostname: 'queue.fal.run',
+    path: '/' + model + '/requests/' + requestId + '/response',
+    method: 'GET',
+    headers: { 'Authorization': 'Key ' + apiKey },
+  }, (res) => {
+    let data = '';
+    res.on('data', (c) => { data += c; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        // Most models: images[0].url
+        let imgUrl = parsed.images && parsed.images[0] && parsed.images[0].url;
+        // Some models (GPT Image, Grok): image.url or output.url
+        if (!imgUrl && parsed.image) imgUrl = parsed.image.url;
+        if (!imgUrl && parsed.output) imgUrl = parsed.output.url || (Array.isArray(parsed.output) && parsed.output[0] && parsed.output[0].url);
+        if (!imgUrl) return callback(new Error('No image URL in FAL result: ' + data.substring(0, 300)));
+        _downloadToFile(imgUrl, outputPath, callback);
+      } catch (e) {
+        callback(new Error('FAL result parse error: ' + e.message));
+      }
+    });
+  });
+  req.on('error', callback);
+  req.setTimeout(30000, () => { req.destroy(); callback(new Error('FAL result fetch timeout')); });
   req.end();
 }
 
