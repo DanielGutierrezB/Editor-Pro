@@ -191,8 +191,9 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
         const requestId = parsed.request_id;
         if (!requestId) return callback(new Error('No request_id from FAL: ' + data.substring(0, 300)));
         const statusUrl = parsed.status_url || ('https://queue.fal.run/' + falModel + '/requests/' + requestId + '/status');
-        const responseUrl = parsed.response_url || ('https://queue.fal.run/' + falModel + '/requests/' + requestId + '/response');
-        console.log('[FAL] Submitted — model:', falModel, 'requestId:', requestId, 'statusUrl:', statusUrl, 'responseUrl:', responseUrl);
+        // FAL docs: result endpoint is /requests/{id} (NOT /requests/{id}/response)
+        const responseUrl = 'https://queue.fal.run/' + falModel + '/requests/' + requestId;
+        console.log('[FAL] Submitted — model:', falModel, 'requestId:', requestId);
         _pollFalImage(statusUrl, responseUrl, apiKey, outputPath, callback);
       } catch (e) {
         callback(new Error('FAL parse error: ' + e.message));
@@ -247,17 +248,12 @@ function _pollFalImage(statusUrl, responseUrl, apiKey, outputPath, callback) {
 
 function _fetchFalImageResult(responseUrl, apiKey, outputPath, callback) {
   const parsedUrl = new URL(responseUrl);
-  console.log('[FAL] Fetching result via POST from:', responseUrl);
-  const emptyBody = '{}';
+  console.log('[FAL] Fetching result from:', responseUrl);
   const req = https.request({
     hostname: parsedUrl.hostname,
     path: parsedUrl.pathname + parsedUrl.search,
-    method: 'POST',
-    headers: {
-      'Authorization': 'Key ' + apiKey,
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(emptyBody),
-    },
+    method: 'GET',
+    headers: { 'Authorization': 'Key ' + apiKey },
   }, (res) => {
     // Handle gzip/deflate if server sends compressed response
     const encoding = res.headers['content-encoding'];
@@ -293,7 +289,6 @@ function _fetchFalImageResult(responseUrl, apiKey, outputPath, callback) {
   });
   req.on('error', callback);
   req.setTimeout(60000, () => { req.destroy(); callback(new Error('FAL result fetch timeout')); });
-  req.write(emptyBody);
   req.end();
 }
 

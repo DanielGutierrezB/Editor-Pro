@@ -227,7 +227,8 @@ function _generateFalVideo(imagePath, durationSecs, prompt, apiKey, model, outpu
         const requestId = parsed.request_id;
         if (!requestId) return callback(new Error('No request_id from FAL: ' + data.substring(0, 300)));
         const statusUrl = parsed.status_url || ('https://queue.fal.run/' + falModel + '/requests/' + requestId + '/status');
-        const responseUrl = parsed.response_url || ('https://queue.fal.run/' + falModel + '/requests/' + requestId + '/response');
+        // FAL docs: result endpoint is /requests/{id} (NOT /requests/{id}/response)
+        const responseUrl = 'https://queue.fal.run/' + falModel + '/requests/' + requestId;
         console.log('[FAL Video] Submitted — model:', falModel, 'requestId:', requestId);
         _pollFalQueue(statusUrl, responseUrl, apiKey, outputPath, callback);
       } catch (e) {
@@ -283,17 +284,12 @@ function _pollFalQueue(statusUrl, responseUrl, apiKey, outputPath, callback) {
 
 function _fetchFalResult(responseUrl, apiKey, outputPath, callback) {
   const parsedUrl = new URL(responseUrl);
-  console.log('[FAL Video] Fetching result via POST from:', responseUrl);
-  const emptyBody = '{}';
+  console.log('[FAL Video] Fetching result from:', responseUrl);
   const req = https.request({
     hostname: parsedUrl.hostname,
     path: parsedUrl.pathname + parsedUrl.search,
-    method: 'POST',
-    headers: {
-      'Authorization': 'Key ' + apiKey,
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(emptyBody),
-    },
+    method: 'GET',
+    headers: { 'Authorization': 'Key ' + apiKey },
   }, (res) => {
     let data = '';
     res.on('data', (c) => { data += c; });
@@ -310,7 +306,6 @@ function _fetchFalResult(responseUrl, apiKey, outputPath, callback) {
   });
   req.on('error', callback);
   req.setTimeout(30000, () => { req.destroy(); callback(new Error('FAL result fetch timeout')); });
-  req.write(emptyBody);
   req.end();
 }
 
