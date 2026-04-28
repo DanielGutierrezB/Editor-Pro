@@ -39,6 +39,11 @@ All image descriptions MUST describe **photorealistic scenes with real people in
 - Icons, UI mockups, or infographics
 - Split screens or collages
 
+## LANGUAGE RULES:
+- **Match the language of the transcript.** If the class is in Spanish, ALL descriptions, rationales, scene titles, and visual worlds MUST be in Spanish.
+- Technical terms commonly used in the original language are OK (e.g. "revenue", "dashboard", "startup") — use them naturally mixed with the transcript's language.
+- Text that appears INSIDE the generated images (labels, numbers, screen content) should also match the transcript language when possible. Example: "PÉRDIDA NETA" instead of "NET LOSS" if the class is in Spanish.
+
 ## DESCRIPTION RULES:
 - **PRIORITY: The description must visualize what the narrator is SAYING**, not just a generic setting
 - Each description is a standalone AI image prompt — it must work WITHOUT seeing other shots
