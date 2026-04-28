@@ -251,6 +251,72 @@
      * Always produces flat proposals[] for backward compat, but also populates scenes[] when available.
      * Returns { proposals: [], scenes: [] }
      */
+    /**
+     * Snap shots within each scene to be contiguous — no gaps between shots.
+     * endTime of shot N becomes startTime of shot N+1 within the same scene.
+     * Preserves the first shot's startTime and last shot's endTime as anchors.
+     */
+    function _snapShotsContiguous(proposals) {
+        // Group by sceneId
+        var sceneGroups = {};
+        for (var i = 0; i < proposals.length; i++) {
+            var p = proposals[i];
+            var sid = p.sceneId || "__flat__";
+            if (!sceneGroups[sid]) sceneGroups[sid] = [];
+            sceneGroups[sid].push(p);
+        }
+
+        for (var key in sceneGroups) {
+            var shots = sceneGroups[key];
+            if (shots.length < 2) continue;
+
+            // Sort by startTime
+            shots.sort(function(a, b) {
+                return _timeToSecs(a.startTime) - _timeToSecs(b.startTime);
+            });
+
+            // Calculate total scene duration and divide evenly, or snap end→start
+            var sceneStart = _timeToSecs(shots[0].startTime);
+            var sceneEnd = _timeToSecs(shots[shots.length - 1].endTime);
+            var totalDuration = sceneEnd - sceneStart;
+            var shotDuration = totalDuration / shots.length;
+
+            // Redistribute evenly across the scene span
+            for (var s = 0; s < shots.length; s++) {
+                var newStart = sceneStart + (s * shotDuration);
+                var newEnd = sceneStart + ((s + 1) * shotDuration);
+                shots[s].startTime = _secsToTime(newStart);
+                shots[s].endTime = _secsToTime(newEnd);
+            }
+        }
+    }
+
+    function _timeToSecs(t) {
+        if (!t) return 0;
+        var parts = String(t).split(":");
+        if (parts.length === 3) {
+            var h = parseFloat(parts[0]) || 0;
+            var m = parseFloat(parts[1]) || 0;
+            var secMs = parts[2].split(".");
+            var sec = parseFloat(secMs[0]) || 0;
+            var ms = secMs.length > 1 ? parseFloat("0." + secMs[1]) : 0;
+            return h * 3600 + m * 60 + sec + ms;
+        }
+        return parseFloat(t) || 0;
+    }
+
+    function _secsToTime(secs) {
+        var h = Math.floor(secs / 3600);
+        var m = Math.floor((secs % 3600) / 60);
+        var s = secs % 60;
+        var sec = Math.floor(s);
+        var ms = Math.round((s - sec) * 1000);
+        return String(h).padStart(2, "0") + ":" +
+               String(m).padStart(2, "0") + ":" +
+               String(sec).padStart(2, "0") + "." +
+               String(ms).padStart(3, "0");
+    }
+
     function _parseLLMResponse(result) {
         var scenes = [];
         var proposals = [];
@@ -286,6 +352,9 @@
                     });
                 }
             }
+            // Post-process: snap shots within each scene to be contiguous (no gaps)
+            _snapShotsContiguous(proposals);
+
             return { proposals: proposals, scenes: scenes };
         }
 
