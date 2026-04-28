@@ -4,6 +4,31 @@
  * Follows the same proven placement pattern as motion.jsx
  */
 
+// ── Constants (defensive — may already be defined in common.jsx) ──────────────
+
+if (typeof TICKS_PER_SECOND === "undefined") {
+    var TICKS_PER_SECOND = 254016000000;
+}
+
+// ── Utility (defensive — may already be defined in common.jsx or motion.jsx) ──
+
+if (typeof _findProjectItemByPath === "undefined") {
+    function _findProjectItemByPath(searchPath, bin) {
+        if (!bin || !bin.children) return null;
+        for (var i = 0; i < bin.children.numItems; i++) {
+            var child = bin.children[i];
+            try {
+                if (child.getMediaPath && child.getMediaPath() === searchPath) return child;
+            } catch(e) {}
+            if (child.type === 2 && child.children) {
+                var found = _findProjectItemByPath(searchPath, child);
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+}
+
 // ── Bin management ────────────────────────────────────────────────────────────
 
 var _brBaseTrack = -1;

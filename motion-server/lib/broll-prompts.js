@@ -88,7 +88,7 @@ All image descriptions MUST follow this artistic style: Black background with gl
 
 Maintain this artistic style consistently across all shots in a scene.`,
 
-  courtroom: `## CRITICAL: Courtroom Sketch Style
+  courtroom_sketch: `## CRITICAL: Courtroom Sketch Style
 All image descriptions MUST follow this artistic style: Courtroom sketch illustration style, traditional media look, expressive and gestural linework, loose yet controlled strokes, hand-drawn ink and colored pencil aesthetic, soft shading with layered strokes, slightly rough textures, muted and natural color palette (earth tones, subdued blues, browns, and reds), subtle paper grain, observational drawing style, dynamic but imperfect proportions, reportage illustration feel.
 
 **DESCRIBE:**

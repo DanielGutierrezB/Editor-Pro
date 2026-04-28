@@ -3,25 +3,12 @@
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
-const { execFile, exec } = require('child_process');
+const { execFile } = require('child_process');
 const zlib = require('zlib');
 const path = require('path');
+const { findFfmpeg, downloadToFile } = require('./media-utils');
 
 // ── Placeholder: solid color PNG + text via ffmpeg ───────────────────────────
-
-function _findFfmpeg(callback) {
-  const candidates = ['ffmpeg', '/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg'];
-  let idx = 0;
-  function next() {
-    if (idx >= candidates.length) return callback(null);
-    exec(candidates[idx] + ' -version 2>/dev/null', { timeout: 3000 }, (err) => {
-      if (!err) return callback(candidates[idx]);
-      idx++;
-      next();
-    });
-  }
-  next();
-}
 
 function _createPlaceholderPng(description, outputPath, callback) {
   const truncated = description.replace(/'/g, '').replace(/"/g, '').substring(0, 120);
@@ -35,7 +22,7 @@ function _createPlaceholderPng(description, outputPath, callback) {
   if (cur) lines.push(cur.trim());
   const textLines = lines.slice(0, 4).join('\\n');
 
-  _findFfmpeg((ffmpeg) => {
+  findFfmpeg((ffmpeg) => {
     if (ffmpeg) {
       const drawtext = textLines
         ? `drawtext=text='${textLines.replace(/:/g, '\\:')}':fontcolor=white:fontsize=36:x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=10`
@@ -211,9 +198,9 @@ function _generateFal(description, apiKey, model, outputPath, callback, _retryCo
         if (!imgUrl && parsed.image) imgUrl = parsed.image.url;
         if (!imgUrl && parsed.output) imgUrl = parsed.output.url || (Array.isArray(parsed.output) && parsed.output[0] && parsed.output[0].url);
         if (!imgUrl) return callback(new Error('No image URL in FAL result: ' + data.substring(0, 300)));
-        // _downloadToFile detects actual format from magic bytes and adds correct extension
+        // downloadToFile detects actual format from magic bytes and adds correct extension
         console.log('[FAL] Got image URL, downloading...');
-        _downloadToFile(imgUrl, outputPath, callback);
+        downloadToFile(imgUrl, outputPath, callback);
       } catch (e) {
         callback(new Error('FAL parse error: ' + e.message + ' | bytes=' + data.length));
       }
@@ -226,50 +213,7 @@ function _generateFal(description, apiKey, model, outputPath, callback, _retryCo
 }
 
 // Queue-based polling removed — using fal.run direct endpoint instead
-
-function _downloadToFile(url, outputPath, callback) {
-  const parsed = new URL(url);
-  const lib = parsed.protocol === 'https:' ? https : http;
-  // Download to a temp path first, then detect real format and rename
-  const tmpPath = outputPath + '.tmp';
-  const file = fs.createWriteStream(tmpPath);
-  lib.get(url, (res) => {
-    if (res.statusCode === 301 || res.statusCode === 302) {
-      file.close();
-      return _downloadToFile(res.headers.location, outputPath, callback);
-    }
-    res.pipe(file);
-    file.on('finish', () => file.close(() => {
-      // Detect actual format from file magic bytes
-      try {
-        const fd = fs.openSync(tmpPath, 'r');
-        const magic = Buffer.alloc(4);
-        fs.readSync(fd, magic, 0, 4, 0);
-        fs.closeSync(fd);
-        const hex = magic.toString('hex');
-        let ext;
-        if (hex.startsWith('89504e47')) ext = '.png';
-        else if (hex.startsWith('ffd8ff')) ext = '.jpg';
-        else if (hex.startsWith('52494646')) ext = '.webp';
-        else ext = path.extname(outputPath) || '.png';
-
-        // Build final path with correct extension
-        const base = outputPath.replace(/\.[^.]+$/, '') || outputPath;
-        const finalPath = base + ext;
-        fs.renameSync(tmpPath, finalPath);
-        console.log('[Download] Saved:', path.basename(finalPath), '(magic:', hex.substring(0, 8), ')');
-        callback(null, finalPath);
-      } catch (e) {
-        // Fallback: just rename tmp to outputPath
-        try { fs.renameSync(tmpPath, outputPath); } catch (_e) {}
-        callback(null, outputPath);
-      }
-    }));
-  }).on('error', (err) => {
-    fs.unlink(tmpPath, () => {});
-    callback(err);
-  });
-}
+// _downloadToFile moved to media-utils.js (shared with video-generator)
 
 // ── ComfyUI (Flux local via node-based workflow) ─────────────────────────────
 
@@ -776,8 +720,9 @@ function _generateGeminiImage(description, apiKey, referenceImages, outputPath, 
 
 function generateImage(options, outputPath, callback) {
   const { provider, description, endpointUrl, apiKey, model, referenceImagePath, denoise } = options;
-  // Ensure outputPath has an extension for providers that need it (FAL handles its own)
-  if (options.provider !== 'fal' && !path.extname(outputPath)) {
+  // Ensure outputPath has an extension for providers that need it
+  // FAL uses downloadToFile which auto-detects format via magic bytes
+  if (provider !== 'fal' && !path.extname(outputPath)) {
     outputPath = outputPath + '.png';
   }
   const dir = path.dirname(outputPath);

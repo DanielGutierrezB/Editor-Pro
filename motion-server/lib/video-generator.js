@@ -3,46 +3,14 @@
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
-const { exec, execFile } = require('child_process');
+const { execFile } = require('child_process');
 const path = require('path');
-
-// ── Shared helpers ────────────────────────────────────────────────────────────
-
-function _findFfmpeg(callback) {
-  const candidates = ['ffmpeg', '/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg'];
-  let idx = 0;
-  function next() {
-    if (idx >= candidates.length) return callback(null);
-    exec(candidates[idx] + ' -version 2>/dev/null', { timeout: 3000 }, (err) => {
-      if (!err) return callback(candidates[idx]);
-      idx++;
-      next();
-    });
-  }
-  next();
-}
-
-function _downloadToFile(url, outputPath, callback) {
-  const parsed = new URL(url);
-  const lib = parsed.protocol === 'https:' ? https : http;
-  const file = fs.createWriteStream(outputPath);
-  lib.get(url, (res) => {
-    if (res.statusCode === 301 || res.statusCode === 302) {
-      file.close();
-      return _downloadToFile(res.headers.location, outputPath, callback);
-    }
-    res.pipe(file);
-    file.on('finish', () => file.close(() => callback(null, outputPath)));
-  }).on('error', (err) => {
-    fs.unlink(outputPath, () => {});
-    callback(err);
-  });
-}
+const { findFfmpeg, downloadToFileSimple } = require('./media-utils');
 
 // ── Placeholder: PNG → MP4 via ffmpeg ────────────────────────────────────────
 
 function _generatePlaceholderVideo(imagePath, durationSecs, outputPath, callback) {
-  _findFfmpeg((ffmpeg) => {
+  findFfmpeg((ffmpeg) => {
     if (!ffmpeg) return callback(new Error('ffmpeg not found — required for placeholder video'));
     const dur = Math.max(1, Math.round(durationSecs)) || 5;
     execFile(ffmpeg, [
@@ -92,7 +60,7 @@ function _generateLtxLocal(imagePath, durationSecs, prompt, endpointUrl, outputP
           const videoBuf = Buffer.from(parsed.video_base64, 'base64');
           return fs.writeFile(outputPath, videoBuf, (e) => callback(e, outputPath));
         }
-        if (parsed.video_url) return _downloadToFile(parsed.video_url, outputPath, callback);
+        if (parsed.video_url) return downloadToFileSimple(parsed.video_url, outputPath, callback);
         callback(new Error('No video in LTX response'));
       } catch (e) {
         callback(new Error('LTX parse error: ' + e.message));
@@ -173,7 +141,7 @@ function _pollKlingTask(taskId, apiKey, outputPath, callback) {
           if (status === 'succeed') {
             const videoUrl = parsed.data.task_result && parsed.data.task_result.videos && parsed.data.task_result.videos[0] && parsed.data.task_result.videos[0].url;
             if (!videoUrl) return callback(new Error('No video URL in Kling result'));
-            return _downloadToFile(videoUrl, outputPath, callback);
+            return downloadToFileSimple(videoUrl, outputPath, callback);
           }
           if (status === 'failed') return callback(new Error('Kling task failed: ' + JSON.stringify(parsed.data)));
           setTimeout(poll, 5000);
@@ -298,7 +266,7 @@ function _fetchFalResult(responseUrl, apiKey, outputPath, callback) {
         const parsed = JSON.parse(data);
         const videoUrl = parsed.video && parsed.video.url;
         if (!videoUrl) return callback(new Error('No video URL in FAL result: ' + data.substring(0, 300)));
-        _downloadToFile(videoUrl, outputPath, callback);
+        downloadToFileSimple(videoUrl, outputPath, callback);
       } catch (e) {
         callback(new Error('FAL result parse error: ' + e.message));
       }

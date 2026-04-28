@@ -1,8 +1,8 @@
 /**
  * BRoll — B-Roll Image-to-Video Pipeline for Editor-Pro
- * Server lifecycle (reuses motion-server port 3847), image gen, video gen, versioning
- * v1.9.0: Gemini Flash Image provider + feedback reference + Gemini-aware denoise skip
- * v1.8.48: Visual style selector — photorealistic, comic sketch, blueprint, courtroom
+ * Core module: constructor, settings, state, server comms, analysis, generation, placement.
+ * Scene logic in broll-scenes.js, style defs in broll-styles.js.
+ * v1.8.61: Refactored from god object into focused modules
  */
 (function(global) {
     "use strict";
@@ -26,9 +26,9 @@
     // ── Constructor ────────────────────────────────────────────────────────────
 
     function BRoll() {
-        this.proposals = [];  // [{id, startTime, endTime, description, rationale, sceneId?, shotType?, shotOrder?, visualWorld?, isHero?}]
-        this.clips = [];      // [{id, proposalId, startTime, endTime, description, versions[], activeVersion, status, placedInTimeline, sceneId?, shotType?, shotOrder?, visualWorld?, isHero?}]
-        this.scenes = [];     // [{id, title, narrative, visualWorld, shots[]}] — new scene-based structure
+        this.proposals = [];
+        this.clips = [];
+        this.scenes = [];
         this.analyzing = false;
         this.generating = false;
         this.generateCancelRequested = false;
@@ -40,7 +40,6 @@
 
     BRoll.prototype._loadSettings = function() {
         var defaults = {
-            // visualStyle removed — AI proposes per scene now
             imageProvider: "comfyui",
             imageEndpointUrl: "http://localhost:8188",
             imageFalModel: "",
@@ -59,7 +58,6 @@
             var saved = localStorage.getItem(SETTINGS_KEY);
             if (saved) {
                 var parsed = JSON.parse(saved);
-                // Migrate removed providers to comfyui
                 if (parsed.imageProvider === "flux_local") {
                     parsed.imageProvider = "comfyui";
                     parsed.imageEndpointUrl = "http://localhost:8188";
@@ -82,13 +80,10 @@
     BRoll.prototype.saveState = function(sessionKey) {
         try {
             var key = STORAGE_KEY + (sessionKey ? "_" + sessionKey : "");
-            // Strip base64 data before saving — too large for localStorage (5-10MB limit)
             var clipsClean = this.clips.map(function(clip) {
                 var c = Object.assign({}, clip);
                 c.versions = clip.versions.map(function(v) {
                     var vc = Object.assign({}, v);
-                    // imageBase64 now stores file:// URL (tiny), keep it for persistence
-                    // Only strip if it's actual base64 data (starts with "data:")
                     if (vc.imageBase64 && vc.imageBase64.indexOf("data:") === 0) {
                         delete vc.imageBase64;
                     }
@@ -131,10 +126,9 @@
         } catch(e) {}
     };
 
-    // ── Server check (reads from shared motion-server) ────────────────────────
+    // ── Server check ───────────────────────────────────────────────────────────
 
     BRoll.prototype.checkServer = function(callback) {
-        var self = this;
         if (!http) { if (callback) callback(false); return; }
         var req = http.get(SERVER_URL + "/api/status", function(res) {
             var data = "";
@@ -194,7 +188,7 @@
     BRoll.prototype._pollJob = function(jobId, onDone, onTick) {
         var self = this;
         var polls = 0;
-        var maxPolls = 200; // 200 × 2s = ~6 min
+        var maxPolls = 200;
         function tick() {
             polls++;
             if (polls > maxPolls) {
@@ -221,274 +215,15 @@
         self._pollTimers[jobId] = setTimeout(tick, 1500);
     };
 
-    // ── B-Roll analysis system prompt ────────────────────────────────────────
-
-    var BROLL_SYSTEM_PROMPT = [
-        "You are a professional video editor and visual storyteller specializing in educational content.",
-        "Analyze the transcript and identify 3-8 moments where B-roll visual content would enhance the educational impact.",
-        "",
-        "Each moment should be 3-10 seconds long. The description must be a specific, actionable image generation prompt.",
-        "Good: 'Close-up of hands typing Python code on a dark terminal'",
-        "Bad: 'Something visual', 'A relevant image'",
-        "",
-        "Return ONLY a valid JSON array:",
-        '[{ "startTime": "HH:MM:SS.mmm", "endTime": "HH:MM:SS.mmm", "description": "...", "rationale": "..." }]'
-    ].join("\n");
-
-    var _STYLE_DEFS = {
-        photorealistic: [
-            "## CRITICAL: Photorealistic Style",
-            "All image descriptions MUST describe **photorealistic scenes with real people in real situations**. Think stock footage / documentary style:",
-            "- Real people in offices, meetings, looking at screens, working",
-            "- Real environments: offices, coffee shops, classrooms, streets, homes",
-            "- Real objects: laptops, phones, documents, whiteboards, money, products",
-            "- Cinematic photography: shallow depth of field, natural lighting, professional composition",
-            "",
-            "**NEVER describe:**",
-            "- Animated/cartoon/illustration style images",
-            "- 3D renders or floating objects",
-            "- Abstract graphics, charts, or diagrams",
-            "- Icons, UI mockups, or infographics",
-            "- Split screens or collages"
-        ].join("\n"),
-
-        comic_sketch: [
-            "## CRITICAL: Comic Sketch Style",
-            "All image descriptions MUST follow this artistic style: Rough illustrative comic sketch style, unfinished drawing aesthetic, loose and imperfect linework, slightly wobbly bold outlines, hand-drawn feel, sketchy composition, minimal refinement, low-saturation color palette with a strong green dominance, muted tones, subtle color variation, raw and expressive strokes.",
-            "",
-            "**DESCRIBE:**",
-            "- Loose sketchy figures and environments rendered in a raw hand-drawn comic style",
-            "- Rough, wobbly outlines with visible pencil/ink strokes and imperfect shapes",
-            "- Low-saturation muted palette dominated by greens and earth tones",
-            "- Expressive, gestural compositions with an unfinished sketch aesthetic",
-            "",
-            "**NEVER describe:**",
-            "- Photorealistic or polished illustration styles",
-            "- Clean digital art, 3D renders, or vector graphics",
-            "- High-saturation or neon color palettes",
-            "- Smooth, precise, or professionally finished linework",
-            "",
-            "Maintain this artistic style consistently across all shots in a scene."
-        ].join("\n"),
-
-        blueprint: [
-            "## CRITICAL: Blueprint Style",
-            "All image descriptions MUST follow this artistic style: Black background with glowing white linework, blueprint-style aesthetic, chalkboard drawing look, technical sketch appearance, clean luminous outlines, high contrast, minimal color (monochrome white on black), soft glow effect, schematic and diagram-like style, precise yet hand-drawn feel, subtle dust or chalk texture.",
-            "",
-            "**DESCRIBE:**",
-            "- Dark/black backgrounds with crisp glowing white technical linework",
-            "- Blueprint, chalkboard, or architectural schematic aesthetic",
-            "- High-contrast monochrome (white on black) with subtle chalk or dust texture",
-            "- Precise structural outlines with a soft luminous glow",
-            "",
-            "**NEVER describe:**",
-            "- Colorful, photorealistic, or warm-toned images",
-            "- Organic textures, natural environments, or soft gradients",
-            "- Bright or light backgrounds",
-            "- Painterly or loose artistic styles",
-            "",
-            "Maintain this artistic style consistently across all shots in a scene."
-        ].join("\n"),
-
-        courtroom: [
-            "## CRITICAL: Courtroom Sketch Style",
-            "All image descriptions MUST follow this artistic style: Courtroom sketch illustration style, traditional media look, expressive and gestural linework, loose yet controlled strokes, hand-drawn ink and colored pencil aesthetic, soft shading with layered strokes, slightly rough textures, muted and natural color palette (earth tones, subdued blues, browns, and reds), subtle paper grain, observational drawing style, dynamic but imperfect proportions, reportage illustration feel.",
-            "",
-            "**DESCRIBE:**",
-            "- Expressive, gestural figures and scenes in a reportage/courtroom sketch style",
-            "- Ink and colored pencil textures with layered, soft shading strokes",
-            "- Muted earth-tone palette: browns, subdued blues, reds, natural colors",
-            "- Paper grain texture and imperfect, observational proportions with dynamic energy",
-            "",
-            "**NEVER describe:**",
-            "- Photorealistic or digitally polished images",
-            "- Clean vector, cartoon, or animation styles",
-            "- Bright, saturated, or neon color palettes",
-            "- Symmetrical or overly precise compositions",
-            "",
-            "Maintain this artistic style consistently across all shots in a scene."
-        ].join("\n")
-    };
-
-    function _buildStyledPrompt(promptTemplate, style) {
-        var styleDef = _STYLE_DEFS[style] || _STYLE_DEFS.photorealistic;
-        return promptTemplate.replace("{VISUAL_STYLE}", styleDef);
-    }
-
-    var _brollPromptLoaded = false;
-    function _ensureBrollPrompt() {
-        if (_brollPromptLoaded) return;
-        _brollPromptLoaded = true;
-        try {
-            var csInterface = window._epCSInterface;
-            if (!csInterface) return;
-            var extPath = csInterface.getSystemPath("extension");
-            var promptPath = require("path").join(extPath, "Prompts", "BRoll", "analysis.md");
-            if (require("fs").existsSync(promptPath)) {
-                BROLL_SYSTEM_PROMPT = require("fs").readFileSync(promptPath, "utf8");
-            }
-        } catch(e) {}
-    }
-
-    // ── Scene-based parsing helpers ──────────────────────────────────────────
-
-    /**
-     * Parse LLM response: supports both scenes[] (new) and proposals[]/array (legacy).
-     * Always produces flat proposals[] for backward compat, but also populates scenes[] when available.
-     * Returns { proposals: [], scenes: [] }
-     */
-    /**
-     * Snap shots within each scene to be contiguous — no gaps between shots.
-     * endTime of shot N becomes startTime of shot N+1 within the same scene.
-     * Preserves the first shot's startTime and last shot's endTime as anchors.
-     */
-    function _snapShotsContiguous(proposals) {
-        // Group by sceneId
-        var sceneGroups = {};
-        for (var i = 0; i < proposals.length; i++) {
-            var p = proposals[i];
-            var sid = p.sceneId || "__flat__";
-            if (!sceneGroups[sid]) sceneGroups[sid] = [];
-            sceneGroups[sid].push(p);
-        }
-
-        for (var key in sceneGroups) {
-            var shots = sceneGroups[key];
-            if (shots.length < 2) continue;
-
-            // Sort by shotOrder (narrative sequence), fallback to startTime
-            shots.sort(function(a, b) {
-                if (a.shotOrder && b.shotOrder) return a.shotOrder - b.shotOrder;
-                return _timeToSecs(a.startTime) - _timeToSecs(b.startTime);
-            });
-
-            // Calculate total scene duration and divide evenly, or snap end→start
-            var sceneStart = _timeToSecs(shots[0].startTime);
-            var sceneEnd = _timeToSecs(shots[shots.length - 1].endTime);
-            var totalDuration = sceneEnd - sceneStart;
-            var shotDuration = totalDuration / shots.length;
-
-            // Redistribute evenly across the scene span
-            for (var s = 0; s < shots.length; s++) {
-                var newStart = sceneStart + (s * shotDuration);
-                var newEnd = sceneStart + ((s + 1) * shotDuration);
-                shots[s].startTime = _secsToTime(newStart);
-                shots[s].endTime = _secsToTime(newEnd);
-            }
-        }
-    }
-
-    function _timeToSecs(t) {
-        if (!t) return 0;
-        var parts = String(t).split(":");
-        if (parts.length === 3) {
-            var h = parseFloat(parts[0]) || 0;
-            var m = parseFloat(parts[1]) || 0;
-            var secMs = parts[2].split(".");
-            var sec = parseFloat(secMs[0]) || 0;
-            var ms = secMs.length > 1 ? parseFloat("0." + secMs[1]) : 0;
-            return h * 3600 + m * 60 + sec + ms;
-        }
-        return parseFloat(t) || 0;
-    }
-
-    function _secsToTime(secs) {
-        var h = Math.floor(secs / 3600);
-        var m = Math.floor((secs % 3600) / 60);
-        var s = secs % 60;
-        var sec = Math.floor(s);
-        var ms = Math.round((s - sec) * 1000);
-        return String(h).padStart(2, "0") + ":" +
-               String(m).padStart(2, "0") + ":" +
-               String(sec).padStart(2, "0") + "." +
-               String(ms).padStart(3, "0");
-    }
-
-    function _parseLLMResponse(result) {
-        var scenes = [];
-        var proposals = [];
-
-        // result is already parsed JSON from ai-analyzer
-        var data = result;
-
-        // Try scenes format first (new cinematographic format)
-        if (data && data.scenes && Array.isArray(data.scenes) && data.scenes.length > 0) {
-            scenes = data.scenes;
-            // Flatten scenes → proposals with scene metadata
-            for (var si = 0; si < scenes.length; si++) {
-                var scene = scenes[si];
-                var sceneId = scene.id || ("scene_" + String(si + 1).padStart(3, "0"));
-                scene.id = sceneId;
-                var shots = scene.shots || [];
-                for (var shi = 0; shi < shots.length; shi++) {
-                    var shot = shots[shi];
-                    var shotId = sceneId + "_shot_" + String(shi + 1).padStart(2, "0");
-                    proposals.push({
-                        id: shotId,
-                        startTime: shot.startTime,
-                        endTime: shot.endTime,
-                        description: String(shot.description || "").trim(),
-                        rationale: String(shot.rationale || "").trim(),
-                        sceneId: sceneId,
-                        sceneTitle: scene.title || "",
-                        sceneNarrative: scene.narrative || "",
-                        visualStyle: scene.visualStyle || "photorealistic",
-                        shotType: (shot.shotType || "MED").toUpperCase(),
-                        shotOrder: shi + 1,
-                        visualWorld: scene.visualWorld || "",
-                        isHero: !!shot.isHero
-                    });
-                }
-            }
-            // Post-process: snap shots within each scene to be contiguous (no gaps)
-            _snapShotsContiguous(proposals);
-
-            return { proposals: proposals, scenes: scenes };
-        }
-
-        // Legacy format: flat array of proposals
-        var rawProposals = Array.isArray(data) ? data : (data && (data.proposals || data.moments || []));
-        if (!Array.isArray(rawProposals) || rawProposals.length === 0) {
-            // Fallback: extract JSON array from stringified result
-            var str = JSON.stringify(data);
-            var start = str.indexOf("[");
-            var end = str.lastIndexOf("]");
-            if (start !== -1 && end !== -1) {
-                try {
-                    rawProposals = JSON.parse(str.substring(start, end + 1));
-                } catch(e) {
-                    rawProposals = [];
-                }
-            }
-        }
-
-        if (Array.isArray(rawProposals)) {
-            proposals = rawProposals
-                .filter(function(p) { return p && p.startTime && p.endTime && p.description; })
-                .map(function(p, i) {
-                    return {
-                        id: "broll_" + Date.now() + "_" + i,
-                        startTime: p.startTime,
-                        endTime: p.endTime,
-                        description: String(p.description).trim(),
-                        rationale: String(p.rationale || "").trim()
-                        // No sceneId — legacy format
-                    };
-                });
-        }
-
-        return { proposals: proposals, scenes: [] };
-    }
-
-    // ── Step 1: Analyze transcript → proposals (direct LLM, no server needed) ─
+    // ── Step 1: Analyze transcript ─────────────────────────────────────────────
 
     BRoll.prototype.analyze = function(transcript, aiSettings, callback) {
         var self = this;
         if (self.analyzing) return callback(new Error("Ya se está analizando"));
 
-        _ensureBrollPrompt(); // lazy-load prompt from file on first analysis
+        var styles = global._epBrollStyles;
+        if (styles) styles.ensureBrollPrompt();
 
-        // Use ai-analyzer directly — no server dependency for analysis
         var analyzer = window._epAiAnalyzer;
         if (!analyzer) return callback(new Error("AI Analyzer no disponible"));
 
@@ -496,9 +231,8 @@
         var userPrompt = "Analyze the following transcript and identify B-roll opportunities.\n\n" + transcript +
             '\n\nReturn ONLY valid JSON. No explanation text.';
 
-        // Style is now AI-proposed per scene — no user setting needed
-        // Just replace {VISUAL_STYLE} token with empty string (styles are in the prompt itself)
-        var systemPrompt = BROLL_SYSTEM_PROMPT.replace("{VISUAL_STYLE}", "");
+        var systemPrompt = styles ? styles.getSystemPrompt().replace("{VISUAL_STYLE}", "") :
+            "You are a professional video editor. Identify B-roll opportunities.";
 
         analyzer._send(systemPrompt, userPrompt, function(result) {
             self.analyzing = false;
@@ -506,7 +240,8 @@
             if (result.error) return callback(new Error(result.error));
 
             try {
-                var parsed = _parseLLMResponse(result);
+                var scenes = global._epBrollScenes;
+                var parsed = scenes ? scenes.parseLLMResponse(result) : { proposals: [], scenes: [] };
 
                 if (!parsed.proposals || parsed.proposals.length === 0) {
                     throw new Error("No proposals found in LLM response");
@@ -532,11 +267,9 @@
         var settings = self._settings;
         var outputDir = settings.outputDir || (os && pathMod ? pathMod.join(os.tmpdir(), "editorpro-broll") : "/tmp/editorpro-broll");
 
-        // img2img options — passed when generating scene shots 2+
         var referenceImagePath = (options && options.referenceImagePath) || null;
         var denoise = (options && options.denoise) || 0.6;
 
-        // Update or create clip entry
         var clip = self._findClip(proposalId);
         if (!clip) {
             clip = {
@@ -564,7 +297,6 @@
 
         if (onProgress) onProgress(proposalId, "generating", 0);
 
-        // Build a readable clip name: SeqName_BRoll_01
         var proposalIndex = 0;
         for (var pi = 0; pi < self.proposals.length; pi++) {
             if (self.proposals[pi].id === proposalId) { proposalIndex = pi; break; }
@@ -572,24 +304,18 @@
         var seqPrefix = (self._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
         var clipName = seqPrefix + "_BRoll_" + String(proposalIndex + 1).padStart(2, "0");
 
-        // Prepend style instruction if the proposal has a visualStyle set
+        // Apply style prefix from broll-styles.js
         var styledDescription = proposal.description;
-        var _stylePrefix = {
-            photorealistic: "Photorealistic style, cinematic photography, real people in real environments. ",
-            comic_sketch: "Rough illustrative comic sketch style, unfinished drawing aesthetic, loose linework, wobbly outlines, hand-drawn feel, low-saturation muted palette. ",
-            blueprint: "Black background with glowing white linework, blueprint-style, chalkboard look, clean luminous outlines, high contrast monochrome, schematic diagram style. ",
-            courtroom_sketch: "Courtroom sketch illustration style, expressive gestural linework, hand-drawn ink and colored pencil, soft shading, muted earth tones, paper grain texture, reportage feel. "
-        };
-        if (proposal.visualStyle && _stylePrefix[proposal.visualStyle]) {
-            styledDescription = _stylePrefix[proposal.visualStyle] + styledDescription;
+        var styles = global._epBrollStyles;
+        if (styles && proposal.visualStyle) {
+            var prefix = styles.getStylePrefix(proposal.visualStyle);
+            if (prefix) styledDescription = prefix + styledDescription;
         }
 
-        // Prepend hero description for visual consistency across scene shots
         if (options && options.heroDescription) {
             styledDescription = '[STYLE REFERENCE ONLY — Use the same artistic style, color palette, and rendering technique. Do NOT repeat the hero composition — generate a COMPLETELY DIFFERENT subject as described below. Reference style: ' + options.heroDescription + '] ' + styledDescription;
         }
 
-        // Build request body
         var requestBody = {
             proposalId: proposalId,
             description: styledDescription,
@@ -601,8 +327,6 @@
             clipName: clipName
         };
 
-        // Add img2img / reference parameters when reference image is available
-        // Gemini handles consistency natively via inline image — no denoise parameter needed
         if (referenceImagePath) {
             requestBody.referenceImagePath = referenceImagePath;
             if (settings.imageProvider !== "gemini_image") {
@@ -612,7 +336,6 @@
 
         self._post("/api/broll/generate-image", requestBody, function(err, result) {
             if (err) {
-                // Remove the failed clip entry — don't leave error ghosts
                 self.clips = self.clips.filter(function(c) { return c.id !== clip.id; });
                 if (onProgress) onProgress(proposalId, "error", 0);
                 return callback(err);
@@ -630,7 +353,6 @@
                     if (onProgress) onProgress(proposalId, "error", 0);
                     return callback(pollErr);
                 }
-                // Add version
                 var version = {
                     version: clip.versions.length + 1,
                     imagePath: job.filePath,
@@ -717,7 +439,6 @@
         var clip = self._findClipById(clipId);
         if (!clip) return callback(new Error("Clip no encontrado"));
 
-        // Store feedback on current version
         var curVersion = clip.versions[clip.activeVersion];
         if (curVersion) curVersion.feedback = feedback;
 
@@ -729,10 +450,8 @@
             enhancedDesc = '[Visual reference — maintain consistency with this scene: ' + heroContext + '] ' + enhancedDesc;
         }
 
-        // Patch description for this generation and use same flow
         var originalDesc = clip.description;
         clip.description = enhancedDesc;
-        // Temporarily update proposal description so generateImage picks up the enhanced description
         var existing = self._findProposal(clip.proposalId);
         var savedDesc = originalDesc;
         if (!existing) {
@@ -746,7 +465,6 @@
         var settings = self._settings;
         var regenOptions = null;
 
-        // Gemini: use previous image as reference for feedback (no denoise — Gemini handles consistency natively)
         if (settings.imageProvider === "gemini_image") {
             if (curVersion && curVersion.imagePath) {
                 regenOptions = { referenceImagePath: curVersion.imagePath };
@@ -760,7 +478,6 @@
                 }
             }
         } else if (clip.sceneId) {
-            // ComfyUI: Hero shot → txt2img; non-hero → img2img from hero with variable denoise
             if (!clip.isHero) {
                 var heroClip = self._findHeroShotClip(clip.sceneId);
                 if (heroClip) {
@@ -773,7 +490,6 @@
                     }
                 }
             }
-            // Hero shot: regenOptions stays null → txt2img
         }
 
         self.generateImage(clip.proposalId, onProgress, function(err, updatedClip) {
@@ -783,7 +499,7 @@
         }, regenOptions);
     };
 
-    // ── Place clip in timeline (PNG or MP4) ───────────────────────────────────
+    // ── Place clip in timeline ─────────────────────────────────────────────────
 
     BRoll.prototype.placeInTimeline = function(clipId, csInterface, callback) {
         var self = this;
@@ -793,16 +509,9 @@
         if (!version) return callback(new Error("No hay versión disponible para clip " + clipId));
 
         var filePath = version.videoPath || version.imagePath;
-        console.log("[BRoll] placeInTimeline — clipId:", clipId, "filePath:", filePath, "exists:", fs ? fs.existsSync(filePath) : "no-fs");
-        if (!filePath) {
-            return callback(new Error("Sin ruta de archivo — regenera la imagen"));
-        }
-        if (!fs) {
-            return callback(new Error("Módulo fs no disponible"));
-        }
-        if (!fs.existsSync(filePath)) {
-            return callback(new Error("Archivo no existe: " + filePath));
-        }
+        if (!filePath) return callback(new Error("Sin ruta de archivo — regenera la imagen"));
+        if (!fs) return callback(new Error("Módulo fs no disponible"));
+        if (!fs.existsSync(filePath)) return callback(new Error("Archivo no existe: " + filePath));
 
         var settings = self._settings;
         var trackIndex = settings.trackIndex === "auto" ? -1 : parseInt(settings.trackIndex, 10);
@@ -811,15 +520,13 @@
         var durationSecs = Math.max(1, endSecs - startSecs);
 
         var isVideo = filePath.toLowerCase().indexOf(".mp4") !== -1 || filePath.toLowerCase().indexOf(".mov") !== -1;
-        // Build readable clip name: SeqName_BRoll_01_v1
         var proposalIndex = 0;
         for (var pi = 0; pi < self.proposals.length; pi++) {
             if (self.proposals[pi].id === clip.proposalId) { proposalIndex = pi; break; }
         }
         var seqPrefix = (self._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
-        var clipNum = String(proposalIndex + 1);
-        if (clipNum.length < 2) clipNum = "0" + clipNum;
-        var clipName = seqPrefix + "_BRoll_" + clipNum + "_v" + (clip.activeVersion + 1) + (isVideo ? "" : "");
+        var clipNum = String(proposalIndex + 1).padStart(2, "0");
+        var clipName = seqPrefix + "_BRoll_" + clipNum + "_v" + (clip.activeVersion + 1);
 
         var tmpFile = pathMod ? pathMod.join(pathMod.dirname(filePath), "broll_place_" + Date.now() + ".json") : "/tmp/broll_place.json";
         var payload = {
@@ -850,7 +557,7 @@
         });
     };
 
-    // ── Animate all videos sequentially ───────────────────────────────────────
+    // ── Batch animate ──────────────────────────────────────────────────────────
 
     BRoll.prototype.animateAll = function(onItemProgress, onBatchProgress, callback) {
         var self = this;
@@ -875,8 +582,6 @@
         }
         next(0);
     };
-
-    // ── Animate a specific subset of clips sequentially ───────────────────────
 
     BRoll.prototype.animateSelected = function(clipIds, onItemProgress, onBatchProgress, callback) {
         var self = this;
@@ -904,136 +609,9 @@
         next(0);
     };
 
-    // ── Scene helpers ──────────────────────────────────────────────────────────
-
-    /**
-     * Get proposals grouped by scene. Returns [{sceneId, title, narrative, visualWorld, proposals[]}]
-     * For legacy (non-scene) proposals, returns a single group with sceneId=null.
-     */
-    BRoll.prototype.getProposalsByScene = function() {
-        var grouped = [];
-        var sceneMap = {};
-
-        for (var i = 0; i < this.proposals.length; i++) {
-            var p = this.proposals[i];
-            var sid = p.sceneId || null;
-            if (!sceneMap[sid]) {
-                var sceneInfo = sid ? this._findScene(sid) : null;
-                sceneMap[sid] = {
-                    sceneId: sid,
-                    title: (sceneInfo && sceneInfo.title) || p.sceneTitle || "",
-                    narrative: (sceneInfo && sceneInfo.narrative) || p.sceneNarrative || "",
-                    visualWorld: (sceneInfo && sceneInfo.visualWorld) || p.visualWorld || "",
-                    proposals: []
-                };
-                grouped.push(sceneMap[sid]);
-            }
-            sceneMap[sid].proposals.push(p);
-        }
-
-        return grouped;
-    };
-
-    /**
-     * Get clips grouped by scene. Returns [{sceneId, title, clips[]}]
-     */
-    BRoll.prototype.getClipsByScene = function() {
-        var grouped = [];
-        var sceneMap = {};
-
-        for (var i = 0; i < this.clips.length; i++) {
-            var c = this.clips[i];
-            var sid = c.sceneId || null;
-            if (!sceneMap[sid]) {
-                var sceneInfo = sid ? this._findScene(sid) : null;
-                sceneMap[sid] = {
-                    sceneId: sid,
-                    title: (sceneInfo && sceneInfo.title) || "",
-                    clips: []
-                };
-                grouped.push(sceneMap[sid]);
-            }
-            sceneMap[sid].clips.push(c);
-        }
-
-        return grouped;
-    };
-
-    /**
-     * Redistribute successful clips in a scene evenly across the full scene span.
-     * Called after a scene finishes generating — fills gaps left by failed shots.
-     */
-    BRoll.prototype.redistributeSceneClips = function(sceneId) {
-        var self = this;
-        var validClips = [];
-        for (var i = 0; i < self.clips.length; i++) {
-            var cl = self.clips[i];
-            if (cl.sceneId === sceneId && (cl.status === "image" || cl.status === "video")) {
-                validClips.push(cl);
-            }
-        }
-        if (validClips.length < 2) return;
-
-        // Find full scene span from ALL proposals (including failed ones)
-        var sceneStart = Infinity, sceneEnd = 0;
-        for (var p = 0; p < self.proposals.length; p++) {
-            if (self.proposals[p].sceneId === sceneId) {
-                var ps = _timeToSecs(self.proposals[p].startTime);
-                var pe = _timeToSecs(self.proposals[p].endTime);
-                if (ps < sceneStart) sceneStart = ps;
-                if (pe > sceneEnd) sceneEnd = pe;
-            }
-        }
-        if (sceneStart === Infinity || sceneEnd === 0) return;
-
-        validClips.sort(function(a, b) {
-            return _timeToSecs(a.startTime) - _timeToSecs(b.startTime);
-        });
-
-        var slotDuration = (sceneEnd - sceneStart) / validClips.length;
-        for (var c = 0; c < validClips.length; c++) {
-            validClips[c].startTime = _secsToTime(sceneStart + c * slotDuration);
-            validClips[c].endTime   = _secsToTime(sceneStart + (c + 1) * slotDuration);
-        }
-    };
-
-    /**
-     * Find the Hero Shot clip for a scene — isHero:true, or lowest shotOrder as fallback.
-     * Used as img2img reference for all non-hero shots in the scene.
-     */
-    BRoll.prototype._findHeroShotClip = function(sceneId) {
-        if (!sceneId) return null;
-        var fallback = null;
-        for (var i = 0; i < this.clips.length; i++) {
-            var c = this.clips[i];
-            if (c.sceneId !== sceneId || c.status === "error") continue;
-            if (c.isHero && c.versions.length > 0) return c;
-            if (!fallback || (c.shotOrder && (!fallback.shotOrder || c.shotOrder < fallback.shotOrder))) {
-                if (c.versions.length > 0) fallback = c;
-            }
-        }
-        return fallback;
-    };
-
-    /**
-     * @deprecated Hero Shot system replaced shot-type compatibility checks.
-     * Kept for reference; no longer called in the active generation flow.
-     */
-    BRoll.prototype._findFirstShotClip = function(sceneId) {
-        return this._findHeroShotClip(sceneId);
-    };
-
-    /** Check if proposals have scene-based structure */
-    BRoll.prototype.hasScenes = function() {
-        return this.scenes.length > 0 ||
-            (this.proposals.length > 0 && !!this.proposals[0].sceneId);
-    };
-
     // ── Helpers ────────────────────────────────────────────────────────────────
 
-    BRoll.prototype.setOutputDir = function(dir) {
-        this._settings.outputDir = dir;
-    };
+    BRoll.prototype.setOutputDir = function(dir) { this._settings.outputDir = dir; };
 
     BRoll.prototype._findProposal = function(id) {
         for (var i = 0; i < this.proposals.length; i++) {
@@ -1063,31 +641,26 @@
         return null;
     };
 
-    /** @deprecated Replaced by Hero Shot system. Hero → txt2img; non-hero → img2img from hero. */
+    /** @deprecated Replaced by Hero Shot system. */
     BRoll.prototype._shouldUseImg2Img = function() { return false; };
 
-    /** Maps shot type to Premiere label color index */
     BRoll.prototype._shotTypeToLabelColor = function(shotType) {
         if (!shotType) return 3;
         switch (String(shotType).toUpperCase()) {
-            case "WIDE": return 4;  // Cerulean/blue
-            case "MED":  return 5;  // Forest/green
-            case "CU":   return 7;  // Mango/orange
-            case "DET":  return 1;  // Iris/purple
-            case "OTS":  return 8;  // Teal
-            default:     return 3;  // Violet
+            case "WIDE": return 4;
+            case "MED":  return 5;
+            case "CU":   return 7;
+            case "DET":  return 1;
+            case "OTS":  return 8;
+            default:     return 3;
         }
     };
 
     BRoll.prototype._timeToSeconds = function(timeStr) {
         if (!timeStr) return 0;
         var parts = timeStr.replace(",", ".").split(":");
-        if (parts.length === 3) {
-            return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
-        }
-        if (parts.length === 2) {
-            return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
-        }
+        if (parts.length === 3) return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+        if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
         return parseFloat(parts[0]) || 0;
     };
 

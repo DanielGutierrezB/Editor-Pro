@@ -14,10 +14,23 @@ const { generateVideo } = require('../lib/video-generator');
 // In-memory job queue (similar to render-queue but simpler — B-roll jobs are fast enough)
 const _jobs = {};
 let _jobSeq = 0;
+const JOB_TTL = 10 * 60 * 1000; // 10 min — auto-cleanup completed/errored jobs
 
 function _newJobId() { return 'br_' + Date.now() + '_' + (++_jobSeq); }
 
 function _setJob(id, data) { _jobs[id] = Object.assign({ id }, data); return _jobs[id]; }
+
+// Auto-cleanup stale jobs every 60s to prevent memory leak on long-running server
+setInterval(() => {
+  const now = Date.now();
+  for (const id of Object.keys(_jobs)) {
+    const job = _jobs[id];
+    if ((job.status === 'complete' || job.status === 'error') &&
+        job.startTime && (now - job.startTime) > JOB_TTL) {
+      delete _jobs[id];
+    }
+  }
+}, 60000);
 
 // ── POST /api/broll/analyze ───────────────────────────────────────────────────
 // Body: { transcript, provider, model, apiKey }
@@ -91,8 +104,11 @@ router.post('/generate-image', (req, res) => {
   const fileName = clipName
     ? clipName.replace(/[^a-z0-9_-]/gi, '_')
     : (proposalId || Date.now()).toString().replace(/[^a-z0-9_-]/gi, '_');
-  // Use no extension — image-generator will add the correct one based on actual format
-  const outputPath = path.join(sessionDir, fileName);
+  // Add .png extension for non-FAL providers (FAL auto-detects via magic bytes in downloadToFile)
+  let outputPath = path.join(sessionDir, fileName);
+  if (imageProvider !== 'fal' && !path.extname(outputPath)) {
+    outputPath += '.png';
+  }
 
   const jobId = _newJobId();
   _setJob(jobId, { type: 'image', status: 'running', proposalId, outputPath,

@@ -33,7 +33,9 @@ Editor-Pro/
 │       ├── speech-to-text.js # STT multi-proveedor (ElevenLabs, Whisper local/API)
 │       ├── recording-notes.js # Notas de grabación — detección IN/OUT, segmentos
 │       ├── cutter.js        # Cortes automáticos por marcadores
-│       ├── broll.js         # B-Roll — image gen, video gen, versioning (window.BRoll)
+│       ├── broll.js         # B-Roll core — constructor, settings, state, server comms, gen/animate/place (window.BRoll)
+│       ├── broll-styles.js  # B-Roll style definitions — single source of truth (window._epBrollStyles)
+│       ├── broll-scenes.js  # B-Roll scene parsing, time utils, scene grouping (extends BRoll.prototype)
 │       ├── motion-pro.js    # Motion-Pro — server lifecycle, generación, versionado
 │       ├── spellcheck-engine.js # Hunspell (typo-js) + reglas ortográficas
 │       ├── context-rules.js # Reglas de confusión español (haber/a ver, etc.)
@@ -41,7 +43,9 @@ Editor-Pro/
 │       ├── ui-spellcheck.js # UI de SpellCheck
 │       ├── ui-supertexts.js # UI de Smart Supertexts + MOGRT
 │       ├── ui-edit-suggestions.js # UI de Edit Suggestions + Reel Proposal
-│       ├── ui-broll.js      # UI de B-Roll
+│       ├── ui-broll-proposals.js # B-Roll UI: Steps 1-2 (analysis, proposal cards, generation flow)
+│       ├── ui-broll-clips.js    # B-Roll UI: Step 3 (clip cards, animate, place, regen)
+│       ├── ui-broll.js          # B-Roll UI orchestrator (init, settings, accordion, session switch)
 │       ├── ui-recording.js  # UI de Recording Notes + STT + Vistas
 │       └── ui-motion-pro.js # UI de Motion-Pro
 ├── host/                    # ExtendScript — API de Premiere Pro (ES3)
@@ -57,9 +61,10 @@ Editor-Pro/
 │   ├── server.js            # Entry point Express
 │   ├── routes/              # generate, render, feedback, propose, studio, broll
 │   └── lib/
+│       ├── media-utils.js      # Shared: findFfmpeg, downloadToFile (used by image + video generators)
 │       ├── broll-prompts.js    # Prompt builder para análisis B-roll
-│       ├── image-generator.js  # Generación de imágenes (placeholder/Flux/FAL.ai)
-│       ├── video-generator.js  # Generación de video (placeholder/LTX/Kling)
+│       ├── image-generator.js  # Generación de imágenes (placeholder/ComfyUI/FAL.ai/Gemini)
+│       ├── video-generator.js  # Generación de video (placeholder/LTX/Kling/FAL/Gemini Veo)
 │       ├── remotion-manager.js # Composition writing, Root.tsx, render (~390 líneas)
 │       ├── tsx-sanitizer.js    # Sanitización de TSX (brandfetch, Trail, transitions, staticPreview)
 │       ├── tsx-validator.js    # Validación de imports/syntax + auto-fix
