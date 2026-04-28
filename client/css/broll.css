@@ -111,7 +111,7 @@
 
 /* ── Proposal cards (Step 1) ─────────────────────────────────────────────────── */
 
-.br-proposal-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.br-proposal-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; max-height: 60vh; overflow-y: auto; }
 
 .br-proposal-card {
     display: flex;
@@ -176,7 +176,7 @@
 
 /* ── B-Roll clip cards (Step 2 & 3) ─────────────────────────────────────────── */
 
-.br-clips-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.br-clips-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; max-height: 60vh; overflow-y: auto; }
 
 .br-clip-card {
     background: var(--bg-surface);
