@@ -201,17 +201,9 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
         if (!imgUrl && parsed.image) imgUrl = parsed.image.url;
         if (!imgUrl && parsed.output) imgUrl = parsed.output.url || (Array.isArray(parsed.output) && parsed.output[0] && parsed.output[0].url);
         if (!imgUrl) return callback(new Error('No image URL in FAL result: ' + data.substring(0, 300)));
-        // Always use the correct extension from the image URL
-        const urlExt = path.extname(new URL(imgUrl).pathname).toLowerCase() || '.png';
-        let finalPath = outputPath;
-        // Add or replace extension to match actual format
-        if (path.extname(outputPath)) {
-          finalPath = outputPath.replace(/\.[^.]+$/, urlExt);
-        } else {
-          finalPath = outputPath + urlExt;
-        }
-        console.log('[FAL] Downloading to:', path.basename(finalPath), '(format:', urlExt, ')');
-        _downloadToFile(imgUrl, finalPath, callback);
+        // _downloadToFile detects actual format from magic bytes and adds correct extension
+        console.log('[FAL] Got image URL, downloading...');
+        _downloadToFile(imgUrl, outputPath, callback);
       } catch (e) {
         callback(new Error('FAL parse error: ' + e.message + ' | bytes=' + data.length));
       }
@@ -228,16 +220,43 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
 function _downloadToFile(url, outputPath, callback) {
   const parsed = new URL(url);
   const lib = parsed.protocol === 'https:' ? https : http;
-  const file = fs.createWriteStream(outputPath);
+  // Download to a temp path first, then detect real format and rename
+  const tmpPath = outputPath + '.tmp';
+  const file = fs.createWriteStream(tmpPath);
   lib.get(url, (res) => {
     if (res.statusCode === 301 || res.statusCode === 302) {
       file.close();
       return _downloadToFile(res.headers.location, outputPath, callback);
     }
     res.pipe(file);
-    file.on('finish', () => file.close(() => callback(null, outputPath)));
+    file.on('finish', () => file.close(() => {
+      // Detect actual format from file magic bytes
+      try {
+        const fd = fs.openSync(tmpPath, 'r');
+        const magic = Buffer.alloc(4);
+        fs.readSync(fd, magic, 0, 4, 0);
+        fs.closeSync(fd);
+        const hex = magic.toString('hex');
+        let ext;
+        if (hex.startsWith('89504e47')) ext = '.png';
+        else if (hex.startsWith('ffd8ff')) ext = '.jpg';
+        else if (hex.startsWith('52494646')) ext = '.webp';
+        else ext = path.extname(outputPath) || '.png';
+
+        // Build final path with correct extension
+        const base = outputPath.replace(/\.[^.]+$/, '') || outputPath;
+        const finalPath = base + ext;
+        fs.renameSync(tmpPath, finalPath);
+        console.log('[Download] Saved:', path.basename(finalPath), '(magic:', hex.substring(0, 8), ')');
+        callback(null, finalPath);
+      } catch (e) {
+        // Fallback: just rename tmp to outputPath
+        try { fs.renameSync(tmpPath, outputPath); } catch (_e) {}
+        callback(null, outputPath);
+      }
+    }));
   }).on('error', (err) => {
-    fs.unlink(outputPath, () => {});
+    fs.unlink(tmpPath, () => {});
     callback(err);
   });
 }
