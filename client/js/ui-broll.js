@@ -803,8 +803,11 @@
                             setTimeout(function() {
                                 _generateSceneShots(remainingIds, 0, referenceImagePath, heroProposal, function() {
                                     completedShots += remainingIds.length;
-                                    broll.redistributeSceneClips(sid);
-                                    nextScene(si + 1);
+                                    // Retry failed shots from this scene
+                                    _retryFailedSceneShots(sid, shotIds, referenceImagePath, heroProposal, function() {
+                                        broll.redistributeSceneClips(sid);
+                                        nextScene(si + 1);
+                                    });
                                 });
                             }, 2000);
                         });
@@ -813,8 +816,10 @@
                         setTimeout(function() {
                             _generateSceneShots(remainingIds, 0, null, heroProposal, function() {
                                 completedShots += remainingIds.length;
-                                broll.redistributeSceneClips(sid);
-                                nextScene(si + 1);
+                                _retryFailedSceneShots(sid, shotIds, null, heroProposal, function() {
+                                    broll.redistributeSceneClips(sid);
+                                    nextScene(si + 1);
+                                });
                             });
                         }, 2000);
                     }
@@ -826,6 +831,30 @@
     }
 
     // heroProposal — used to determine denoise strength by shot type similarity
+    // Retry shots that failed in this scene (e.g. 429 rate limit)
+    function _retryFailedSceneShots(sceneId, allShotIds, referenceImagePath, heroProposal, done) {
+        if (broll.generateCancelRequested) return done();
+
+        // Find shots that don't have a clip (failed during generation)
+        var failedIds = [];
+        for (var i = 0; i < allShotIds.length; i++) {
+            var clip = broll._findClip(allShotIds[i]);
+            if (!clip || clip.status === "error") {
+                failedIds.push(allShotIds[i]);
+            }
+        }
+
+        if (failedIds.length === 0) return done();
+
+        console.log("[BRoll] Retrying " + failedIds.length + " failed shots for scene " + sceneId + " after 5s...");
+        showToast("Reintentando " + failedIds.length + " shots fallidos...", "info");
+
+        // Wait 5s before retrying to let FAL rate limit cool down
+        setTimeout(function() {
+            _generateSceneShots(failedIds, 0, referenceImagePath, heroProposal, done);
+        }, 5000);
+    }
+
     function _generateSceneShots(shotIds, startIdx, referenceImagePath, heroProposal, done) {
         if (broll.generateCancelRequested || startIdx >= shotIds.length) return done();
 
