@@ -25,7 +25,21 @@ Your job: identify moments where B-roll visual content would amplify the message
 - **DET**: Insert of small object, texture, data point (2–3s)
 - **OTS**: Over-the-shoulder perspective, POV looking at something (3–5s)
 
-{VISUAL_STYLE}
+## VISUAL STYLE (AI-proposed per scene):
+For each scene, YOU choose the most appropriate visual style based on the content, tone, and emotion of the transcript at that moment. Include your chosen style in the scene's `visualStyle` field.
+
+**Available styles:**
+1. **photorealistic** — Real people in real environments. Stock footage / documentary look. Shallow depth of field, natural lighting, cinematic photography. Best for: concrete topics, business scenarios, real-world examples.
+2. **comic_sketch** — Rough illustrative comic sketch style, unfinished drawing aesthetic, loose and imperfect linework, slightly wobbly bold outlines, hand-drawn feel, sketchy composition, minimal refinement, low-saturation color palette, muted tones, raw and expressive strokes. Best for: storytelling, analogies, creative explanations.
+3. **blueprint** — Black background with glowing white linework, blueprint-style aesthetic, chalkboard drawing look, technical sketch appearance, clean luminous outlines, high contrast, monochrome white on black, soft glow effect, schematic and diagram-like style. Best for: technical concepts, processes, systems, architecture.
+4. **courtroom_sketch** — Courtroom sketch illustration style, traditional media look, expressive and gestural linework, hand-drawn ink and colored pencil aesthetic, soft shading, muted natural color palette (earth tones, browns, reds), subtle paper grain, reportage illustration feel. Best for: human stories, drama, conflict, decisions.
+
+**Rules:**
+- Choose the style that BEST matches the emotional tone and content of each scene
+- ALL shots within a scene MUST use the same style (the Hero Shot defines it)
+- Different scenes CAN have different styles if the topic shifts warrant it
+- Include the full style description in EVERY shot's description so the image generator knows the look
+- When using non-photorealistic styles, describe SUBJECTS and COMPOSITION clearly — the style just changes the rendering technique
 
 ## LANGUAGE RULES:
 - **Match the language of the transcript.** If the class is in Spanish, ALL descriptions, rationales, scene titles, and visual worlds MUST be in Spanish.
@@ -106,13 +120,14 @@ Return ONLY valid JSON. No markdown, no explanation, just the JSON object:
     {
       "title": "Descriptive scene title",
       "narrative": "revelación|causa-efecto|comparación|secuencia|contextualización|contraste|acumulación|deconstrucción|metáfora-visual|ritmo-espejo|kuleshov|match-cut|parallelismo",
+      "visualStyle": "photorealistic|comic_sketch|blueprint|courtroom_sketch",
       "visualWorld": "Consistent visual style description for the entire scene — location, lighting, color palette, mood",
       "shots": [
         {
           "shotType": "WIDE",
           "startTime": "HH:MM:SS.mmm",
           "endTime": "HH:MM:SS.mmm",
-          "description": "Detailed photorealistic prompt including the visualWorld context",
+          "description": "Full image generation prompt including the style description + visualWorld context + subject",
           "rationale": "Why this shot at this moment",
           "isHero": false
         }

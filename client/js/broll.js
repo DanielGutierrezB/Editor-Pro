@@ -40,7 +40,7 @@
 
     BRoll.prototype._loadSettings = function() {
         var defaults = {
-            visualStyle: "photorealistic",
+            // visualStyle removed — AI proposes per scene now
             imageProvider: "comfyui",
             imageEndpointUrl: "http://localhost:8188",
             imageFalModel: "",
@@ -427,6 +427,7 @@
                         sceneId: sceneId,
                         sceneTitle: scene.title || "",
                         sceneNarrative: scene.narrative || "",
+                        visualStyle: scene.visualStyle || "photorealistic",
                         shotType: (shot.shotType || "MED").toUpperCase(),
                         shotOrder: shi + 1,
                         visualWorld: scene.visualWorld || "",
@@ -490,8 +491,9 @@
         var userPrompt = "Analyze the following transcript and identify B-roll opportunities.\n\n" + transcript +
             '\n\nReturn ONLY valid JSON. No explanation text.';
 
-        var visualStyle = self._settings.visualStyle || "photorealistic";
-        var systemPrompt = _buildStyledPrompt(BROLL_SYSTEM_PROMPT, visualStyle);
+        // Style is now AI-proposed per scene — no user setting needed
+        // Just replace {VISUAL_STYLE} token with empty string (styles are in the prompt itself)
+        var systemPrompt = BROLL_SYSTEM_PROMPT.replace("{VISUAL_STYLE}", "");
 
         analyzer._send(systemPrompt, userPrompt, function(result) {
             self.analyzing = false;

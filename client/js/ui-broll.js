@@ -402,11 +402,15 @@
                     if (pStart >= 0 && pEnd >= 0) totalDuration += (pEnd - pStart);
                 }
 
+                var styleEmoji = { photorealistic: '📸', comic_sketch: '✏️', blueprint: '📐', courtroom_sketch: '🎨' };
+                var styleLabel = group.proposals[0] && group.proposals[0].visualStyle ? group.proposals[0].visualStyle : '';
+                var styleBadge = styleLabel ? ' · ' + (styleEmoji[styleLabel] || '🎨') + ' ' + styleLabel.replace(/_/g, ' ') : '';
+
                 sceneHeader.innerHTML =
                     '<div class="br-scene-title">🎬 ' + esc(group.title) + '</div>' +
                     '<div class="br-scene-meta">' +
                         '<span class="br-scene-narrative">' + esc(group.narrative) + '</span>' +
-                        ' · ' + group.proposals.length + ' planos · ' + Math.round(totalDuration) + 's' +
+                        ' · ' + group.proposals.length + ' planos · ' + Math.round(totalDuration) + 's' + styleBadge +
                     '</div>' +
                     (group.visualWorld ? '<div class="br-scene-world">🌍 ' + esc(group.visualWorld.substring(0, 120)) + (group.visualWorld.length > 120 ? '…' : '') + '</div>' : '');
 
@@ -1250,7 +1254,7 @@
     function _loadSettingsUI() {
         if (!broll) return;
         var s = broll.getSettings();
-        _setSelectVal("br-visual-style", s.visualStyle);
+        // visualStyle removed from settings — AI proposes per scene now
         _setSelectVal("br-img-provider", s.imageProvider);
         _setInputVal("br-img-endpoint", s.imageEndpointUrl);
         _setInputVal("br-img-gemini-key", s.imageGeminiApiKey);
@@ -1380,7 +1384,7 @@
     function saveSettings() {
         if (!broll) return;
         broll.saveSettings({
-            visualStyle:       _getSelectVal("br-visual-style"),
+
             imageProvider:     _getSelectVal("br-img-provider"),
             imageEndpointUrl:  _getInputVal("br-img-endpoint"),
             imageGeminiApiKey: _getInputVal("br-img-gemini-key"),
