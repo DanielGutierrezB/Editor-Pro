@@ -87,7 +87,11 @@
                 var c = Object.assign({}, clip);
                 c.versions = clip.versions.map(function(v) {
                     var vc = Object.assign({}, v);
-                    delete vc.imageBase64; // ~5-8MB per image, don't persist
+                    // imageBase64 now stores file:// URL (tiny), keep it for persistence
+                    // Only strip if it's actual base64 data (starts with "data:")
+                    if (vc.imageBase64 && vc.imageBase64.indexOf("data:") === 0) {
+                        delete vc.imageBase64;
+                    }
                     return vc;
                 });
                 return c;

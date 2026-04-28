@@ -115,13 +115,8 @@ router.post('/generate-image', (req, res) => {
         if (filePath !== outputPath && fs.existsSync(outputPath)) {
           try { fs.unlinkSync(outputPath); } catch (_e) {}
         }
-        // Generate base64 thumbnail (for UI preview)
-        try {
-          const buf = fs.readFileSync(filePath);
-          const ext = path.extname(filePath).toLowerCase();
-          const mime = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.webp' ? 'image/webp' : 'image/png';
-          _jobs[jobId].base64 = 'data:' + mime + ';base64,' + buf.toString('base64');
-        } catch (_e) {}
+        // Use file:// URL for thumbnail (no base64 — images are 5-6MB at 2k)
+        _jobs[jobId].base64 = 'file://' + filePath;
       }
     }
   );
