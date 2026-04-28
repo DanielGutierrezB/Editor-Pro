@@ -154,15 +154,17 @@ function _generateFal(description, apiKey, model, outputPath, callback) {
   // Build input — most models accept prompt + image_size
   const input = { prompt: description };
 
-  // Nano Banana / Gemini models use aspect_ratio instead of image_size
-  if (/nano-banana|gemini|gpt-image|grok-imagine|seedream/i.test(falModel)) {
+  // Model-specific input params for resolution
+  if (/grok-imagine/i.test(falModel)) {
     input.aspect_ratio = '16:9';
+    input.resolution = '1k'; // 1080p
+    input.num_images = 1;
+  } else if (/nano-banana|gemini|gpt-image|seedream/i.test(falModel)) {
+    input.aspect_ratio = '16:9';
+    input.num_images = 1;
+    input.output_format = 'png';
   } else {
     input.image_size = { width: 1920, height: 1080 };
-  }
-
-  // Most models support these
-  if (!/gpt-image|grok-imagine/i.test(falModel)) {
     input.num_images = 1;
     input.output_format = 'png';
   }
