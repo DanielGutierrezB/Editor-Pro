@@ -567,10 +567,22 @@
         var seqPrefix = (self._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
         var clipName = seqPrefix + "_BRoll_" + String(proposalIndex + 1).padStart(2, "0");
 
+        // Prepend style instruction if the proposal has a visualStyle set
+        var styledDescription = proposal.description;
+        var _stylePrefix = {
+            photorealistic: "Photorealistic style, cinematic photography, real people in real environments. ",
+            comic_sketch: "Rough illustrative comic sketch style, unfinished drawing aesthetic, loose linework, wobbly outlines, hand-drawn feel, low-saturation muted palette. ",
+            blueprint: "Black background with glowing white linework, blueprint-style, chalkboard look, clean luminous outlines, high contrast monochrome, schematic diagram style. ",
+            courtroom_sketch: "Courtroom sketch illustration style, expressive gestural linework, hand-drawn ink and colored pencil, soft shading, muted earth tones, paper grain texture, reportage feel. "
+        };
+        if (proposal.visualStyle && _stylePrefix[proposal.visualStyle]) {
+            styledDescription = _stylePrefix[proposal.visualStyle] + styledDescription;
+        }
+
         // Build request body
         var requestBody = {
             proposalId: proposalId,
-            description: proposal.description,
+            description: styledDescription,
             imageProvider: settings.imageProvider,
             endpointUrl: settings.imageEndpointUrl,
             apiKey: settings.imageProvider === "gemini_image" ? settings.imageGeminiApiKey : settings.imageFalApiKey,

@@ -402,15 +402,27 @@
                     if (pStart >= 0 && pEnd >= 0) totalDuration += (pEnd - pStart);
                 }
 
-                var styleEmoji = { photorealistic: '📸', comic_sketch: '✏️', blueprint: '📐', courtroom_sketch: '🎨' };
-                var styleLabel = group.proposals[0] && group.proposals[0].visualStyle ? group.proposals[0].visualStyle : '';
-                var styleBadge = styleLabel ? ' · ' + (styleEmoji[styleLabel] || '🎨') + ' ' + styleLabel.replace(/_/g, ' ') : '';
+                var currentStyle = group.proposals[0] && group.proposals[0].visualStyle ? group.proposals[0].visualStyle : 'photorealistic';
+                var sceneIdForStyle = group.sceneId || '';
+                var styleOptions = [
+                    { value: 'photorealistic', emoji: '📸', label: 'Fotorealista' },
+                    { value: 'comic_sketch', emoji: '✏️', label: 'Comic Sketch' },
+                    { value: 'blueprint', emoji: '📐', label: 'Blueprint' },
+                    { value: 'courtroom_sketch', emoji: '🎨', label: 'Courtroom Sketch' }
+                ];
+                var styleSelectHtml = '<select class="br-scene-style-select" data-scene-id="' + escAttr(sceneIdForStyle) + '">';
+                for (var so = 0; so < styleOptions.length; so++) {
+                    var sel = styleOptions[so].value === currentStyle ? ' selected' : '';
+                    styleSelectHtml += '<option value="' + styleOptions[so].value + '"' + sel + '>' +
+                        styleOptions[so].emoji + ' ' + styleOptions[so].label + '</option>';
+                }
+                styleSelectHtml += '</select>';
 
                 sceneHeader.innerHTML =
                     '<div class="br-scene-title">🎬 ' + esc(group.title) + '</div>' +
                     '<div class="br-scene-meta">' +
                         '<span class="br-scene-narrative">' + esc(group.narrative) + '</span>' +
-                        ' · ' + group.proposals.length + ' planos · ' + Math.round(totalDuration) + 's' + styleBadge +
+                        ' · ' + group.proposals.length + ' planos · ' + Math.round(totalDuration) + 's · ' + styleSelectHtml +
                     '</div>' +
                     (group.visualWorld ? '<div class="br-scene-world">🌍 ' + esc(group.visualWorld.substring(0, 120)) + (group.visualWorld.length > 120 ? '…' : '') + '</div>' : '');
 
@@ -429,6 +441,22 @@
         }
 
         _updateSelectedCount();
+
+        // Wire up style dropdown changes — update all proposals in the scene
+        var styleSelects = list.querySelectorAll(".br-scene-style-select");
+        for (var ss = 0; ss < styleSelects.length; ss++) {
+            styleSelects[ss].addEventListener("change", function(e) {
+                var sceneId = e.target.dataset.sceneId;
+                var newStyle = e.target.value;
+                if (!broll || !sceneId) return;
+                for (var pi = 0; pi < broll.proposals.length; pi++) {
+                    if (broll.proposals[pi].sceneId === sceneId) {
+                        broll.proposals[pi].visualStyle = newStyle;
+                    }
+                }
+                showToast("Estilo cambiado a " + newStyle.replace(/_/g, " "), "success");
+            });
+        }
 
         // Show summary bar
         var summary = _el("br-proposals-summary");
