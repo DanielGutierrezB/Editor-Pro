@@ -1101,15 +1101,59 @@
         _setSelectVal("br-img-provider", s.imageProvider);
         _setInputVal("br-img-endpoint", s.imageEndpointUrl);
         _setInputVal("br-img-gemini-key", s.imageGeminiApiKey);
-        _setSelectVal("br-img-fal-model", s.imageFalModel);
         _setInputVal("br-img-fal-key", s.imageFalApiKey);
         _setSelectVal("br-vid-provider", s.videoProvider);
         _setInputVal("br-vid-endpoint", s.videoEndpointUrl);
         _setInputVal("br-vid-kling-key", s.videoKlingApiKey);
-        _setSelectVal("br-vid-fal-model", s.videoFalModel);
         _setInputVal("br-vid-fal-key", s.videoFalApiKey);
         _setSelectVal("br-track-select", s.trackIndex);
         _refreshSettingsVisibility();
+        // Load FAL models if FAL is selected (after selects are visible)
+        if (s.imageProvider === "fal") _loadFalModels("text-to-image", "br-img-fal-model", s.imageFalModel);
+        if (s.videoProvider === "fal") _loadFalModels("image-to-video", "br-vid-fal-model", s.videoFalModel);
+    }
+
+    // ── FAL.ai dynamic model loading ───────────────────────────────────────────
+
+    var _falModelsLoaded = {};  // cache: { "text-to-image": [{id, name}], ... }
+
+    function _loadFalModels(category, selectId, savedValue) {
+        var sel = _el(selectId);
+        if (!sel) return;
+
+        // Serve from memory cache if available
+        if (_falModelsLoaded[category]) {
+            _populateFalSelect(sel, _falModelsLoaded[category], savedValue);
+            return;
+        }
+
+        sel.innerHTML = '<option value="">Cargando modelos...</option>';
+
+        if (!broll) return;
+        broll._get("/api/broll/fal-models?category=" + encodeURIComponent(category), function(err, result) {
+            if (err || !result || !result.models || result.models.length === 0) {
+                sel.innerHTML = '<option value="">Error cargando modelos</option>';
+                return;
+            }
+            _falModelsLoaded[category] = result.models;
+            _populateFalSelect(sel, result.models, savedValue);
+        });
+    }
+
+    function _populateFalSelect(sel, models, savedValue) {
+        sel.innerHTML = "";
+        for (var i = 0; i < models.length; i++) {
+            var opt = document.createElement("option");
+            opt.value = models[i].id;
+            opt.textContent = models[i].name;
+            if (models[i].description) opt.title = models[i].description;
+            sel.appendChild(opt);
+        }
+        // Restore saved value if it exists in the list
+        if (savedValue) {
+            sel.value = savedValue;
+            // If savedValue not found in list, keep first option selected
+        }
     }
 
     function _refreshSettingsVisibility() {
@@ -1119,9 +1163,18 @@
         _toggleEl("br-img-fal-key-row",     imgProv === "fal");
         _toggleEl("br-img-fal-model-row",   imgProv === "fal");
 
+        // Load FAL models on provider switch
+        if (imgProv === "fal" && !_falModelsLoaded["text-to-image"]) {
+            _loadFalModels("text-to-image", "br-img-fal-model", broll ? broll.getSettings().imageFalModel : "");
+        }
+
         var vidProv = _getSelectVal("br-vid-provider");
         _toggleEl("br-vid-fal-key-row",     vidProv === "fal");
         _toggleEl("br-vid-fal-model-row",   vidProv === "fal");
+
+        if (vidProv === "fal" && !_falModelsLoaded["image-to-video"]) {
+            _loadFalModels("image-to-video", "br-vid-fal-model", broll ? broll.getSettings().videoFalModel : "");
+        }
     }
 
     function saveSettings() {

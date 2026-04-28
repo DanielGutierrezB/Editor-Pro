@@ -230,4 +230,51 @@ router.get('/check-comfyui', (req, res) => {
   checkReq.setTimeout(5000, () => { checkReq.destroy(); res.json({ ok: false, error: 'timeout' }); });
 });
 
+// ── GET /api/broll/fal-models?category=text-to-image ─────────────────────────
+// Proxy FAL.ai model catalog — CEP panel can't call external APIs directly.
+// category: 'text-to-image' or 'image-to-video'
+
+const _falModelsCache = {};
+const FAL_CACHE_TTL = 10 * 60 * 1000; // 10 min
+
+router.get('/fal-models', (req, res) => {
+  const category = req.query.category || 'text-to-image';
+  const now = Date.now();
+
+  // Serve from cache if fresh
+  if (_falModelsCache[category] && (now - _falModelsCache[category].ts) < FAL_CACHE_TTL) {
+    return res.json(_falModelsCache[category].data);
+  }
+
+  const https2 = require('https');
+  const apiUrl = '/v1/models?category=' + encodeURIComponent(category) + '&status=active&limit=50';
+  const apiReq = https2.request({
+    hostname: 'api.fal.ai',
+    path: apiUrl,
+    method: 'GET',
+    headers: { 'Accept': 'application/json' },
+  }, (apiRes) => {
+    let data = '';
+    apiRes.on('data', (c) => { data += c; });
+    apiRes.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        const models = (parsed.models || []).map((m) => ({
+          id: m.endpoint_id,
+          name: m.metadata && m.metadata.display_name || m.endpoint_id,
+          description: m.metadata && m.metadata.description || '',
+        }));
+        const result = { models, category };
+        _falModelsCache[category] = { ts: now, data: result };
+        res.json(result);
+      } catch (e) {
+        res.json({ models: [], error: 'parse error: ' + e.message });
+      }
+    });
+  });
+  apiReq.on('error', (e) => res.json({ models: [], error: e.message }));
+  apiReq.setTimeout(10000, () => { apiReq.destroy(); res.json({ models: [], error: 'timeout' }); });
+  apiReq.end();
+});
+
 module.exports = router;
