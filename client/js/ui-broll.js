@@ -536,6 +536,43 @@
         _updateSelectedCount();
     }
 
+    // ── Step 3: Clip selection helpers ────────────────────────────────────────
+
+    function _getSelectedClipIds() {
+        var ids = [];
+        document.querySelectorAll(".br-clip-check:checked").forEach(function(cb) {
+            var card = cb.closest(".br-clip-card");
+            if (card) ids.push(card.id.replace("br-clip-card-", ""));
+        });
+        return ids;
+    }
+
+    function _updateClipSelectedCount() {
+        if (!broll) return;
+        var total = broll.clips.filter(function(c) { return c.status === "image"; }).length;
+        var selected = _getSelectedClipIds().length;
+        var el = _el("br-clips-selected-count");
+        if (el) el.textContent = selected + "/" + total + " seleccionados";
+        var btn = _el("btn-br-animate-selected");
+        if (btn) {
+            btn.disabled = selected === 0;
+            if (selected === 0) btn.classList.add("btn-disabled");
+            else btn.classList.remove("btn-disabled");
+        }
+    }
+
+    function toggleSelectAllClips() {
+        var all = document.querySelectorAll(".br-clip-check");
+        var anyUnchecked = false;
+        all.forEach(function(cb) { if (!cb.checked) anyUnchecked = true; });
+        all.forEach(function(cb) {
+            cb.checked = anyUnchecked;
+            var card = cb.closest(".br-clip-card");
+            if (card) card.classList.toggle("selected", anyUnchecked);
+        });
+        _updateClipSelectedCount();
+    }
+
     // ── Accordion helper ─────────────────────────────────────────────────────
 
     function _collapseAllSteps() {
@@ -937,10 +974,13 @@
         var countEl = _el("br-clips-count");
         if (countEl) countEl.textContent = clips.length;
 
-        // Show "animate all" only if there are image-stage clips
+        // Show "animate selection" row only if there are image-stage clips
         var hasImages = clips.some(function(c) { return c.status === "image"; });
         var batchRow = _el("br-batch-animate-row");
         if (batchRow) batchRow.style.display = hasImages ? "" : "none";
+
+        // Defer count update so checkboxes are in DOM
+        setTimeout(_updateClipSelectedCount, 0);
     }
 
     function _buildClipCard(clip, num) {
@@ -951,6 +991,10 @@
         var version = clip.versions[clip.activeVersion] || null;
         var hasImage = version && version.imagePath;
         var hasVideo = version && version.videoPath;
+
+        // Checkbox: checked by default only for image-stage clips
+        var checkId = "br-clip-check-" + clip.id;
+        var isCheckable = clip.status === "image";
 
         // Version options
         var versionOpts = "";
@@ -999,6 +1043,7 @@
         var clipDisplayName = clipSeqPrefix + "_BRoll_" + num;
 
         div.innerHTML =
+            '<input type="checkbox" id="' + checkId + '" class="br-clip-check"' + (isCheckable ? ' checked' : '') + '>' +
             '<div class="br-clip-header">' +
                 '<span class="br-clip-num">' + num + '</span>' +
                 '<span class="br-clip-timecode br-timecode-link" data-time="' + escAttr(clip.startTime) + '">' + esc(clip.startTime) + '</span>' +
@@ -1020,6 +1065,33 @@
                 '<textarea class="br-feedback-input" id="br-feedback-' + clip.id + '" placeholder="Feedback para regenerar: ej. \'más colorido\', \'sin personas\'..." rows="2"></textarea>' +
                 '<div class="br-clip-actions">' + btnPlace + btnAnimate + btnRegen + '</div>' +
             '</div>';
+
+        // Sync card selected class and count on checkbox change
+        setTimeout(function() {
+            var cb = document.getElementById(checkId);
+            if (cb) {
+                if (isCheckable) div.classList.add("selected");
+                cb.addEventListener("change", function() {
+                    div.classList.toggle("selected", cb.checked);
+                    _updateClipSelectedCount();
+                });
+            }
+        }, 0);
+
+        // Card click toggles checkbox (not for button/checkbox clicks)
+        div.addEventListener("click", function(e) {
+            if (e.target.type === "checkbox") return;
+            if (e.target.closest && e.target.closest("button")) return;
+            if (e.target.tagName === "BUTTON") return;
+            if (e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
+            if (e.target.classList.contains("br-timecode-link")) return;
+            var cb = document.getElementById(checkId);
+            if (cb) {
+                cb.checked = !cb.checked;
+                div.classList.toggle("selected", cb.checked);
+                _updateClipSelectedCount();
+            }
+        });
 
         return div;
     }
@@ -1149,11 +1221,14 @@
 
     function startBatchAnimate() {
         if (!broll) return;
+        var selectedIds = _getSelectedClipIds();
+        if (selectedIds.length === 0) { showToast("Selecciona al menos un clip para animar", "error"); return; }
         broll.checkServer(function(ok) {
             if (!ok) { showToast("Inicia el servidor Motion-Pro primero", "error"); return; }
-            var btn = _el("btn-br-animate-all");
+            var btn = _el("btn-br-animate-selected");
             if (btn) btn.disabled = true;
-            broll.animateAll(
+            broll.animateSelected(
+                selectedIds,
                 function(cId, status, elapsed) { _refreshClipCard(cId, status, elapsed); },
                 function(idx, total, cId) {
                     _setHeaderProgress(idx / total * 100, (idx + 1) + "/" + total + " animando");
@@ -1410,12 +1485,13 @@
         _renderNoTranscript();
         _refreshServerStatus();
 
-        on("btn-br-analyze",        "click", startAnalysis);
-        on("btn-br-select-all",     "click", toggleSelectAll);
-        on("btn-br-generate",       "click", startGeneration);
-        on("btn-br-stop",           "click", cancelGeneration);
-        on("btn-br-animate-all",    "click", startBatchAnimate);
-        on("btn-br-save-settings",  "click", saveSettings);
+        on("btn-br-analyze",            "click", startAnalysis);
+        on("btn-br-select-all",         "click", toggleSelectAll);
+        on("btn-br-generate",           "click", startGeneration);
+        on("btn-br-stop",               "click", cancelGeneration);
+        on("btn-br-animate-selected",   "click", startBatchAnimate);
+        on("btn-br-select-all-clips",   "click", toggleSelectAllClips);
+        on("btn-br-save-settings",      "click", saveSettings);
 
         var imgProv = _el("br-img-provider");
         if (imgProv) imgProv.addEventListener("change", _refreshSettingsVisibility);
@@ -1493,6 +1569,7 @@
         updateAnalyzeButton: updateAnalyzeButton,
         refreshHeaderProgressVisibility: refreshHeaderProgressVisibility,
         toggleSelectAll: toggleSelectAll,
+        toggleSelectAllClips: toggleSelectAllClips,
         // Exposed for inline onclick in card HTML
         _placeClip: _placeClip,
         _animateClip: _animateClip,

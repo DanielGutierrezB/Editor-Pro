@@ -763,6 +763,34 @@
         next(0);
     };
 
+    // ── Animate a specific subset of clips sequentially ───────────────────────
+
+    BRoll.prototype.animateSelected = function(clipIds, onItemProgress, onBatchProgress, callback) {
+        var self = this;
+        var toAnimate = self.clips.filter(function(c) {
+            return c.status === "image" && clipIds.indexOf(c.id) !== -1;
+        });
+        if (toAnimate.length === 0) return callback(null, 0);
+
+        self.generateCancelRequested = false;
+        var done = 0;
+        var errors = [];
+
+        function next(idx) {
+            if (self.generateCancelRequested || idx >= toAnimate.length) {
+                return callback(null, done, errors);
+            }
+            var clip = toAnimate[idx];
+            onBatchProgress(idx, toAnimate.length, clip.id);
+            self.animateClip(clip.id, onItemProgress, function(err) {
+                if (err) errors.push({ clipId: clip.id, error: err.message });
+                else done++;
+                next(idx + 1);
+            });
+        }
+        next(0);
+    };
+
     // ── Scene helpers ──────────────────────────────────────────────────────────
 
     /**

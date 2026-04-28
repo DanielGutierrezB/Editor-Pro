@@ -1327,8 +1327,12 @@
                             </div>
                         </div>
                         <div id="br-batch-animate-row" class="br-batch-row" style="display:none">
-                            <button id="btn-br-animate-all" class="btn-analyze btn-analyze-alt">
-                                <span class="btn-analyze-text">🎬 Animar Todos</span>
+                            <div class="result-actions" style="margin-bottom:4px; display:flex; gap:4px; align-items:center;">
+                                <button id="btn-br-select-all-clips" class="btn btn-sm btn-ghost">Sel. todo</button>
+                                <span id="br-clips-selected-count" class="br-selected-count"></span>
+                            </div>
+                            <button id="btn-br-animate-selected" class="btn-analyze btn-analyze-alt">
+                                <span class="btn-analyze-text">🎬 Animar Selección</span>
                             </button>
                         </div>
                         <div id="br-clips-list" class="br-clips-list"></div>
