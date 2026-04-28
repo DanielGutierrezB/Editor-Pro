@@ -283,11 +283,17 @@ function _pollFalQueue(statusUrl, responseUrl, apiKey, outputPath, callback) {
 
 function _fetchFalResult(responseUrl, apiKey, outputPath, callback) {
   const parsedUrl = new URL(responseUrl);
+  console.log('[FAL Video] Fetching result via POST from:', responseUrl);
+  const emptyBody = '{}';
   const req = https.request({
     hostname: parsedUrl.hostname,
     path: parsedUrl.pathname + parsedUrl.search,
-    method: 'GET',
-    headers: { 'Authorization': 'Key ' + apiKey },
+    method: 'POST',
+    headers: {
+      'Authorization': 'Key ' + apiKey,
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(emptyBody),
+    },
   }, (res) => {
     let data = '';
     res.on('data', (c) => { data += c; });
@@ -304,6 +310,7 @@ function _fetchFalResult(responseUrl, apiKey, outputPath, callback) {
   });
   req.on('error', callback);
   req.setTimeout(30000, () => { req.destroy(); callback(new Error('FAL result fetch timeout')); });
+  req.write(emptyBody);
   req.end();
 }
 

@@ -223,9 +223,11 @@ function _pollFalImage(statusUrl, responseUrl, apiKey, outputPath, callback) {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
-          console.log('[FAL] Poll #' + polls + ' — status:', parsed.status);
+          console.log('[FAL] Poll #' + polls + ' — status:', parsed.status, 'response_url:', parsed.response_url || 'none');
           if (parsed.status === 'COMPLETED') {
-            return _fetchFalImageResult(responseUrl, apiKey, outputPath, callback);
+            // Prefer response_url from status response (most reliable)
+            const resultUrl = parsed.response_url || responseUrl;
+            return _fetchFalImageResult(resultUrl, apiKey, outputPath, callback);
           }
           if (parsed.status === 'FAILED') {
             return callback(new Error('FAL image failed: ' + JSON.stringify(parsed)));
@@ -245,11 +247,17 @@ function _pollFalImage(statusUrl, responseUrl, apiKey, outputPath, callback) {
 
 function _fetchFalImageResult(responseUrl, apiKey, outputPath, callback) {
   const parsedUrl = new URL(responseUrl);
+  console.log('[FAL] Fetching result via POST from:', responseUrl);
+  const emptyBody = '{}';
   const req = https.request({
     hostname: parsedUrl.hostname,
     path: parsedUrl.pathname + parsedUrl.search,
-    method: 'GET',
-    headers: { 'Authorization': 'Key ' + apiKey },
+    method: 'POST',
+    headers: {
+      'Authorization': 'Key ' + apiKey,
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(emptyBody),
+    },
   }, (res) => {
     // Handle gzip/deflate if server sends compressed response
     const encoding = res.headers['content-encoding'];
@@ -285,6 +293,7 @@ function _fetchFalImageResult(responseUrl, apiKey, outputPath, callback) {
   });
   req.on('error', callback);
   req.setTimeout(60000, () => { req.destroy(); callback(new Error('FAL result fetch timeout')); });
+  req.write(emptyBody);
   req.end();
 }
 
