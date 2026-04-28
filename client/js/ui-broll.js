@@ -996,9 +996,9 @@
         var hasImage = version && version.imagePath;
         var hasVideo = version && version.videoPath;
 
-        // Checkbox: checked by default only for image-stage clips
+        // Checkbox: checked by default for image and video clips
         var checkId = "br-clip-check-" + clip.id;
-        var isCheckable = clip.status === "image";
+        var isCheckable = clip.status === "image" || clip.status === "video";
 
         // Version options
         var versionOpts = "";
@@ -1012,7 +1012,7 @@
         var thumbHtml = "";
         if (hasImage && version.imageBase64) {
             thumbHtml = '<div class="br-clip-thumb-wrap">' +
-                '<img class="br-clip-thumb" src="' + escAttr(version.imageBase64) + '" alt="preview">' +
+                '<img class="br-clip-thumb" src="' + escAttr(version.imageBase64) + '" alt="preview" onclick="EditorProUI.broll._expandImage(this.src)" style="cursor:zoom-in">' +
                 '<div class="br-clip-thumb-overlay">' +
                     (hasVideo ? "🎬 Video listo" : "📸 Imagen") +
                     ' · ' + esc(clip.startTime) +
@@ -1562,6 +1562,20 @@
         }
     }
 
+    // ── Image expand overlay ───────────────────────────────────────────────────
+
+    function _expandImage(src) {
+        var overlay = document.createElement("div");
+        overlay.className = "br-expand-overlay";
+        var img = document.createElement("img");
+        img.src = src;
+        overlay.appendChild(img);
+        overlay.addEventListener("click", function() {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        });
+        document.body.appendChild(overlay);
+    }
+
     // ── Public API ─────────────────────────────────────────────────────────────
 
     EP.broll = {
@@ -1581,6 +1595,7 @@
         _animateClip: _animateClip,
         _regenClip: _regenClip,
         _switchVersion: _switchVersion,
+        _expandImage: _expandImage,
     };
 
 })(window);

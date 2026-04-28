@@ -191,11 +191,12 @@ function _generateFal(description, apiKey, model, outputPath, callback, _retryCo
       if (res.statusCode === 429) {
         // Rate limited — retry with backoff
         _retryCount = (_retryCount || 0) + 1;
-        if (_retryCount <= 5) {
-          const wait = Math.min(3000 * _retryCount, 15000);
+        if (_retryCount <= 8) {
+          const wait = Math.min(5000 * _retryCount, 20000);
           console.log('[FAL] Rate limited (429), retry #' + _retryCount + ' in ' + (wait/1000) + 's...');
           return setTimeout(() => _generateFal(description, apiKey, model, outputPath, callback, _retryCount), wait);
         }
+        console.log('[FAL] Rate limited (429) — all 8 retries exhausted, giving up.');
       }
       if (res.statusCode !== 200) {
         return callback(new Error('FAL error HTTP ' + res.statusCode + ': ' + data.substring(0, 300)));
