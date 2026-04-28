@@ -934,6 +934,44 @@
     };
 
     /**
+     * Redistribute successful clips in a scene evenly across the full scene span.
+     * Called after a scene finishes generating — fills gaps left by failed shots.
+     */
+    BRoll.prototype.redistributeSceneClips = function(sceneId) {
+        var self = this;
+        var validClips = [];
+        for (var i = 0; i < self.clips.length; i++) {
+            var cl = self.clips[i];
+            if (cl.sceneId === sceneId && (cl.status === "image" || cl.status === "video")) {
+                validClips.push(cl);
+            }
+        }
+        if (validClips.length < 2) return;
+
+        // Find full scene span from ALL proposals (including failed ones)
+        var sceneStart = Infinity, sceneEnd = 0;
+        for (var p = 0; p < self.proposals.length; p++) {
+            if (self.proposals[p].sceneId === sceneId) {
+                var ps = _timeToSecs(self.proposals[p].startTime);
+                var pe = _timeToSecs(self.proposals[p].endTime);
+                if (ps < sceneStart) sceneStart = ps;
+                if (pe > sceneEnd) sceneEnd = pe;
+            }
+        }
+        if (sceneStart === Infinity || sceneEnd === 0) return;
+
+        validClips.sort(function(a, b) {
+            return _timeToSecs(a.startTime) - _timeToSecs(b.startTime);
+        });
+
+        var slotDuration = (sceneEnd - sceneStart) / validClips.length;
+        for (var c = 0; c < validClips.length; c++) {
+            validClips[c].startTime = _secsToTime(sceneStart + c * slotDuration);
+            validClips[c].endTime   = _secsToTime(sceneStart + (c + 1) * slotDuration);
+        }
+    };
+
+    /**
      * Find the Hero Shot clip for a scene — isHero:true, or lowest shotOrder as fallback.
      * Used as img2img reference for all non-hero shots in the scene.
      */

@@ -799,18 +799,24 @@
                             referenceImagePath = heroVersion.imagePath;
                         }
                         _placeClip(heroClip.id, function() {
-                            // Generate remaining shots with img2img from Hero
-                            _generateSceneShots(remainingIds, 0, referenceImagePath, heroProposal, function() {
-                                completedShots += remainingIds.length;
-                                nextScene(si + 1);
-                            });
+                            // 2s delay before starting remaining shots to avoid FAL 429
+                            setTimeout(function() {
+                                _generateSceneShots(remainingIds, 0, referenceImagePath, heroProposal, function() {
+                                    completedShots += remainingIds.length;
+                                    broll.redistributeSceneClips(sid);
+                                    nextScene(si + 1);
+                                });
+                            }, 2000);
                         });
                     } else {
                         // Hero failed — generate remaining as txt2img
-                        _generateSceneShots(remainingIds, 0, null, heroProposal, function() {
-                            completedShots += remainingIds.length;
-                            nextScene(si + 1);
-                        });
+                        setTimeout(function() {
+                            _generateSceneShots(remainingIds, 0, null, heroProposal, function() {
+                                completedShots += remainingIds.length;
+                                broll.redistributeSceneClips(sid);
+                                nextScene(si + 1);
+                            });
+                        }, 2000);
                     }
                 }
             );
@@ -857,10 +863,14 @@
                 var clip = broll._findClip(shotId);
                 if (clip) {
                     _placeClip(clip.id, function() {
-                        _generateSceneShots(shotIds, startIdx + 1, referenceImagePath, heroProposal, done);
+                        setTimeout(function() {
+                            _generateSceneShots(shotIds, startIdx + 1, referenceImagePath, heroProposal, done);
+                        }, 2000);
                     });
                 } else {
-                    _generateSceneShots(shotIds, startIdx + 1, referenceImagePath, heroProposal, done);
+                    setTimeout(function() {
+                        _generateSceneShots(shotIds, startIdx + 1, referenceImagePath, heroProposal, done);
+                    }, 2000);
                 }
             },
             genOptions
@@ -890,7 +900,7 @@
                 if (err) {
                     if (window.EPLogger) EPLogger.error("broll", "generate-image-error", "clip " + (idx + 1) + ": " + err.message);
                     showToast("Error generando " + (idx + 1) + ": " + err.message, "error");
-                    _generateNext(ids, idx + 1, done);
+                    setTimeout(function() { _generateNext(ids, idx + 1, done); }, 2000);
                 } else {
                     if (window.EPLogger) EPLogger.log("broll", "generate-image-ok", "clip " + (idx + 1) + "/" + ids.length);
                     _renderClips();
@@ -900,10 +910,10 @@
                     var clip = broll._findClip(proposalId);
                     if (clip) {
                         _placeClip(clip.id, function() {
-                            _generateNext(ids, idx + 1, done);
+                            setTimeout(function() { _generateNext(ids, idx + 1, done); }, 2000);
                         });
                     } else {
-                        _generateNext(ids, idx + 1, done);
+                        setTimeout(function() { _generateNext(ids, idx + 1, done); }, 2000);
                     }
                 }
             }
