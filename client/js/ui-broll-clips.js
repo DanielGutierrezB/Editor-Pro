@@ -256,8 +256,9 @@
 
     // ── Refresh a single clip card's badge ──────────────────────────────────────
 
-    function refreshClipCard(proposalId, status, elapsedSecs) {
-        var clip = broll._findClip(proposalId);
+    function refreshClipCard(proposalOrClipId, status, elapsedSecs) {
+        // Accept either proposalId or clipId
+        var clip = broll._findClip(proposalOrClipId) || broll._findClipById(proposalOrClipId);
         if (!clip) return;
         var existing = _el("br-clip-card-" + clip.id);
         if (existing) {
