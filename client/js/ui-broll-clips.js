@@ -155,7 +155,16 @@
         // Description
         var descText = clip.description || "";
 
+        // Thumbnail HTML
+        var thumbSrc = (version && version.imageBase64) ? version.imageBase64 :
+                       (version && version.imagePath) ? ('file://' + version.imagePath) : '';
+        var thumbHtml = thumbSrc ?
+            '<div style="width:100%;max-height:100px;overflow:hidden;background:#1a1a2e">' +
+                '<img src="' + escAttr(thumbSrc) + '" alt="" style="width:100%;height:100px;object-fit:cover;display:block;cursor:zoom-in" onclick="EditorProUI.broll._expandImage(this.src)">' +
+            '</div>' : '';
+
         div.innerHTML =
+            // Header
             '<div class="br-clip-header-row">' +
                 '<input type="checkbox" id="' + checkId + '" class="br-clip-check"' + (isCheckable ? ' checked' : '') + '>' +
                 '<span class="br-clip-num">' + num + '</span>' +
@@ -163,16 +172,18 @@
                 (shotBadge || '') + (heroBadge || '') +
                 '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>' +
             '</div>' +
-            (hasImage && version && version.imageBase64 ?
-                '<div class="br-clip-thumb-row">' +
-                    '<img class="br-clip-thumb-mid" src="' + escAttr(version.imageBase64) + '" alt="preview" onclick="EditorProUI.broll._expandImage(this.src)">' +
-                '</div>' : '') +
-            '<div class="br-clip-desc-row">' + esc(descText) + '</div>' +
-            (clip.versions.length > 1 ? '<div class="br-clip-version-row"><span class="br-version-label">Versión:</span><select class="br-version-select-sm" onchange="EditorProUI.broll._switchVersion(\'' + clip.id + '\', this.value)">' + versionOpts + '</select></div>' : '') +
-            '<div class="br-clip-actions-row">' + btnVideo + btnRegen + btnRegenChildren + '</div>' +
-            '<div class="br-clip-feedback-row">' +
-                '<input type="text" class="br-feedback-inline" id="br-feedback-' + clip.id + '" placeholder="Cambios: ej. más colorido, sin personas…">' +
-                '<button class="btn btn-xs btn-send" onclick="EditorProUI.broll._sendFeedback(\'' + clip.id + '\')">Enviar</button>' +
+            // Thumbnail
+            thumbHtml +
+            // Description
+            '<div style="font-size:10px;color:#94a3b8;line-height:1.35;padding:4px 8px;max-height:2.7em;overflow:hidden">' + esc(descText) + '</div>' +
+            // Version selector
+            (clip.versions.length > 1 ? '<div style="display:flex;align-items:center;gap:6px;padding:0 8px 4px"><span style="font-size:9px;color:#64748b">Versión:</span><select class="br-version-select-sm" onchange="EditorProUI.broll._switchVersion(\'' + clip.id + '\', this.value)">' + versionOpts + '</select></div>' : '') +
+            // Actions
+            '<div style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 8px 4px">' + btnVideo + btnRegen + btnRegenChildren + '</div>' +
+            // Feedback
+            '<div style="display:flex;gap:4px;padding:2px 8px 6px;align-items:center">' +
+                '<input type="text" class="br-feedback-inline" id="br-feedback-' + clip.id + '" placeholder="Cambios: ej. más colorido, sin personas…" style="flex:1;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px 6px;font-size:9px">' +
+                '<button class="btn btn-xs btn-send" onclick="EditorProUI.broll._sendFeedback(\'' + clip.id + '\')" style="background:#10b981;color:#fff;border:none;font-weight:700;font-size:9px;padding:4px 8px;border-radius:3px;cursor:pointer">Enviar</button>' +
             '</div>';
 
         setTimeout(function() {
