@@ -239,7 +239,7 @@
                 }
 
                 var mogrtFiles = files.filter(function(f) {
-                    return f.toLowerCase().indexOf(".mogrt") === f.length - 6;
+                    return f.toLowerCase().indexOf(".mogrt") === f.length - 6 && f.charAt(0) !== ".";
                 });
 
                 var matched = 0;
