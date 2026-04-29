@@ -366,6 +366,7 @@
             }
             if (result.error) {
                 self.clips = self.clips.filter(function(c) { return c.id !== clip.id; });
+                if (onProgress) onProgress(proposalId, "error", 0);
                 return callback(new Error(result.error));
             }
             var jobId = result.jobId;
@@ -435,6 +436,7 @@
             }
             if (result.error) {
                 clip.status = "image";
+                if (onProgress) onProgress(clipId, "error", 0);
                 return callback(new Error(result.error));
             }
             if (onProgress) onProgress(clipId, "animating", 0);
@@ -572,6 +574,7 @@
             }
             if (result.error) {
                 clip.status = "video";
+                if (onProgress) onProgress(clipId, "error", 0);
                 return callback(new Error(result.error));
             }
             if (onProgress) onProgress(clipId, "animating", 0);
@@ -700,7 +703,10 @@
                 if (onProgress) onProgress(clipId, "error", 0);
                 return callback(err);
             }
-            if (result.error) return callback(new Error(result.error));
+            if (result.error) {
+                if (onProgress) onProgress(clipId, "error", 0);
+                return callback(new Error(result.error));
+            }
 
             self._pollJob(result.jobId, function(pollErr, job) {
                 if (pollErr) {
