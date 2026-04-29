@@ -151,10 +151,13 @@
         var clipSeqPrefix = (broll._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
         var clipDisplayName = clipSeqPrefix + "_BRoll_" + String(num).padStart(2, "0");
 
-        // Action buttons
+        // Action buttons — context-aware based on clip status
+        var isVideoStatus = clip.status === "video" || clip.status === "placed";
         var btnVideo = hasImage ? '<button class="btn btn-xs btn-accent" onclick="EditorProUI.broll._animateClip(\'' + clip.id + '\')">' + (hasVideo ? '🔄 Re-animar' : '🎬 Animar') + '</button>' : '';
-        var btnRegen = hasImage ? '<button class="btn btn-xs btn-ghost" onclick="EditorProUI.broll._regenClip(\'' + clip.id + '\')">🔄 Regenerar</button>' : '';
+        var btnRegen = hasImage ? '<button class="btn btn-xs btn-ghost" onclick="EditorProUI.broll._regenClip(\'' + clip.id + '\')">' + (isVideoStatus ? '🖼 Regenerar Imagen' : '🔄 Regenerar') + '</button>' : '';
         var btnRegenChildren = (clip.isHero && hasImage) ? '<button class="btn btn-xs btn-ghost" onclick="EditorProUI.broll._regenChildren(\'' + clip.id + '\')">🔄 Regenerar Hijos</button>' : '';
+        var hasAudioPath = version && version.audioPath;
+        var btnAudio = hasImage ? '<button class="btn btn-xs btn-ghost" onclick="EditorProUI.broll._generateAudio(\'' + clip.id + '\')">' + (hasAudioPath ? '🔊 Re-generar Audio' : '🔊 Generar Audio') + '</button>' : '';
 
         // Description
         var descText = clip.description || "";
@@ -185,9 +188,10 @@
                     (shotBadge || '') + (heroBadge || '') +
                     versionLabel +
                     '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>' +
+                    (hasAudioPath ? '<span class="br-audio-badge">🔊</span>' : '<span class="br-audio-badge br-audio-none">🔇</span>') +
                 '</div>' +
                 '<div class="br-clip-desc-compact">' + esc(descText.length > 70 ? descText.substring(0, 67) + '…' : descText) + '</div>' +
-                '<div class="br-clip-actions-row">' + btnVideo + btnRegen + btnRegenChildren + '</div>' +
+                '<div class="br-clip-actions-row">' + btnVideo + btnRegen + btnRegenChildren + btnAudio + '</div>' +
             '</div>';
         div.appendChild(rowDiv);
 
@@ -204,12 +208,16 @@
             }
         }
 
-        // Feedback row with progress indicator
+        // Feedback row with progress indicator — context-aware placeholder
+        var fbPlaceholder = isVideoStatus
+            ? "Feedback video: ej. más movimiento de cámara, zoom in…"
+            : "Feedback imagen: ej. más colorido, sin personas…";
+        var fbBtnLabel = isVideoStatus ? "🎬 Enviar" : "Enviar";
         var fbDiv = document.createElement("div");
         fbDiv.className = "br-clip-feedback-row";
         fbDiv.innerHTML =
-            '<input type="text" id="br-feedback-' + clip.id + '" placeholder="Feedback: ej. más colorido, sin personas…" class="br-feedback-inline">' +
-            '<button class="btn btn-xs btn-send" onclick="EditorProUI.broll._sendFeedback(\'' + clip.id + '\')">Enviar</button>';
+            '<input type="text" id="br-feedback-' + clip.id + '" placeholder="' + escAttr(fbPlaceholder) + '" class="br-feedback-inline">' +
+            '<button class="btn btn-xs btn-send" onclick="EditorProUI.broll._sendFeedback(\'' + clip.id + '\')">' + fbBtnLabel + '</button>';
         div.appendChild(fbDiv);
 
         // Progress bar (hidden by default, shown during regen/feedback)
@@ -358,19 +366,39 @@
         var feedback = feedbackEl ? feedbackEl.value.trim() : "";
         if (!feedback) { showToast("Escribe tu feedback primero", "warning"); return; }
 
+        var clip = broll._findClipById(clipId);
+        if (!clip) { showToast("Clip no encontrado", "error"); return; }
+
+        var isVideoFeedback = clip.status === "video" || clip.status === "placed";
+
         broll.checkServer(function(ok) {
             if (!ok) { showToast("Inicia el servidor Motion-Pro primero", "error"); return; }
-            // Enviar feedback con contexto de la imagen actual (img2img refinement)
-            broll.regenerateImage(clipId, feedback,
-                function(pId, status, elapsed) { refreshClipCard(pId, status, elapsed); },
-                function(err) {
-                    if (err) { showToast("Error al aplicar feedback: " + err.message, "error"); return; }
-                    broll.saveState(brollUI._getSessionKey());
-                    showToast("Imagen actualizada con feedback", "success");
-                    if (feedbackEl) feedbackEl.value = "";
-                    renderClips();
-                }
-            );
+
+            if (isVideoFeedback) {
+                // Video feedback: regenerate video with same image + feedback prompt
+                broll.regenerateVideo(clipId, feedback,
+                    function(cId, status, elapsed) { refreshClipCard(cId, status, elapsed); },
+                    function(err) {
+                        if (err) { showToast("Error al regenerar video: " + err.message, "error"); return; }
+                        broll.saveState(brollUI._getSessionKey());
+                        showToast("Video regenerado con feedback", "success");
+                        if (feedbackEl) feedbackEl.value = "";
+                        renderClips();
+                    }
+                );
+            } else {
+                // Image feedback: regenerate image with reference + feedback
+                broll.regenerateImage(clipId, feedback,
+                    function(pId, status, elapsed) { refreshClipCard(pId, status, elapsed); },
+                    function(err) {
+                        if (err) { showToast("Error al aplicar feedback: " + err.message, "error"); return; }
+                        broll.saveState(brollUI._getSessionKey());
+                        showToast("Imagen actualizada con feedback", "success");
+                        if (feedbackEl) feedbackEl.value = "";
+                        renderClips();
+                    }
+                );
+            }
         });
     }
 
@@ -407,6 +435,48 @@
                 );
             }
             regenNext(0);
+        });
+    }
+
+    function _generateAudio(clipId) {
+        if (!broll) return;
+        broll.checkServer(function(ok) {
+            if (!ok) { showToast("Inicia el servidor Motion-Pro primero", "error"); return; }
+            var card = _el("br-clip-card-" + clipId);
+            if (card) {
+                var badge = card.querySelector(".br-audio-badge");
+                if (badge) { badge.textContent = "⏳"; badge.className = "br-audio-badge"; }
+            }
+            broll.generateAudio(clipId,
+                function(cId, status, elapsed) {
+                    // Update progress
+                    if (card) {
+                        var progressEl = _el("br-progress-" + clipId);
+                        var progressText = _el("br-progress-text-" + clipId);
+                        if (progressEl && status === "audio_generating") {
+                            progressEl.classList.remove("hidden");
+                            if (progressText) progressText.textContent = "Generando audio..." + (elapsed > 0 ? " " + elapsed + "s" : "");
+                        } else if (progressEl) {
+                            progressEl.classList.add("hidden");
+                        }
+                    }
+                },
+                function(err) {
+                    if (err) { showToast("Error al generar audio: " + err.message, "error"); }
+                    else {
+                        showToast("Audio ambiental generado", "success");
+                        broll.saveState(brollUI._getSessionKey());
+                        // Auto-place audio in timeline
+                        if (csInterface) {
+                            broll.placeAudioInTimeline(clipId, csInterface, function(placeErr) {
+                                if (placeErr) showToast("Error al colocar audio: " + placeErr.message, "warning");
+                                else showToast("Audio colocado en timeline", "success");
+                            });
+                        }
+                    }
+                    renderClips();
+                }
+            );
         });
     }
 
@@ -460,6 +530,7 @@
     brollUI._regenClip = _regenClip;
     brollUI._sendFeedback = _sendFeedback;
     brollUI._regenChildren = _regenChildren;
+    brollUI._generateAudio = _generateAudio;
     brollUI._switchVersion = _switchVersion;
     brollUI._expandImage = _expandImage;
     brollUI.startBatchAnimate = startBatchAnimate;

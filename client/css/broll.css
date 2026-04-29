@@ -588,3 +588,13 @@
     color: var(--accent);
     white-space: nowrap;
 }
+
+/* Audio badge */
+.br-audio-badge {
+    font-size: 10px;
+    margin-left: 4px;
+    opacity: 0.9;
+}
+.br-audio-badge.br-audio-none {
+    opacity: 0.35;
+}

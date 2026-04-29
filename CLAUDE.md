@@ -458,11 +458,32 @@ host/broll.jsx (importAndPlaceBroll, replaceBrollClip)
 
 ### Proveedores de Video
 
+| Proveedor | Descripción | Config | Max Duration |
+|-----------|-------------|--------|-------------|
+| placeholder | ffmpeg PNG→MP4 estático (requiere ffmpeg) | — | 30s |
+| ltx_local | LTX Video API local | endpointUrl (default http://localhost:7861) | 10s |
+| kling | Kling API cloud (image2video) | apiKey | 10s |
+| fal | FAL.ai queue API (Kling 2.0/3.0 via FAL) | apiKey, model | 10s |
+| gemini_video | Gemini Veo (Google AI) | apiKey | 8s |
+
+### Proveedores de Audio Ambiental
+
 | Proveedor | Descripción | Config |
 |-----------|-------------|--------|
-| placeholder | ffmpeg PNG→MP4 estático (requiere ffmpeg) | — |
-| ltx_local | LTX Video API local | endpointUrl (default http://localhost:7861) |
-| kling | Kling API cloud (image2video) | apiKey |
+| placeholder | ffmpeg silent audio (no requiere API) | — |
+| elevenlabs | ElevenLabs Sound Effects API | apiKey (xi-api-key) |
+
+### Shot Splitting (Duration-Aware)
+- `video-generator.js` exports `VIDEO_PROVIDER_MAX_DURATION` with per-provider limits
+- `broll-scenes.js` has `splitOversizedShots(proposals, maxDurationSecs)` — post-processes after LLM analysis
+- If a shot exceeds the active provider's max, it's split into 2+ sub-shots with different shot types
+- Split shots get alternating types (WIDE→MED→CU) and appended composition hints
+- The analysis prompt also includes the max duration so the LLM plans accordingly
+
+### Video Feedback
+- `BRoll.regenerateVideo(clipId, feedback, onProgress, callback)` — re-generates video with same image + feedback prompt
+- Pushes new version to `clip.versions[]` (keeps same imagePath, new videoPath)
+- UI detects clip status and routes feedback: image feedback → regenerateImage, video feedback → regenerateVideo
 
 ### localStorage Keys
 
@@ -473,8 +494,9 @@ host/broll.jsx (importAndPlaceBroll, replaceBrollClip)
 
 | Función | Uso |
 |---------|-----|
-| `importAndPlaceBroll(jsonPath)` | Importa PNG/MP4, crea bin "B-Roll", coloca en track |
+| `importAndPlaceBroll(jsonPath)` | Importa PNG/MP4, crea bin "B-Roll", coloca en track de video |
 | `replaceBrollClip(jsonPath)` | Reemplaza un clip B-Roll existente en la timeline |
+| `importAndPlaceAudio(jsonPath)` | Importa audio ambiental, crea nuevo track de audio, coloca clips |
 | `getBrollTrackInfo()` | Retorna trackCount y nextAvailable del sequence activo |
 
 ### Prompts

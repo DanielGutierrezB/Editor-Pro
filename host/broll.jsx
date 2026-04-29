@@ -438,6 +438,129 @@ function replaceBrollClip(jsonPath) {
     }
 }
 
+// ── importAndPlaceAudio(jsonPath) ──────────────────────────────────────────
+// JSON schema: { clips: [{ filePath, clipName, startTimeSecs, durationSecs }] }
+// Places audio clips on audio tracks.
+// First clip creates a new audio track, rest go on the same track.
+
+var _brAudioTrack = -1;
+var _brAudioLastSeqId = "";
+
+function importAndPlaceAudio(jsonPath) {
+    try {
+        var f = new File(jsonPath);
+        if (!f.exists) return JSON.stringify({ error: "JSON file not found: " + jsonPath });
+        f.encoding = "UTF-8";
+        f.open("r");
+        var raw = f.read();
+        f.close();
+
+        var data = JSON.parse(raw);
+        if (!data.clips || data.clips.length === 0) {
+            return JSON.stringify({ success: true, placed: 0 });
+        }
+
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: "No active sequence" });
+
+        // Reset audio track if sequence changed
+        try {
+            var sid = seq.sequenceID;
+            if (sid && sid !== _brAudioLastSeqId) {
+                _brAudioLastSeqId = sid;
+                _brAudioTrack = -1;
+            }
+        } catch(eSid) {}
+
+        var bin = _getOrCreateBrollBin();
+        if (!bin) return JSON.stringify({ error: "No se pudo crear bin B-Roll." });
+
+        // Determine audio base track
+        var audioTrack = _brAudioTrack;
+        if (audioTrack < 0 || audioTrack >= seq.audioTracks.numTracks) {
+            // Create a new audio track
+            var beforeCount = seq.audioTracks.numTracks;
+            try {
+                app.enableQE();
+                var qeSeq = qe.project.getActiveSequence();
+                qeSeq.addTracks(0, 0, 1); // 0 video, 0 submix, 1 audio
+                $.sleep(500);
+            } catch(eQE) {}
+            var afterCount = seq.audioTracks.numTracks;
+            audioTrack = (afterCount > beforeCount) ? afterCount - 1 : beforeCount - 1;
+        }
+        _brAudioTrack = audioTrack;
+
+        var inserted = 0;
+        var errors = [];
+
+        for (var c = 0; c < data.clips.length; c++) {
+            var clip = data.clips[c];
+            var filePath = clip.filePath;
+            if (!filePath) { errors.push("No filePath for audio clip " + c); continue; }
+
+            var mediaFile = new File(filePath);
+            if (!mediaFile.exists) { errors.push("Audio file not found: " + filePath); continue; }
+
+            // Import file into B-Roll bin
+            var countBefore = bin.children ? bin.children.numItems : 0;
+            app.project.importFiles([mediaFile.fsName], true, bin, false);
+
+            var item = null;
+            for (var w = 0; w < 25; w++) {
+                $.sleep(250);
+                if (bin.children && bin.children.numItems > countBefore) {
+                    item = bin.children[bin.children.numItems - 1];
+                }
+                if (!item) item = _findProjectItemByPath(mediaFile.fsName, bin);
+                if (item) break;
+            }
+            if (!item) { errors.push("Imported but could not find audio item: " + filePath); continue; }
+
+            try { item.name = clip.clipName || ("BR_Audio_" + c); } catch(e) {}
+
+            var startTicks = String(Math.round((clip.startTimeSecs || 0) * TICKS_PER_SECOND));
+            var track = seq.audioTracks[audioTrack];
+            if (!track) { errors.push("Audio track " + audioTrack + " not available."); continue; }
+
+            var placed = false;
+            try { track.overwriteClip(item, startTicks); placed = true; }
+            catch(eOw) {
+                try { track.insertClip(item, startTicks); placed = true; }
+                catch(e2) { errors.push("Audio place error clip " + c + ": " + eOw.message + " | " + e2.message); continue; }
+            }
+            if (placed) inserted++;
+
+            // Set duration
+            try {
+                var durationSecs = parseFloat(clip.durationSecs) || 0;
+                if (durationSecs > 0) {
+                    $.sleep(300);
+                    for (var ci = track.clips.numItems - 1; ci >= 0; ci--) {
+                        var tc = track.clips[ci];
+                        if (Math.abs(parseFloat(tc.start.seconds) - (clip.startTimeSecs || 0)) < 1.0) {
+                            tc.end = String(Math.round(((clip.startTimeSecs || 0) + durationSecs) * TICKS_PER_SECOND));
+                            break;
+                        }
+                    }
+                }
+            } catch(eDur) {}
+
+            $.sleep(100);
+        }
+
+        return JSON.stringify({
+            success: true,
+            placed: inserted,
+            audioTrackIndex: audioTrack,
+            audioTrackNumber: audioTrack + 1,
+            errors: errors
+        });
+    } catch(e) {
+        return JSON.stringify({ error: "importAndPlaceAudio error: " + e.message });
+    }
+}
+
 // ── getBrollTrackInfo() ───────────────────────────────────────────────────────
 
 function getBrollTrackInfo() {

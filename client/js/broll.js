@@ -51,6 +51,9 @@
             videoFalModel: "",
             videoFalApiKey: "",
             videoGeminiApiKey: "",
+            audioProvider: "placeholder",
+            audioApiKey: "",
+            autoGenerateAudio: false,
             trackIndex: "auto",
             outputDir: ""
         };
@@ -228,7 +231,15 @@
         if (!analyzer) return callback(new Error("AI Analyzer no disponible"));
 
         self.analyzing = true;
+
+        // Inject video provider max duration into prompt context
+        var maxVidDuration = self.getVideoMaxDuration();
+        var durationHint = '\n\nIMPORTANT: The video generation model supports a maximum of ' + maxVidDuration +
+            ' seconds per clip. Plan shots so each individual shot is ≤' + maxVidDuration +
+            's. If a moment needs more time, split it into multiple shots with different angles/compositions that cut naturally together.\n';
+
         var userPrompt = "Analyze the following transcript and identify B-roll opportunities.\n\n" + transcript +
+            durationHint +
             '\n\nReturn ONLY valid JSON. No explanation text.';
 
         var systemPrompt = styles ? styles.getSystemPrompt().replace("{VISUAL_STYLE}", "") :
@@ -247,6 +258,11 @@
                     throw new Error("No proposals found in LLM response");
                 }
 
+                // Post-process: split any shots that exceed the video provider's max duration
+                if (scenes && scenes.splitOversizedShots) {
+                    parsed.proposals = scenes.splitOversizedShots(parsed.proposals, maxVidDuration);
+                }
+
                 self.proposals = parsed.proposals;
                 self.scenes = parsed.scenes;
 
@@ -255,6 +271,14 @@
                 callback(new Error("Error parseando propuestas: " + e.message));
             }
         });
+    };
+
+    // ── Video provider max duration ────────────────────────────────────────────
+
+    /** Max seconds per video clip for the active video provider */
+    BRoll.prototype.getVideoMaxDuration = function() {
+        var limits = { kling: 10, fal: 10, gemini_video: 8, ltx_local: 10, placeholder: 30 };
+        return limits[this._settings.videoProvider] || 10;
     };
 
     // ── Step 2: Generate image for a proposal ────────────────────────────────
@@ -499,6 +523,86 @@
         }, regenOptions);
     };
 
+    // ── Regenerate video with feedback ───────────────────────────────────────────
+
+    BRoll.prototype.regenerateVideo = function(clipId, feedback, onProgress, callback) {
+        var self = this;
+        var clip = self._findClipById(clipId);
+        if (!clip) return callback(new Error("Clip no encontrado"));
+        var curVersion = clip.versions[clip.activeVersion];
+        if (!curVersion || !curVersion.imagePath) return callback(new Error("Genera la imagen primero"));
+
+        // Store feedback on current version
+        if (curVersion) curVersion.videoFeedback = feedback;
+
+        var settings = self._settings;
+        var startSecs = self._timeToSeconds(clip.startTime);
+        var endSecs = self._timeToSeconds(clip.endTime);
+        var durationSecs = Math.max(1, endSecs - startSecs) || 5;
+
+        clip.status = "animating";
+        if (onProgress) onProgress(clipId, "animating", 0);
+
+        // Build enhanced prompt with feedback
+        var basePrompt = clip.description || "Smooth cinematic camera motion";
+        var enhancedPrompt = feedback
+            ? basePrompt + ". Video direction: " + feedback
+            : basePrompt;
+
+        var videoApiKey = settings.videoProvider === "fal" ? settings.videoFalApiKey
+            : settings.videoProvider === "gemini_video" ? settings.videoGeminiApiKey
+            : settings.videoKlingApiKey;
+        var videoModel = settings.videoProvider === "fal" ? settings.videoFalModel : undefined;
+
+        self._post("/api/broll/animate", {
+            proposalId: clip.proposalId,
+            imagePath: curVersion.imagePath,
+            durationSecs: durationSecs,
+            prompt: enhancedPrompt,
+            videoProvider: settings.videoProvider,
+            endpointUrl: settings.videoEndpointUrl,
+            apiKey: videoApiKey,
+            model: videoModel,
+            outputDir: pathMod ? pathMod.dirname(curVersion.imagePath) : null
+        }, function(err, result) {
+            if (err) {
+                clip.status = "video";
+                if (onProgress) onProgress(clipId, "error", 0);
+                return callback(err);
+            }
+            if (result.error) {
+                clip.status = "video";
+                return callback(new Error(result.error));
+            }
+            if (onProgress) onProgress(clipId, "animating", 0);
+
+            self._pollJob(result.jobId, function(pollErr, job) {
+                if (pollErr) {
+                    clip.status = "video";
+                    if (onProgress) onProgress(clipId, "error", 0);
+                    return callback(pollErr);
+                }
+                // Push new video version (keep same image, new video)
+                var newVersion = {
+                    version: clip.versions.length + 1,
+                    imagePath: curVersion.imagePath,
+                    imageBase64: curVersion.imageBase64 || null,
+                    videoPath: job.filePath,
+                    status: "video",
+                    feedback: "",
+                    videoFeedback: feedback || ""
+                };
+                clip.versions.push(newVersion);
+                clip.activeVersion = clip.versions.length - 1;
+                clip.status = "video";
+                if (onProgress) onProgress(clipId, "video", 100);
+                callback(null, clip);
+            }, function(job) {
+                if (onProgress) onProgress(clipId, "animating", job.elapsedMs ? Math.round(job.elapsedMs / 1000) : 0);
+            });
+        });
+    };
+
     // ── Place clip in timeline ─────────────────────────────────────────────────
 
     BRoll.prototype.placeInTimeline = function(clipId, csInterface, callback) {
@@ -550,6 +654,112 @@
                 clip.status = "placed";
                 clip.placedInTimeline = true;
                 version.status = "placed";
+                callback(null, clip);
+            } catch(e) {
+                callback(new Error("ExtendScript result parse error: " + result));
+            }
+        });
+    };
+
+    // ── Step: Generate ambient audio for a clip ───────────────────────────────
+
+    BRoll.prototype.generateAudio = function(clipId, onProgress, callback) {
+        var self = this;
+        var clip = self._findClipById(clipId);
+        if (!clip) return callback(new Error("Clip no encontrado: " + clipId));
+
+        var settings = self._settings;
+        var startSecs = self._timeToSeconds(clip.startTime);
+        var endSecs = self._timeToSeconds(clip.endTime);
+        var durationSecs = Math.max(1, endSecs - startSecs) || 5;
+
+        if (onProgress) onProgress(clipId, "audio_generating", 0);
+
+        var seqPrefix = (self._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
+        var proposalIndex = 0;
+        for (var pi = 0; pi < self.proposals.length; pi++) {
+            if (self.proposals[pi].id === clip.proposalId) { proposalIndex = pi; break; }
+        }
+        var clipName = seqPrefix + "_BRoll_" + String(proposalIndex + 1).padStart(2, "0");
+
+        var version = clip.versions[clip.activeVersion];
+        var outputDir = (version && version.imagePath && pathMod)
+            ? pathMod.dirname(version.imagePath)
+            : (settings.outputDir || (os && pathMod ? pathMod.join(os.tmpdir(), "editorpro-broll") : "/tmp/editorpro-broll"));
+
+        self._post("/api/broll/generate-audio", {
+            proposalId: clip.proposalId,
+            description: clip.description,
+            durationSecs: durationSecs,
+            audioProvider: settings.audioProvider || "placeholder",
+            apiKey: settings.audioApiKey || "",
+            outputDir: outputDir,
+            clipName: clipName
+        }, function(err, result) {
+            if (err) {
+                if (onProgress) onProgress(clipId, "error", 0);
+                return callback(err);
+            }
+            if (result.error) return callback(new Error(result.error));
+
+            self._pollJob(result.jobId, function(pollErr, job) {
+                if (pollErr) {
+                    if (onProgress) onProgress(clipId, "error", 0);
+                    return callback(pollErr);
+                }
+                // Store audio path on the active version
+                if (version) {
+                    version.audioPath = job.filePath;
+                }
+                clip.hasAudio = true;
+                if (onProgress) onProgress(clipId, "audio_done", 100);
+                callback(null, clip);
+            }, function(job) {
+                if (onProgress) onProgress(clipId, "audio_generating", job.elapsedMs ? Math.round(job.elapsedMs / 1000) : 0);
+            });
+        });
+    };
+
+    // ── Place audio in timeline ──────────────────────────────────────────────
+
+    BRoll.prototype.placeAudioInTimeline = function(clipId, csInterface, callback) {
+        var self = this;
+        var clip = self._findClipById(clipId);
+        if (!clip) return callback(new Error("Clip no encontrado: " + clipId));
+        var version = clip.versions[clip.activeVersion];
+        if (!version || !version.audioPath) return callback(new Error("Sin audio generado para este clip"));
+
+        if (!fs) return callback(new Error("Módulo fs no disponible"));
+        if (!fs.existsSync(version.audioPath)) return callback(new Error("Archivo de audio no existe: " + version.audioPath));
+
+        var startSecs = self._timeToSeconds(clip.startTime);
+        var endSecs = self._timeToSeconds(clip.endTime);
+        var durationSecs = Math.max(1, endSecs - startSecs);
+
+        var proposalIndex = 0;
+        for (var pi = 0; pi < self.proposals.length; pi++) {
+            if (self.proposals[pi].id === clip.proposalId) { proposalIndex = pi; break; }
+        }
+        var seqPrefix = (self._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
+        var clipName = seqPrefix + "_BRoll_Audio_" + String(proposalIndex + 1).padStart(2, "0");
+
+        var tmpFile = pathMod ? pathMod.join(pathMod.dirname(version.audioPath), "broll_audio_place_" + Date.now() + ".json") : "/tmp/broll_audio_place.json";
+        var payload = {
+            clips: [{
+                filePath: version.audioPath,
+                clipName: clipName,
+                startTimeSecs: startSecs,
+                durationSecs: durationSecs
+            }]
+        };
+        try { fs.writeFileSync(tmpFile, JSON.stringify(payload)); } catch(e) { return callback(e); }
+
+        var safeJson = tmpFile.replace(/\\/g, "/").replace(/"/g, '\\"');
+        csInterface.evalScript('importAndPlaceAudio("' + safeJson + '")', function(result) {
+            try { fs.unlinkSync(tmpFile); } catch(e) {}
+            try {
+                var parsed = JSON.parse(result);
+                if (parsed.error) return callback(new Error(parsed.error));
                 callback(null, clip);
             } catch(e) {
                 callback(new Error("ExtendScript result parse error: " + result));

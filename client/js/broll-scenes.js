@@ -243,13 +243,105 @@
             (this.proposals.length > 0 && !!this.proposals[0].sceneId);
     };
 
+    // ── Split oversized shots based on video provider max duration ───────────
+
+    /**
+     * Post-process proposals: if any shot's duration exceeds maxDurationSecs,
+     * split it into 2+ sub-shots that each fit within the limit.
+     * Each sub-shot gets a different shotType to create a natural cut.
+     * Returns a new proposals array (does not mutate the original).
+     */
+    function splitOversizedShots(proposals, maxDurationSecs) {
+        if (!maxDurationSecs || maxDurationSecs <= 0) maxDurationSecs = 10;
+        var result = [];
+
+        for (var i = 0; i < proposals.length; i++) {
+            var p = proposals[i];
+            var startSecs = timeToSecs(p.startTime);
+            var endSecs = timeToSecs(p.endTime);
+            var duration = endSecs - startSecs;
+
+            if (duration <= maxDurationSecs) {
+                result.push(p);
+                continue;
+            }
+
+            // Need to split — calculate how many sub-shots
+            var numSplits = Math.ceil(duration / maxDurationSecs);
+            var splitDuration = duration / numSplits;
+
+            // Alternate shot types to create natural cuts
+            var altTypes = _getAlternateShotTypes(p.shotType);
+
+            for (var s = 0; s < numSplits; s++) {
+                var splitStart = startSecs + (s * splitDuration);
+                var splitEnd = startSecs + ((s + 1) * splitDuration);
+                var splitType = altTypes[s % altTypes.length];
+
+                var splitProposal = {};
+                for (var key in p) {
+                    if (p.hasOwnProperty(key)) splitProposal[key] = p[key];
+                }
+                splitProposal.id = p.id + "_split_" + (s + 1);
+                splitProposal.startTime = secsToTime(splitStart);
+                splitProposal.endTime = secsToTime(splitEnd);
+                splitProposal.shotType = splitType;
+                splitProposal.shotOrder = (p.shotOrder || 1) + s;
+                splitProposal._splitFrom = p.id;
+                splitProposal._splitIndex = s;
+                splitProposal._splitTotal = numSplits;
+                // Only first split inherits hero status
+                if (s > 0) splitProposal.isHero = false;
+                // Append split context to description for variety
+                if (s > 0) {
+                    splitProposal.description = _appendSplitHint(p.description, splitType, s, numSplits);
+                }
+                result.push(splitProposal);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Get alternate shot types for creating cuts.
+     * Given the original type, returns an array of types that create
+     * natural visual progression for splits.
+     */
+    function _getAlternateShotTypes(originalType) {
+        var type = String(originalType || "MED").toUpperCase();
+        switch (type) {
+            case "WIDE": return ["WIDE", "MED", "CU"];
+            case "MED":  return ["MED", "CU", "WIDE"];
+            case "CU":   return ["CU", "DET", "MED"];
+            case "DET":  return ["DET", "CU", "MED"];
+            case "OTS":  return ["OTS", "MED", "CU"];
+            default:     return ["MED", "CU", "WIDE"];
+        }
+    }
+
+    /**
+     * Append a hint to the description so the AI generates a different
+     * composition for the split shot.
+     */
+    function _appendSplitHint(description, shotType, splitIndex, totalSplits) {
+        var hints = {
+            "WIDE": " [Cut to a wider establishing shot showing the full environment from a different angle]",
+            "MED":  " [Cut to a medium shot focusing on the main subject or action from a new perspective]",
+            "CU":   " [Cut to a close-up detail shot focusing on a key element or reaction]",
+            "DET":  " [Cut to an insert/detail shot of a specific object, texture, or data point]",
+            "OTS":  " [Cut to an over-the-shoulder perspective showing the point of view]"
+        };
+        return description + (hints[shotType] || " [Cut to a different angle — shot " + (splitIndex + 1) + " of " + totalSplits + "]");
+    }
+
     // ── Expose utilities for other modules ───────────────────────────────────
 
     global._epBrollScenes = {
         timeToSecs: timeToSecs,
         secsToTime: secsToTime,
         snapShotsContiguous: snapShotsContiguous,
-        parseLLMResponse: parseLLMResponse
+        parseLLMResponse: parseLLMResponse,
+        splitOversizedShots: splitOversizedShots
     };
 
 })(window);

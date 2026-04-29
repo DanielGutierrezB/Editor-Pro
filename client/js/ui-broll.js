@@ -124,6 +124,10 @@
         _setInputVal("br-vid-kling-key", s.videoKlingApiKey);
         _setInputVal("br-vid-fal-key", s.videoFalApiKey);
         _setInputVal("br-vid-gemini-key", s.videoGeminiApiKey);
+        _setSelectVal("br-audio-provider", s.audioProvider || "placeholder");
+        _setInputVal("br-audio-key", s.audioApiKey || "");
+        var autoAudio = _el("br-auto-audio");
+        if (autoAudio) autoAudio.checked = !!s.autoGenerateAudio;
         _setSelectVal("br-track-select", s.trackIndex);
         _refreshSettingsVisibility();
 
@@ -183,10 +187,14 @@
         _toggleEl("br-vid-fal-key-row", vidProv === "fal");
         _toggleEl("br-vid-fal-model-row", vidProv === "fal");
         if (vidProv === "fal" && !_falModelsLoaded["image-to-video"]) _loadFalModels("image-to-video", "br-vid-fal-model", broll ? broll.getSettings().videoFalModel : "");
+
+        var audioProv = _getSelectVal("br-audio-provider");
+        _toggleEl("br-audio-key-row", audioProv === "elevenlabs");
     }
 
     function saveSettings() {
         if (!broll) return;
+        var autoAudio = _el("br-auto-audio");
         broll.saveSettings({
             imageProvider: _getSelectVal("br-img-provider"),
             imageEndpointUrl: _getInputVal("br-img-endpoint"),
@@ -199,6 +207,9 @@
             videoFalModel: _getSelectVal("br-vid-fal-model"),
             videoFalApiKey: _getInputVal("br-vid-fal-key"),
             videoGeminiApiKey: _getInputVal("br-vid-gemini-key"),
+            audioProvider: _getSelectVal("br-audio-provider"),
+            audioApiKey: _getInputVal("br-audio-key"),
+            autoGenerateAudio: autoAudio ? autoAudio.checked : false,
             trackIndex: _getSelectVal("br-track-select")
         });
         showToast("Configuración B-Roll guardada", "success");
@@ -267,6 +278,8 @@
         if (imgProv) imgProv.addEventListener("change", _refreshSettingsVisibility);
         var vidProv = _el("br-vid-provider");
         if (vidProv) vidProv.addEventListener("change", _refreshSettingsVisibility);
+        var audioProv = _el("br-audio-provider");
+        if (audioProv) audioProv.addEventListener("change", _refreshSettingsVisibility);
 
         // Step accordion — only one open at a time
         var stepHeaders = document.querySelectorAll("[data-br-step]");

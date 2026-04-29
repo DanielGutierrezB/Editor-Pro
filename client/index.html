@@ -1261,7 +1261,7 @@
                             <span>⚠ Carga una transcripción en la pestaña Transcripción primero</span>
                         </div>
                         <label style="display:flex;align-items:center;gap:6px;margin:0 0 8px;cursor:pointer;font-size:12px;">
-                            <input type="checkbox" id="br-markers-only" style="margin:0;" checked>
+                            <input type="checkbox" id="br-markers-only" style="margin:0;">
                             <span>Solo en marcadores de la secuencia</span>
                         </label>
                         <button id="btn-br-analyze" class="btn-analyze btn-disabled" disabled>
@@ -1408,6 +1408,25 @@
                             <!-- Legacy hidden fields for LTX/Kling direct API (not exposed in UI) -->
                             <div id="br-vid-endpoint-row" style="display:none"><input type="hidden" id="br-vid-endpoint" value=""></div>
                             <div id="br-vid-kling-row" style="display:none"><input type="hidden" id="br-vid-kling-key" value=""></div>
+
+                            <div class="br-settings-title" style="margin-top:10px">Audio Ambiental</div>
+                            <div class="br-settings-row">
+                                <span class="br-settings-label">Proveedor audio</span>
+                                <select id="br-audio-provider" class="select-input">
+                                    <option value="placeholder">🔇 Placeholder (silencio)</option>
+                                    <option value="elevenlabs">🔊 ElevenLabs Sound FX</option>
+                                </select>
+                            </div>
+                            <div class="br-settings-row" id="br-audio-key-row" style="display:none">
+                                <span class="br-settings-label">ElevenLabs API Key</span>
+                                <input type="password" id="br-audio-key" class="text-input" placeholder="sk_...">
+                            </div>
+                            <div class="br-settings-row">
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                    <input type="checkbox" id="br-auto-audio" style="margin:0;">
+                                    <span class="br-settings-label" style="margin:0;">Auto-generar audio con cada imagen</span>
+                                </label>
+                            </div>
 
                             <div class="br-settings-title" style="margin-top:10px">Timeline</div>
                             <div class="br-settings-row">

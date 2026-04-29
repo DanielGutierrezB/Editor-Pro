@@ -10,6 +10,7 @@ const { sendLLM } = require('../lib/llm');
 const { getAnalysisSystemPrompt, buildAnalysisPrompt } = require('../lib/broll-prompts');
 const { generateImage } = require('../lib/image-generator');
 const { generateVideo } = require('../lib/video-generator');
+const { generateAudio } = require('../lib/audio-generator');
 
 // In-memory job queue (similar to render-queue but simpler — B-roll jobs are fast enough)
 const _jobs = {};
@@ -172,6 +173,48 @@ router.post('/animate', (req, res) => {
       } else {
         _jobs[jobId].status = 'complete';
         _jobs[jobId].filePath = filePath;
+      }
+    }
+  );
+
+  res.json({ jobId });
+});
+
+// ── POST /api/broll/generate-audio ────────────────────────────────────────────
+// Body: { proposalId, description, durationSecs, audioProvider, apiKey, outputDir, clipName }
+// Returns: { jobId } — poll /api/broll/status/:jobId
+
+router.post('/generate-audio', (req, res) => {
+  const {
+    proposalId, description, durationSecs = 5,
+    audioProvider = 'placeholder', apiKey, outputDir, clipName,
+  } = req.body;
+
+  if (!description) return res.status(400).json({ error: 'description is required' });
+
+  const sessionDir = outputDir || path.join(os.tmpdir(), 'editorpro-broll');
+  if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
+
+  const fileName = clipName
+    ? clipName.replace(/[^a-z0-9_-]/gi, '_') + '_audio'
+    : (proposalId || Date.now()).toString().replace(/[^a-z0-9_-]/gi, '_') + '_audio';
+  const ext = audioProvider === 'elevenlabs' ? '.mp3' : '.m4a';
+  const outputPath = path.join(sessionDir, fileName + ext);
+
+  const jobId = _newJobId();
+  _setJob(jobId, { type: 'audio', status: 'running', proposalId, outputPath, startTime: Date.now() });
+
+  generateAudio(
+    { provider: audioProvider, description, durationSecs, apiKey },
+    outputPath,
+    (err, filePath) => {
+      if (err) {
+        _jobs[jobId].status = 'error';
+        _jobs[jobId].error = err.message;
+      } else {
+        _jobs[jobId].status = 'complete';
+        _jobs[jobId].filePath = filePath;
+        console.log('[BRoll] Audio done:', filePath);
       }
     }
   );

@@ -337,6 +337,20 @@ function _generateGeminiVideo(imagePath, prompt, apiKey, outputPath, callback) {
   req.end();
 }
 
+// ── Max duration per provider ──────────────────────────────────────────────────
+
+const VIDEO_PROVIDER_MAX_DURATION = {
+  kling: 10,
+  fal: 10,
+  gemini_video: 8,
+  ltx_local: 10,
+  placeholder: 30,
+};
+
+function getVideoProviderMaxDuration(provider) {
+  return VIDEO_PROVIDER_MAX_DURATION[provider] || 10;
+}
+
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 function generateVideo(options, outputPath, callback) {
@@ -354,4 +368,4 @@ function generateVideo(options, outputPath, callback) {
   }
 }
 
-module.exports = { generateVideo };
+module.exports = { generateVideo, getVideoProviderMaxDuration, VIDEO_PROVIDER_MAX_DURATION };
