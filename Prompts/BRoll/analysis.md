@@ -38,8 +38,8 @@ For each scene, YOU choose the most appropriate visual style based on the conten
 - Choose the style that BEST matches the emotional tone and content of each scene
 - ALL shots within a scene MUST use the same style (the Hero Shot defines it)
 - Different scenes CAN have different styles if the topic shifts warrant it
-- Include the full style description in EVERY shot's description so the image generator knows the look
-- When using non-photorealistic styles, describe SUBJECTS and COMPOSITION clearly — the style just changes the rendering technique
+- **DO NOT include style/rendering descriptions in shot descriptions.** The `visualStyle` field handles the artistic style automatically. Shot descriptions should ONLY describe the SUBJECT, COMPOSITION, CAMERA ANGLE, and SCENE CONTENT — never mention the rendering technique, color palette, or artistic style.
+- Describe SUBJECTS and COMPOSITION clearly — what we SEE, not how it's rendered
 
 ## LANGUAGE RULES:
 - **Match the language of the transcript.** If the class is in Spanish, ALL descriptions, rationales, scene titles, and visual worlds MUST be in Spanish.
@@ -121,13 +121,13 @@ Return ONLY valid JSON. No markdown, no explanation, just the JSON object:
       "title": "Descriptive scene title",
       "narrative": "revelación|causa-efecto|comparación|secuencia|contextualización|contraste|acumulación|deconstrucción|metáfora-visual|ritmo-espejo|kuleshov|match-cut|parallelismo",
       "visualStyle": "photorealistic|comic_sketch|blueprint|courtroom_sketch",
-      "visualWorld": "Consistent visual style description for the entire scene — location, lighting, color palette, mood",
+      "visualWorld": "Consistent visual SETTING for the entire scene — location, environment, lighting, mood, props. DO NOT include artistic style or rendering technique here (that is handled by visualStyle).",
       "shots": [
         {
           "shotType": "WIDE",
           "startTime": "HH:MM:SS.mmm",
           "endTime": "HH:MM:SS.mmm",
-          "description": "Full image generation prompt including the style description + visualWorld context + subject",
+          "description": "Image generation prompt describing ONLY the subject, composition, camera angle, lighting, and scene content. DO NOT include artistic style — that is handled by the visualStyle field.",
           "rationale": "Why this shot at this moment",
           "isHero": false
         }

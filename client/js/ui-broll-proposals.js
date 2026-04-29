@@ -288,9 +288,38 @@
                 var sceneId = e.target.dataset.sceneId;
                 var newStyle = e.target.value;
                 if (!broll || !sceneId) return;
+                var styles = global._epBrollStyles;
                 for (var pi = 0; pi < broll.proposals.length; pi++) {
-                    if (broll.proposals[pi].sceneId === sceneId) broll.proposals[pi].visualStyle = newStyle;
+                    if (broll.proposals[pi].sceneId === sceneId) {
+                        // Strip ALL known style keywords from description
+                        if (styles && styles.stripStyleKeywords) {
+                            var allKnownStyles = ["photorealistic", "comic_sketch", "blueprint", "courtroom_sketch"];
+                            for (var ski = 0; ski < allKnownStyles.length; ski++) {
+                                broll.proposals[pi].description = styles.stripStyleKeywords(broll.proposals[pi].description, allKnownStyles[ski]);
+                            }
+                            // Also strip from visualWorld
+                            if (broll.proposals[pi].visualWorld) {
+                                for (var swi = 0; swi < allKnownStyles.length; swi++) {
+                                    broll.proposals[pi].visualWorld = styles.stripStyleKeywords(broll.proposals[pi].visualWorld, allKnownStyles[swi]);
+                                }
+                            }
+                        }
+                        broll.proposals[pi].visualStyle = newStyle;
+                    }
                 }
+                // Also strip visualWorld from the scene object itself
+                if (broll.scenes && styles && styles.stripStyleKeywords) {
+                    var allKnownStyles2 = ["photorealistic", "comic_sketch", "blueprint", "courtroom_sketch"];
+                    for (var sci = 0; sci < broll.scenes.length; sci++) {
+                        if (broll.scenes[sci].id === sceneId && broll.scenes[sci].visualWorld) {
+                            for (var swi2 = 0; swi2 < allKnownStyles2.length; swi2++) {
+                                broll.scenes[sci].visualWorld = styles.stripStyleKeywords(broll.scenes[sci].visualWorld, allKnownStyles2[swi2]);
+                            }
+                        }
+                    }
+                }
+                // Re-render the proposal cards to reflect the cleaned descriptions
+                renderProposals(broll.proposals);
                 showToast("Estilo cambiado a " + newStyle.replace(/_/g, " "), "success");
             });
         }

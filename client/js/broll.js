@@ -332,10 +332,12 @@
         var styledDescription = proposal.description;
         var styles = global._epBrollStyles;
         if (styles && proposal.visualStyle) {
-            // If user changed style after analysis, strip old style keywords from description
-            var originalStyle = proposal.originalVisualStyle || proposal.visualStyle;
-            if (originalStyle !== proposal.visualStyle && styles.stripStyleKeywords) {
-                styledDescription = styles.stripStyleKeywords(styledDescription, originalStyle);
+            // Strip ALL known style keywords from description (LLM may embed them despite instructions)
+            if (styles.stripStyleKeywords) {
+                var allStyles = ["photorealistic", "comic_sketch", "blueprint", "courtroom_sketch"];
+                for (var si = 0; si < allStyles.length; si++) {
+                    styledDescription = styles.stripStyleKeywords(styledDescription, allStyles[si]);
+                }
             }
             var prefix = styles.getStylePrefix(proposal.visualStyle);
             if (prefix) styledDescription = prefix + styledDescription;
