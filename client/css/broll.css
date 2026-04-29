@@ -271,6 +271,25 @@
     text-decoration-style: solid;
 }
 
+.br-clip-name-label {
+    font-size: 9px;
+    color: var(--text-primary);
+    font-weight: 600;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.br-clip-version-label {
+    font-size: 8px;
+    color: var(--accent);
+    font-weight: 600;
+    padding: 0 3px;
+    background: rgba(99, 102, 241, 0.12);
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
 .br-clip-desc-compact {
     font-size: 9px;
     color: var(--text-secondary);
@@ -278,6 +297,34 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+
+/* Clip progress bar */
+.br-clip-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px 5px 92px;
+}
+.br-clip-progress.hidden { display: none; }
+.br-progress-track {
+    flex: 1;
+    height: 3px;
+    background: var(--bg-active);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.br-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    width: 30%;
+    animation: pulse-update 1.5s infinite;
+}
+.br-progress-text {
+    font-size: 9px;
+    color: var(--accent);
+    white-space: nowrap;
 }
 
 .br-status-badge {

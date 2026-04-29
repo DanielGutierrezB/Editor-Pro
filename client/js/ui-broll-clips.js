@@ -145,12 +145,16 @@
         }
 
         var shotBadge = clip.shotType ? brollUI._shotTypeBadge(clip.shotType) : "";
-        var heroBadge = clip.isHero ? '<span class="br-hero-badge">⭐</span>' : '';
+        var heroBadge = clip.isHero ? '<span class="br-hero-badge">⭐ Hero Shot</span>' : '';
+
+        // Clip display name (like Motion Pro)
+        var clipSeqPrefix = (broll._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
+        var clipDisplayName = clipSeqPrefix + "_BRoll_" + String(num).padStart(2, "0");
 
         // Action buttons
-        var btnVideo = hasImage ? '<button class="btn btn-xs btn-accent" onclick="EditorProUI.broll._animateClip(\'' + clip.id + '\')">' + (hasVideo ? '🔄 Re-video' : '🎥 Video') + '</button>' : '';
+        var btnVideo = hasImage ? '<button class="btn btn-xs btn-accent" onclick="EditorProUI.broll._animateClip(\'' + clip.id + '\')">' + (hasVideo ? '🔄 Re-animar' : '🎬 Animar') + '</button>' : '';
         var btnRegen = hasImage ? '<button class="btn btn-xs btn-ghost" onclick="EditorProUI.broll._regenClip(\'' + clip.id + '\')">🔄 Regenerar</button>' : '';
-        var btnRegenChildren = (clip.isHero && hasImage) ? '<button class="btn btn-xs btn-ghost" onclick="EditorProUI.broll._regenChildren(\'' + clip.id + '\')">🔄 Hijos</button>' : '';
+        var btnRegenChildren = (clip.isHero && hasImage) ? '<button class="btn btn-xs btn-ghost" onclick="EditorProUI.broll._regenChildren(\'' + clip.id + '\')">🔄 Regenerar Hijos</button>' : '';
 
         // Description
         var descText = clip.description || "";
@@ -159,7 +163,13 @@
         var thumbSrc = (version && version.imageBase64) ? version.imageBase64 :
                        (version && version.imagePath) ? ('file://' + version.imagePath) : '';
 
-        // Compact row: checkbox + thumb(left) + info(center) + actions(right)
+        // Version info
+        var versionLabel = '';
+        if (clip.versions.length > 1) {
+            versionLabel = '<span class="br-clip-version-label">v' + (clip.activeVersion + 1) + '/' + clip.versions.length + '</span>';
+        }
+
+        // Compact row: checkbox + thumb(left) + info(center)
         var rowDiv = document.createElement("div");
         rowDiv.className = "br-clip-row";
 
@@ -170,8 +180,10 @@
             '<div class="br-clip-info">' +
                 '<div class="br-clip-info-top">' +
                     '<span class="br-clip-num">' + num + '</span>' +
+                    '<span class="br-clip-name-label">' + esc(clipDisplayName) + '</span>' +
                     '<span class="br-clip-timecode br-timecode-link" data-time="' + escAttr(clip.startTime) + '">' + esc(clip.startTime) + '</span>' +
                     (shotBadge || '') + (heroBadge || '') +
+                    versionLabel +
                     '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>' +
                 '</div>' +
                 '<div class="br-clip-desc-compact">' + esc(descText.length > 70 ? descText.substring(0, 67) + '…' : descText) + '</div>' +
@@ -192,13 +204,22 @@
             }
         }
 
-        // Feedback row (separate from main row to avoid base64 issues)
+        // Feedback row with progress indicator
         var fbDiv = document.createElement("div");
         fbDiv.className = "br-clip-feedback-row";
         fbDiv.innerHTML =
-            '<input type="text" id="br-feedback-' + clip.id + '" placeholder="Cambios: ej. más colorido, sin personas…" class="br-feedback-inline">' +
+            '<input type="text" id="br-feedback-' + clip.id + '" placeholder="Feedback: ej. más colorido, sin personas…" class="br-feedback-inline">' +
             '<button class="btn btn-xs btn-send" onclick="EditorProUI.broll._sendFeedback(\'' + clip.id + '\')">Enviar</button>';
         div.appendChild(fbDiv);
+
+        // Progress bar (hidden by default, shown during regen/feedback)
+        var progressDiv = document.createElement("div");
+        progressDiv.className = "br-clip-progress hidden";
+        progressDiv.id = "br-progress-" + clip.id;
+        progressDiv.innerHTML =
+            '<div class="br-progress-track"><div class="br-progress-fill" id="br-progress-fill-' + clip.id + '"></div></div>' +
+            '<span class="br-progress-text" id="br-progress-text-' + clip.id + '">Regenerando...</span>';
+        div.appendChild(progressDiv);
 
         setTimeout(function() {
             var cb = document.getElementById(checkId);
@@ -232,6 +253,7 @@
         if (!clip) return;
         var existing = _el("br-clip-card-" + clip.id);
         if (existing) {
+            // Update status badge
             var badge = existing.querySelector(".br-status-badge");
             if (badge) {
                 badge.dataset.status = status;
@@ -239,6 +261,21 @@
                 if (elapsedSecs > 0 && status === "generating") label = "⏳ Generando... (" + elapsedSecs + "s)";
                 else if (elapsedSecs > 0 && status === "animating") label = "🎬 Animando... (" + elapsedSecs + "s)";
                 badge.textContent = label;
+            }
+
+            // Show/hide progress bar
+            var progressEl = _el("br-progress-" + clip.id);
+            var progressText = _el("br-progress-text-" + clip.id);
+            if (progressEl) {
+                if (status === "generating" || status === "animating") {
+                    progressEl.classList.remove("hidden");
+                    if (progressText) {
+                        var msg = status === "generating" ? "Generando imagen" : "Creando video";
+                        progressText.textContent = msg + (elapsedSecs > 0 ? "... " + elapsedSecs + "s" : "...");
+                    }
+                } else {
+                    progressEl.classList.add("hidden");
+                }
             }
         }
     }
