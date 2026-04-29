@@ -155,36 +155,60 @@
         // Description
         var descText = clip.description || "";
 
-        // Thumbnail HTML
+        // Build DOM elements instead of one giant innerHTML (base64 src breaks innerHTML parsing)
         var thumbSrc = (version && version.imageBase64) ? version.imageBase64 :
                        (version && version.imagePath) ? ('file://' + version.imagePath) : '';
-        var thumbHtml = thumbSrc ?
-            '<div style="width:100%;max-height:100px;overflow:hidden;background:#1a1a2e">' +
-                '<img src="' + escAttr(thumbSrc) + '" alt="" style="width:100%;height:100px;object-fit:cover;display:block;cursor:zoom-in" onclick="EditorProUI.broll._expandImage(this.src)">' +
-            '</div>' : '';
 
-        div.innerHTML =
-            // Header
-            '<div class="br-clip-header-row">' +
-                '<input type="checkbox" id="' + checkId + '" class="br-clip-check"' + (isCheckable ? ' checked' : '') + '>' +
-                '<span class="br-clip-num">' + num + '</span>' +
-                '<span class="br-clip-timecode br-timecode-link" data-time="' + escAttr(clip.startTime) + '">' + esc(clip.startTime) + '</span>' +
-                (shotBadge || '') + (heroBadge || '') +
-                '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>' +
-            '</div>' +
-            // Thumbnail
-            thumbHtml +
-            // Description
-            '<div style="font-size:10px;color:#94a3b8;line-height:1.35;padding:4px 8px;max-height:2.7em;overflow:hidden">' + esc(descText) + '</div>' +
-            // Version selector
-            (clip.versions.length > 1 ? '<div style="display:flex;align-items:center;gap:6px;padding:0 8px 4px"><span style="font-size:9px;color:#64748b">Versión:</span><select class="br-version-select-sm" onchange="EditorProUI.broll._switchVersion(\'' + clip.id + '\', this.value)">' + versionOpts + '</select></div>' : '') +
-            // Actions
-            '<div style="display:flex;flex-wrap:wrap;gap:4px;padding:2px 8px 4px">' + btnVideo + btnRegen + btnRegenChildren + '</div>' +
-            // Feedback
-            '<div style="display:flex;gap:4px;padding:2px 8px 6px;align-items:center">' +
-                '<input type="text" class="br-feedback-inline" id="br-feedback-' + clip.id + '" placeholder="Cambios: ej. más colorido, sin personas…" style="flex:1;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px 6px;font-size:9px">' +
-                '<button class="btn btn-xs btn-send" onclick="EditorProUI.broll._sendFeedback(\'' + clip.id + '\')" style="background:#10b981;color:#fff;border:none;font-weight:700;font-size:9px;padding:4px 8px;border-radius:3px;cursor:pointer">Enviar</button>' +
-            '</div>';
+        // Header
+        var headerDiv = document.createElement("div");
+        headerDiv.className = "br-clip-header-row";
+        headerDiv.innerHTML =
+            '<input type="checkbox" id="' + checkId + '" class="br-clip-check"' + (isCheckable ? ' checked' : '') + '>' +
+            '<span class="br-clip-num">' + num + '</span>' +
+            '<span class="br-clip-timecode br-timecode-link" data-time="' + escAttr(clip.startTime) + '">' + esc(clip.startTime) + '</span>' +
+            (shotBadge || '') + (heroBadge || '') +
+            '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>';
+        div.appendChild(headerDiv);
+
+        // Thumbnail — set src via DOM property (not innerHTML) to avoid base64 parsing issues
+        if (thumbSrc) {
+            var thumbWrap = document.createElement("div");
+            thumbWrap.className = "br-clip-thumb-row";
+            var thumbImg = document.createElement("img");
+            thumbImg.className = "br-clip-thumb-mid";
+            thumbImg.src = thumbSrc;
+            thumbImg.alt = "";
+            thumbImg.addEventListener("click", function() { brollUI._expandImage(thumbImg.src); });
+            thumbWrap.appendChild(thumbImg);
+            div.appendChild(thumbWrap);
+        }
+
+        // Description
+        var descDiv = document.createElement("div");
+        descDiv.className = "br-clip-desc-row";
+        descDiv.textContent = descText;
+        div.appendChild(descDiv);
+
+        // Version selector
+        if (clip.versions.length > 1) {
+            var verDiv = document.createElement("div");
+            verDiv.className = "br-clip-version-row";
+            verDiv.innerHTML = '<span class="br-version-label">Versión:</span><select class="br-version-select-sm" onchange="EditorProUI.broll._switchVersion(\'' + clip.id + '\', this.value)">' + versionOpts + '</select>';
+            div.appendChild(verDiv);
+        }
+
+        // Action buttons
+        var actDiv = document.createElement("div");
+        actDiv.className = "br-clip-actions-row";
+        actDiv.innerHTML = btnVideo + btnRegen + btnRegenChildren;
+        div.appendChild(actDiv);
+
+        // Feedback row
+        var fbDiv = document.createElement("div");
+        fbDiv.className = "br-clip-feedback-row";
+        fbDiv.innerHTML = '<input type="text" class="br-feedback-inline" id="br-feedback-' + clip.id + '" placeholder="Cambios: ej. más colorido, sin personas…">' +
+            '<button class="btn btn-xs btn-send" onclick="EditorProUI.broll._sendFeedback(\'' + clip.id + '\')">Enviar</button>';
+        div.appendChild(fbDiv);
 
         setTimeout(function() {
             var cb = document.getElementById(checkId);
