@@ -106,6 +106,33 @@
         courtroom_sketch: "Courtroom sketch illustration style, expressive gestural linework, hand-drawn ink and colored pencil, soft shading, muted earth tones, paper grain texture, reportage feel. "
     };
 
+    // ── Style keyword patterns for stripping when style changes ─────────────
+
+    var STYLE_KEYWORDS = {
+        photorealistic: /\b(photorealistic|stock footage|documentary style|shallow depth of field|cinematic photography|natural lighting|real people|real environment)\b/gi,
+        comic_sketch: /\b(comic sketch|unfinished drawing|loose linework|wobbly outlines|hand-drawn feel|sketchy composition|low-saturation|muted tones|raw.{0,5}expressive strokes|rough illustrative)\b/gi,
+        blueprint: /\b(blueprint[- ]?style|chalkboard|chalk effect|chalk texture|glowing white (lines|linework|outlines)|black background|luminous outlines|high contrast monochrome|schematic|diagram-like|technical sketch|white on black|soft glow effect)\b/gi,
+        courtroom_sketch: /\b(courtroom sketch|reportage|gestural linework|ink and colored pencil|paper grain|earth tones?|muted natural|observational drawing)\b/gi
+    };
+
+    /**
+     * Strip style-specific keywords from a description.
+     * Used when the user changes the visual style AFTER analysis — the LLM-generated
+     * descriptions already contain style instructions from the original style that
+     * would conflict with the new style prefix.
+     */
+    function stripStyleKeywords(description, styleToStrip) {
+        var pattern = STYLE_KEYWORDS[styleToStrip];
+        if (!pattern) return description;
+        // Reset regex state (global flag)
+        pattern.lastIndex = 0;
+        var cleaned = description.replace(pattern, "");
+        // Clean up leftover punctuation artifacts (double commas, leading commas, etc.)
+        cleaned = cleaned.replace(/,\s*,/g, ",").replace(/\.\s*\./g, ".").replace(/,\s*\./g, ".");
+        cleaned = cleaned.replace(/^\s*[,.:;]\s*/, "").replace(/\s{2,}/g, " ").trim();
+        return cleaned;
+    }
+
     // ── Prompt building ──────────────────────────────────────────────────────
 
     function buildStyledPrompt(promptTemplate, style) {
@@ -136,7 +163,8 @@
         getSystemPrompt: function() { return BROLL_SYSTEM_PROMPT; },
         buildStyledPrompt: buildStyledPrompt,
         ensureBrollPrompt: ensureBrollPrompt,
-        getStylePrefix: function(style) { return STYLE_PREFIX[style] || ""; }
+        getStylePrefix: function(style) { return STYLE_PREFIX[style] || ""; },
+        stripStyleKeywords: stripStyleKeywords
     };
 
 })(window);

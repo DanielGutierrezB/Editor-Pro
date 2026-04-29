@@ -332,6 +332,11 @@
         var styledDescription = proposal.description;
         var styles = global._epBrollStyles;
         if (styles && proposal.visualStyle) {
+            // If user changed style after analysis, strip old style keywords from description
+            var originalStyle = proposal.originalVisualStyle || proposal.visualStyle;
+            if (originalStyle !== proposal.visualStyle && styles.stripStyleKeywords) {
+                styledDescription = styles.stripStyleKeywords(styledDescription, originalStyle);
+            }
             var prefix = styles.getStylePrefix(proposal.visualStyle);
             if (prefix) styledDescription = prefix + styledDescription;
         }

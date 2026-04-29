@@ -88,6 +88,7 @@
                 for (var shi = 0; shi < shots.length; shi++) {
                     var shot = shots[shi];
                     var shotId = sceneId + "_shot_" + String(shi + 1).padStart(2, "0");
+                    var sceneStyle = scene.visualStyle || "photorealistic";
                     proposals.push({
                         id: shotId,
                         startTime: shot.startTime,
@@ -97,7 +98,8 @@
                         sceneId: sceneId,
                         sceneTitle: scene.title || "",
                         sceneNarrative: scene.narrative || "",
-                        visualStyle: scene.visualStyle || "photorealistic",
+                        visualStyle: sceneStyle,
+                        originalVisualStyle: sceneStyle,
                         shotType: (shot.shotType || "MED").toUpperCase(),
                         shotOrder: shi + 1,
                         visualWorld: scene.visualWorld || "",
