@@ -159,47 +159,46 @@
         var thumbSrc = (version && version.imageBase64) ? version.imageBase64 :
                        (version && version.imagePath) ? ('file://' + version.imagePath) : '';
 
-        // Build card with separate innerHTML blocks to avoid base64 truncation
-        // 1) Header
-        var headerDiv = document.createElement("div");
-        headerDiv.className = "br-clip-header-row";
-        headerDiv.innerHTML =
+        // Compact row: checkbox + thumb(left) + info(center) + actions(right)
+        var rowDiv = document.createElement("div");
+        rowDiv.className = "br-clip-row";
+
+        // Row innerHTML (without base64 — that goes via DOM .src)
+        rowDiv.innerHTML =
             '<input type="checkbox" id="' + checkId + '" class="br-clip-check"' + (isCheckable ? ' checked' : '') + '>' +
-            '<span class="br-clip-num">' + num + '</span>' +
-            '<span class="br-clip-timecode br-timecode-link" data-time="' + escAttr(clip.startTime) + '">' + esc(clip.startTime) + '</span>' +
-            (shotBadge || '') + (heroBadge || '') +
-            '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>';
-        div.appendChild(headerDiv);
-
-        // 2) Thumbnail
-        if (thumbSrc) {
-            var thumbWrap = document.createElement("div");
-            thumbWrap.className = "br-clip-thumb-row";
-            var thumbImg = document.createElement("img");
-            thumbImg.className = "br-clip-thumb-mid";
-            thumbImg.alt = "";
-            thumbImg.onclick = function() { brollUI._expandImage(this.src); };
-            thumbImg.src = thumbSrc; // set src LAST
-            thumbWrap.appendChild(thumbImg);
-            div.appendChild(thumbWrap);
-        }
-
-        // 3) Body: desc + actions + feedback — all in one innerHTML (no base64 here)
-        var bodyDiv = document.createElement("div");
-        bodyDiv.style.cssText = "padding:6px 8px;background:rgba(30,41,59,0.5);border-top:1px solid rgba(51,65,85,0.5)";
-        var bodyHtml =
-            '<div style="font-size:10px;color:#94a3b8;line-height:1.35;margin-bottom:4px">' + esc(descText) + '</div>';
-        if (clip.versions.length > 1) {
-            bodyHtml += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="font-size:9px;color:#64748b">Versión:</span><select class="br-version-select-sm" onchange="EditorProUI.broll._switchVersion(\'' + clip.id + '\', this.value)">' + versionOpts + '</select></div>';
-        }
-        bodyHtml += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">' + btnVideo + btnRegen + btnRegenChildren + '</div>' +
-            '<div style="display:flex;gap:4px;align-items:center">' +
-                '<input type="text" id="br-feedback-' + clip.id + '" placeholder="Cambios: ej. más colorido, sin personas…" style="flex:1;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:3px;padding:4px 6px;font-size:9px;font-family:inherit">' +
-                '<button class="btn btn-xs" onclick="EditorProUI.broll._sendFeedback(\'' + clip.id + '\')" style="background:#10b981;color:#fff;border:none;font-weight:700;font-size:9px;padding:4px 8px;border-radius:3px;cursor:pointer">Enviar</button>' +
+            '<div class="br-clip-thumb-sm" id="br-thumb-' + clip.id + '"></div>' +
+            '<div class="br-clip-info">' +
+                '<div class="br-clip-info-top">' +
+                    '<span class="br-clip-num">' + num + '</span>' +
+                    '<span class="br-clip-timecode br-timecode-link" data-time="' + escAttr(clip.startTime) + '">' + esc(clip.startTime) + '</span>' +
+                    (shotBadge || '') + (heroBadge || '') +
+                    '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>' +
+                '</div>' +
+                '<div class="br-clip-desc-compact">' + esc(descText.length > 70 ? descText.substring(0, 67) + '…' : descText) + '</div>' +
+                '<div class="br-clip-actions-row">' + btnVideo + btnRegen + btnRegenChildren + '</div>' +
             '</div>';
-        bodyDiv.innerHTML = bodyHtml;
-        div.appendChild(bodyDiv);
-        console.log("[BRoll] Card " + num + " built, bodyDiv children:", bodyDiv.childNodes.length, "hasImage:", !!hasImage);
+        div.appendChild(rowDiv);
+
+        // Set thumbnail src via DOM (avoids base64 in innerHTML)
+        if (thumbSrc) {
+            var thumbContainer = rowDiv.querySelector('#br-thumb-' + clip.id);
+            if (thumbContainer) {
+                var thumbImg = document.createElement("img");
+                thumbImg.className = "br-clip-thumb-img";
+                thumbImg.alt = "";
+                thumbImg.onclick = function() { brollUI._expandImage(this.src); };
+                thumbImg.src = thumbSrc;
+                thumbContainer.appendChild(thumbImg);
+            }
+        }
+
+        // Feedback row (separate from main row to avoid base64 issues)
+        var fbDiv = document.createElement("div");
+        fbDiv.className = "br-clip-feedback-row";
+        fbDiv.innerHTML =
+            '<input type="text" id="br-feedback-' + clip.id + '" placeholder="Cambios: ej. más colorido, sin personas…" class="br-feedback-inline">' +
+            '<button class="btn btn-xs btn-send" onclick="EditorProUI.broll._sendFeedback(\'' + clip.id + '\')">Enviar</button>';
+        div.appendChild(fbDiv);
 
         setTimeout(function() {
             var cb = document.getElementById(checkId);
@@ -212,11 +211,12 @@
             }
         }, 0);
 
-        // Click on header row toggles checkbox
+        // Click on card toggles checkbox (except on interactive elements)
         div.addEventListener("click", function(e) {
-            var hdr = e.target.closest ? e.target.closest(".br-clip-header-row") : null;
-            if (!hdr) return;
             if (e.target.type === "checkbox") return;
+            if (e.target.closest && e.target.closest("button")) return;
+            if (e.target.tagName === "BUTTON" || e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+            if (e.target.tagName === "IMG") return;
             if (e.target.classList.contains("br-timecode-link")) return;
             var cb = document.getElementById(checkId);
             if (cb) { cb.checked = !cb.checked; div.classList.toggle("selected", cb.checked); _updateClipSelectedCount(); }

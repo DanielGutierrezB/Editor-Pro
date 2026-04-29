@@ -186,7 +186,7 @@
 
 /* ── B-Roll clip cards (Step 2 & 3) — Compact horizontal layout ──────────── */
 
-.br-clips-list { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; max-height: 65vh; overflow-y: auto; }
+.br-clips-list { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
 
 .br-clip-card {
     background: var(--bg-surface);
@@ -199,21 +199,49 @@
 .br-clip-card.error  { border-color: rgba(248, 113, 113, 0.4); }
 .br-clip-card.selected { background: var(--bg-active); }
 
-/* ── Card inner layout ───────────────────────────────────────────────────── */
+/* ── Card inner layout — compact horizontal ─────────────────────────────── */
 
-/* Header row: checkbox + num + timecode + badges + status */
-.br-clip-header-row {
+/* Horizontal row: checkbox + thumb + info + actions */
+.br-clip-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 8px 4px;
+}
+
+.br-clip-check { flex-shrink: 0; margin: 2px 0 0; }
+
+/* Small thumbnail */
+.br-clip-thumb-sm {
+    width: 72px;
+    height: 48px;
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--bg-raised);
+    cursor: zoom-in;
+}
+.br-clip-thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Info column */
+.br-clip-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.br-clip-info-top {
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 5px 8px;
-    background: var(--bg-raised);
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
+    gap: 4px;
+    flex-wrap: wrap;
 }
-.br-clip-header-row:hover { background: var(--bg-active); }
-
-.br-clip-check { flex-shrink: 0; margin: 0; }
 
 .br-clip-num {
     font-size: 9px;
@@ -243,10 +271,19 @@
     text-decoration-style: solid;
 }
 
+.br-clip-desc-compact {
+    font-size: 9px;
+    color: var(--text-secondary);
+    line-height: 1.3;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
 .br-status-badge {
     font-size: 8px;
     font-weight: 700;
-    padding: 1px 5px;
+    padding: 1px 4px;
     border-radius: 3px;
     white-space: nowrap;
     flex-shrink: 0;
@@ -260,61 +297,16 @@
 .br-status-badge[data-status="placed"]     { background: rgba(16,185,129,0.3); color: #10b981; }
 .br-status-badge[data-status="error"]      { background: rgba(248,113,113,0.2); color: #f87171; }
 
-/* Thumbnail — medium size, full width, capped height */
-.br-clip-thumb-row {
-    width: 100%;
-    max-height: 100px;
-    overflow: hidden;
-    background: var(--bg-raised);
-    cursor: zoom-in;
-}
-.br-clip-thumb-mid {
-    width: 100%;
-    height: 100px;
-    object-fit: cover;
-    display: block;
-}
-
-/* Description row */
-.br-clip-desc-row {
-    font-size: 10px;
-    color: var(--text-secondary);
-    line-height: 1.35;
-    padding: 4px 8px;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-/* Version selector row */
-.br-clip-version-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 8px 4px;
-}
-.br-version-label { font-size: 9px; color: var(--text-muted); }
-.br-version-select-sm {
-    flex: 1;
-    font-size: 9px;
-    background: var(--bg-input);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 1px 4px;
-}
-
-/* Action buttons row */
+/* Action buttons inside info column */
 .br-clip-actions-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
-    padding: 2px 8px 4px;
+    gap: 3px;
+    margin-top: 1px;
 }
 .btn-xs {
     font-size: 9px;
-    padding: 3px 8px;
+    padding: 2px 7px;
     border-radius: 3px;
     line-height: 1.3;
     white-space: nowrap;
@@ -327,11 +319,22 @@
 }
 .btn-accent:hover { opacity: 0.85; }
 
-/* Feedback row: input + send button */
+/* Version selector */
+.br-version-select-sm {
+    font-size: 9px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 4px;
+    max-width: 100px;
+}
+
+/* Feedback row below the main row */
 .br-clip-feedback-row {
     display: flex;
     gap: 4px;
-    padding: 2px 8px 6px;
+    padding: 0 8px 5px 92px; /* aligned with info column */
     align-items: center;
 }
 .br-feedback-inline {
@@ -340,7 +343,7 @@
     color: var(--text-primary);
     border: 1px solid var(--border);
     border-radius: 3px;
-    padding: 4px 6px;
+    padding: 3px 6px;
     font-size: 9px;
     font-family: inherit;
     transition: border-color 0.15s;
