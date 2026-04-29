@@ -147,49 +147,49 @@
         // Thumbnail
         var thumbHtml = "";
         if (hasImage && version.imageBase64) {
-            thumbHtml = '<div class="br-clip-thumb-wrap">' +
+            thumbHtml = '<div class="br-clip-thumb-compact">' +
                 '<img class="br-clip-thumb" src="' + escAttr(version.imageBase64) + '" alt="preview" onclick="EditorProUI.broll._expandImage(this.src)" style="cursor:zoom-in">' +
-                '<div class="br-clip-thumb-overlay">' + (hasVideo ? "🎬 Video listo" : "📸 Imagen") + ' · ' + esc(clip.startTime) + '</div></div>';
+                '</div>';
         } else if (clip.status === "generating" || clip.status === "animating") {
-            thumbHtml = '<div class="br-clip-thumb-wrap"><div class="br-clip-thumb-placeholder">⏳</div>' +
-                '<div class="br-clip-thumb-overlay">' + (clip.status === "animating" ? "Animando…" : "Generando…") + '</div></div>';
+            thumbHtml = '<div class="br-clip-thumb-compact"><div class="br-clip-thumb-placeholder-sm">' +
+                (clip.status === "animating" ? "🎬" : "⏳") + '</div></div>';
         } else {
-            thumbHtml = '<div class="br-clip-thumb-wrap"><div class="br-clip-thumb-placeholder">🖼</div></div>';
+            thumbHtml = '<div class="br-clip-thumb-compact"><div class="br-clip-thumb-placeholder-sm">🖼</div></div>';
         }
 
         var shotBadge = clip.shotType ? brollUI._shotTypeBadge(clip.shotType) : "";
-        var heroBadge = clip.isHero ? '<span class="br-hero-badge">⭐ Hero</span>' : '';
+        var heroBadge = clip.isHero ? '<span class="br-hero-badge">⭐</span>' : '';
 
-        var btnPlace = hasImage ? '<button class="btn btn-sm btn-success" onclick="EditorProUI.broll._placeClip(\'' + clip.id + '\')">📌 Colocar</button>' : '<button class="btn btn-sm btn-success" disabled>📌 Colocar</button>';
-        var btnAnimate = hasImage && !hasVideo ? '<button class="btn btn-sm btn-ghost" onclick="EditorProUI.broll._animateClip(\'' + clip.id + '\')">🎬 Animar</button>' : (hasVideo ? '<button class="btn btn-sm btn-ghost" onclick="EditorProUI.broll._animateClip(\'' + clip.id + '\')">🔄 Re-animar</button>' : '');
-        var btnRegen = hasImage ? '<button class="btn btn-sm btn-ghost" onclick="EditorProUI.broll._regenClip(\'' + clip.id + '\')">🔄 Regenerar</button>' : '';
-        var btnRegenChildren = (clip.isHero && hasImage) ? '<button class="btn btn-sm btn-ghost" onclick="EditorProUI.broll._regenChildren(\'' + clip.id + '\')">🔄 Regenerar Hijos</button>' : '';
+        var btnPlace = hasImage ? '<button class="btn btn-xs btn-success" onclick="EditorProUI.broll._placeClip(\'' + clip.id + '\')">📌</button>' : '';
+        var btnAnimate = hasImage && !hasVideo ? '<button class="btn btn-xs btn-ghost" onclick="EditorProUI.broll._animateClip(\'' + clip.id + '\')">🎬</button>' : (hasVideo ? '<button class="btn btn-xs btn-ghost" onclick="EditorProUI.broll._animateClip(\'' + clip.id + '\')">🔄🎬</button>' : '');
+        var btnRegen = hasImage ? '<button class="btn btn-xs btn-ghost" onclick="EditorProUI.broll._regenClip(\'' + clip.id + '\')">🔄</button>' : '';
+        var btnRegenChildren = (clip.isHero && hasImage) ? '<button class="btn btn-xs btn-ghost" onclick="EditorProUI.broll._regenChildren(\'' + clip.id + '\')">👶🔄</button>' : '';
 
-        var clipSeqPrefix = (broll._currentSequenceName || "BRoll").replace(/[^a-zA-Z0-9_-]/g, "_");
-        var clipDisplayName = clipSeqPrefix + "_BRoll_" + num;
+        // Compact description (truncated)
+        var shortDesc = clip.description || "";
+        if (shortDesc.length > 80) shortDesc = shortDesc.substring(0, 77) + "…";
 
         div.innerHTML =
-            '<input type="checkbox" id="' + checkId + '" class="br-clip-check"' + (isCheckable ? ' checked' : '') + '>' +
-            '<div class="br-clip-header">' +
-                '<span class="br-clip-num">' + num + '</span>' +
-                '<span class="br-clip-timecode br-timecode-link" data-time="' + escAttr(clip.startTime) + '">' + esc(clip.startTime) + '</span>' +
-                (shotBadge || '') + (heroBadge || '') +
-                '<span class="br-clip-name-label">' + esc(clipDisplayName) + '</span>' +
-                '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>' +
-            '</div>' +
-            thumbHtml +
-            '<div class="br-clip-body">' +
-                (clip.versions.length > 1 ? '<div class="br-version-row"><span class="br-version-label">Versión:</span><select class="br-version-select" onchange="EditorProUI.broll._switchVersion(\'' + clip.id + '\', this.value)">' + versionOpts + '</select></div>' : '') +
-                '<div class="br-clip-desc">' + esc(clip.description) + '</div>' +
-                (clip.transcriptText ? '<div class="br-clip-transcript">🎙 <em>' + esc(clip.transcriptText.substring(0, 200)) + (clip.transcriptText.length > 200 ? '…' : '') + '</em></div>' : '') +
-                '<textarea class="br-feedback-input" id="br-feedback-' + clip.id + '" placeholder="Feedback: ej. \'más colorido\', \'sin personas\'..." rows="2"></textarea>' +
-                '<div class="br-clip-actions">' + btnPlace + btnAnimate + btnRegen + btnRegenChildren + '</div>' +
+            '<div class="br-clip-row">' +
+                '<input type="checkbox" id="' + checkId + '" class="br-clip-check"' + (isCheckable ? ' checked' : '') + '>' +
+                thumbHtml +
+                '<div class="br-clip-info">' +
+                    '<div class="br-clip-info-top">' +
+                        '<span class="br-clip-num">' + num + '</span>' +
+                        '<span class="br-clip-timecode br-timecode-link" data-time="' + escAttr(clip.startTime) + '">' + esc(clip.startTime) + '</span>' +
+                        (shotBadge || '') + (heroBadge || '') +
+                        '<span class="br-status-badge" data-status="' + escAttr(clip.status) + '">' + _statusLabel(clip.status) + '</span>' +
+                    '</div>' +
+                    '<div class="br-clip-desc-compact">' + esc(shortDesc) + '</div>' +
+                    (clip.versions.length > 1 ? '<select class="br-version-select-sm" onchange="EditorProUI.broll._switchVersion(\'' + clip.id + '\', this.value)">' + versionOpts + '</select>' : '') +
+                '</div>' +
+                '<div class="br-clip-actions-compact">' + btnPlace + btnAnimate + btnRegen + btnRegenChildren + '</div>' +
             '</div>';
 
         setTimeout(function() {
             var cb = document.getElementById(checkId);
             if (cb) {
-                if (isCheckable) div.classList.add("selected");
+                if (isCheckable && cb.checked) div.classList.add("selected");
                 cb.addEventListener("change", function() {
                     div.classList.toggle("selected", cb.checked);
                     _updateClipSelectedCount();
@@ -201,6 +201,7 @@
             if (e.target.type === "checkbox") return;
             if (e.target.closest && e.target.closest("button")) return;
             if (e.target.tagName === "BUTTON" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
+            if (e.target.tagName === "IMG") return; // let image click expand
             if (e.target.classList.contains("br-timecode-link")) return;
             var cb = document.getElementById(checkId);
             if (cb) { cb.checked = !cb.checked; div.classList.toggle("selected", cb.checked); _updateClipSelectedCount(); }
