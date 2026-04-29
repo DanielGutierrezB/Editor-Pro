@@ -30,7 +30,7 @@ function _generateElevenLabsAudio(description, durationSecs, apiKey, outputPath,
 
   const body = JSON.stringify({
     text: description,
-    duration_seconds: Math.min(22, Math.max(1, Math.round(durationSecs))), // ElevenLabs max ~22s
+    duration_seconds: Math.min(30, Math.max(0.5, durationSecs)), // ElevenLabs: min 0.5s, max 30s
     prompt_influence: 0.3,
   });
 
