@@ -43,6 +43,9 @@ echo "→ Preparing extension files..."
 cp -R "$SCRIPT_DIR/CSXS"   "$BUILD/ext/CSXS"
 cp -R "$SCRIPT_DIR/client"  "$BUILD/ext/client"
 cp -R "$SCRIPT_DIR/host"    "$BUILD/ext/host"
+if [ -d "$SCRIPT_DIR/Prompts" ]; then
+    cp -R "$SCRIPT_DIR/Prompts" "$BUILD/ext/Prompts"
+fi
 
 # Motion-Pro server (without node_modules — user runs npm install)
 mkdir -p "$BUILD/ext/motion-server"
@@ -78,6 +81,13 @@ export const RemotionRoot: React.FC = () => {
 ROOTEOF
 cp "$SCRIPT_DIR/motion-render/src/components/"*.ts  "$BUILD/ext/motion-render/src/components/" 2>/dev/null || true
 cp "$SCRIPT_DIR/motion-render/src/components/"*.tsx "$BUILD/ext/motion-render/src/components/" 2>/dev/null || true
+
+# Write current commit SHA so the updater knows what version is installed
+CURRENT_SHA=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo "")
+if [ -n "$CURRENT_SHA" ]; then
+    echo "$CURRENT_SHA" > "$BUILD/ext/.update-sha"
+    echo "  ✓ .update-sha written ($CURRENT_SHA)"
+fi
 
 echo "  ✓ Files staged (including Motion-Pro)"
 

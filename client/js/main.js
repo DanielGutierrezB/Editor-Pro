@@ -609,32 +609,11 @@
     window._epMP_ANTICIPATION_SECS = 0.35;
 
     // ═══════════════════════════════════════════════════════════════
-    // AUTO-UPDATE ON RELOAD
+    // AUTO-UPDATE ON RELOAD  (delegated to updater.js / EPUpdater)
     // ═══════════════════════════════════════════════════════════════
 
-    var _updateAvailable = false;
-    var _originalReloadHTML = "";
-
     function _checkForUpdates() {
-        try {
-            var exec = require("child_process").exec;
-            var extensionPath = csInterface.getSystemPath("extension");
-            exec("cd '" + extensionPath + "' && BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main) && git fetch origin $BRANCH 2>&1 && git diff --stat HEAD origin/$BRANCH",
-                { timeout: 15000 },
-                function(err, stdout) {
-                    if (stdout && stdout.trim() && stdout.indexOf("files changed") !== -1) {
-                        _updateAvailable = true;
-                        var btn = document.getElementById("btn-reload");
-                        if (btn) {
-                            _originalReloadHTML = btn.innerHTML;
-                            btn.style.cssText = "background:#0ae98d;color:#1a1d23;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;animation:pulse-update 1.5s infinite;white-space:nowrap;";
-                            btn.innerHTML = "⬇";
-                            btn.title = "Hay una actualización disponible — click para actualizar";
-                        }
-                    }
-                }
-            );
-        } catch(e) {}
+        if (window.EPUpdater) window.EPUpdater.checkForUpdates();
     }
 
     function _showVersion() {
@@ -667,58 +646,15 @@
     }
 
     window.checkAndReload = function() {
-        var btn = document.getElementById("btn-reload");
-        var originalHTML = _originalReloadHTML || btn.innerHTML;
-        btn.innerHTML = "⏳";
-        btn.title = "Verificando updates...";
-        btn.style.animation = "";
-
-        try {
-            var exec = require("child_process").exec;
-            var extensionPath = csInterface.getSystemPath("extension");
-
-            exec("cd '" + extensionPath + "' && BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main) && git fetch origin $BRANCH 2>&1 && git diff --stat HEAD origin/$BRANCH",
-                { timeout: 15000 },
-                function(err, stdout) {
-                    if (stdout && stdout.trim() && stdout.indexOf("files changed") !== -1) {
-                        btn.innerHTML = "⬇️";
-                        btn.title = "Descargando update...";
-                        exec("cd '" + extensionPath + "' && BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main) && git stash -q 2>/dev/null; git pull origin $BRANCH 2>&1",
-                            { timeout: 30000 },
-                            function(err2, stdout2) {
-                                if (!err2) {
-                                    btn.innerHTML = "✅";
-                                    btn.title = "Actualizado! Recargando...";
-                                    _cleanupBeforeReload(function() { location.reload(); });
-                                } else {
-                                    // Fallback: force reset to remote (nuclear option — always works)
-                                    exec("cd '" + extensionPath + "' && BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main) && git fetch origin $BRANCH && git reset --hard origin/$BRANCH 2>&1",
-                                        { timeout: 30000 },
-                                        function(err3) {
-                                            if (!err3) {
-                                                btn.innerHTML = "✅";
-                                                btn.title = "Actualizado (reset)! Recargando...";
-                                                _cleanupBeforeReload(function() { location.reload(); });
-                                            } else {
-                                                btn.innerHTML = "❌";
-                                                btn.title = "Error: " + (err3.message || "git pull falló");
-                                                setTimeout(function() { btn.innerHTML = originalHTML; btn.title = "Recargar panel"; }, 3000);
-                                            }
-                                        }
-                                    );
-                                }
-                            }
-                        );
-                    } else {
-                        btn.innerHTML = "✅";
-                        btn.title = "Sin updates — recargando...";
-                        _cleanupBeforeReload(function() { location.reload(); });
-                    }
-                }
-            );
-        } catch(e) {
-            _cleanupBeforeReload(function() { location.reload(); });
+        // If EPUpdater has an update ready, let it handle the full download+apply flow.
+        if (window.EPUpdater && window.EPUpdater.isUpdateAvailable()) {
+            window.EPUpdater.doUpdate();
+            return;
         }
+        // No update available — plain reload (stop server first).
+        var btn = document.getElementById("btn-reload");
+        if (btn) { btn.innerHTML = "⏳"; btn.title = "Recargando..."; }
+        _cleanupBeforeReload(function() { location.reload(); });
     };
 
     // ─── Start ───────────────────────────────────────────────────
