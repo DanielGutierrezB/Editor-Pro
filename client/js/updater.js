@@ -29,7 +29,6 @@
         "motion-render/src/compositions",
         "motion-render/out",
         "node_modules",
-        "mogrts",
         ".env"
     ];
 
