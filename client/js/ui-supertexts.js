@@ -91,7 +91,7 @@
     // SMART SUPERTEXTS — MOGRT graphic clips on timeline
     // ═══════════════════════════════════════════════════════════════
 
-    var ST2_TYPES = ["title", "bullet", "step", "definition", "data", "summary", "highlight"];
+    var ST2_TYPES = ["title", "bullet", "definition", "highlight", "question"];
     var ST2_BULLET_SPACING = 70;
     var ST2_EXTRA_LINE_SPACING = 45;
 
@@ -156,6 +156,50 @@
             if (saved) state.mogrtPaths = JSON.parse(saved);
         } catch(e) {}
         state.mogrtTrackIndex = localStorage.getItem("edupro_mogrt_track") || "auto";
+
+        // Auto-detect bundled MOGRTs if not already configured
+        try {
+            var extPath = csInterface.getSystemPath("extension");
+            if (extPath && pathMod && fs) {
+                var mogrtDir = pathMod.join(extPath, "mogrts");
+                if (fs.existsSync(mogrtDir)) {
+                    var changed = false;
+                    var dirFiles = fs.readdirSync(mogrtDir);
+                    var bundledAliases = {
+                        title: ["title", "titulo", "título"],
+                        bullet: ["bullet", "bullet_point", "bullets"],
+                        definition: ["definition", "definicion", "definición"],
+                        highlight: ["highlight", "highlights", "destacado"],
+                        question: ["question", "pregunta", "preguntas"]
+                    };
+                    ST2_TYPES.forEach(function(t) {
+                        if (!state.mogrtPaths[t] || !fs.existsSync(state.mogrtPaths[t])) {
+                            var aliases = bundledAliases[t] || [t];
+                            var bundled = null;
+                            for (var fi = 0; fi < dirFiles.length; fi++) {
+                                var fname = dirFiles[fi];
+                                var base = fname.replace(/\.mogrt$/i, "").toLowerCase().replace(/[_\-\s]+/g, "");
+                                for (var a = 0; a < aliases.length; a++) {
+                                    if (base === aliases[a] || base.indexOf(aliases[a]) !== -1) {
+                                        bundled = pathMod.join(mogrtDir, fname);
+                                        break;
+                                    }
+                                }
+                                if (bundled) break;
+                            }
+                            if (bundled && fs.existsSync(bundled)) {
+                                state.mogrtPaths[t] = bundled;
+                                changed = true;
+                                console.log("[Smart Supertexts] Auto-configured MOGRT for " + t + ": " + bundled);
+                            }
+                        }
+                    });
+                    if (changed) {
+                        localStorage.setItem("edupro_mogrt_paths", JSON.stringify(state.mogrtPaths));
+                    }
+                }
+            }
+        } catch(e) { console.warn("[Smart Supertexts] Auto-detect MOGRTs error:", e.message); }
 
         ST2_TYPES.forEach(function(t) {
             var fileEl = document.getElementById("st2-mogrt-file-" + t);
@@ -242,16 +286,28 @@
                     return f.toLowerCase().indexOf(".mogrt") === f.length - 6 && f.charAt(0) !== ".";
                 });
 
+                // Map Spanish MOGRT names to types
+                var TYPE_ALIASES = {
+                    title: ["title", "titulo", "título"],
+                    bullet: ["bullet", "bullet_point", "bullets"],
+                    definition: ["definition", "definicion", "definición"],
+                    highlight: ["highlight", "highlights", "destacado"],
+                    question: ["question", "pregunta", "preguntas"]
+                };
+
                 var matched = 0;
                 ST2_TYPES.forEach(function(type) {
-                    var typeLower = type.toLowerCase();
+                    var aliases = TYPE_ALIASES[type] || [type];
                     for (var i = 0; i < mogrtFiles.length; i++) {
-                        var nameLower = mogrtFiles[i].toLowerCase().replace(".mogrt", "");
-                        if (nameLower === typeLower || nameLower.indexOf(typeLower) !== -1) {
-                            var fullPath = folderPath + path.sep + mogrtFiles[i];
-                            state.mogrtPaths[type] = fullPath;
-                            matched++;
-                            break;
+                        var nameLower = mogrtFiles[i].toLowerCase().replace(".mogrt", "").replace(/[_\-\s]+/g, "");
+                        for (var a = 0; a < aliases.length; a++) {
+                            if (nameLower === aliases[a] || nameLower.indexOf(aliases[a]) !== -1) {
+                                var fullPath = folderPath + path.sep + mogrtFiles[i];
+                                state.mogrtPaths[type] = fullPath;
+                                matched++;
+                                i = mogrtFiles.length; // break outer
+                                break;
+                            }
                         }
                     }
                 });
@@ -1207,7 +1263,7 @@
     }
 
     var _st2TypeFilter = null;
-    var ST2_TYPE_COLORS = { title: "var(--accent-bright)", bullet: "var(--success)", step: "var(--info)", definition: "var(--warning)", data: "var(--highlight)", summary: "var(--brand-start)", highlight: "#facc15" };
+    var ST2_TYPE_COLORS = { title: "var(--accent-bright)", bullet: "var(--success)", step: "var(--info)", definition: "var(--warning)", data: "var(--highlight)", summary: "var(--brand-start)", highlight: "#facc15", question: "#f472b6" };
 
     function renderSupertext2Results(result) {
         var summary = document.getElementById("st2-summary");
