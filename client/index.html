@@ -24,7 +24,8 @@
                 <span class="seq-dropdown-arrow">▾</span>
             </button>
             <span id="version-label" style="font-size:10px; color:#666; margin-right:6px; cursor:default;" title="Versión actual">v—</span>
-            <button id="btn-debug-mogrt" class="icon-btn" title="Debug: inspeccionar MOGRT seleccionado (resultado en log)" style="font-size:12px;padding:2px 4px;" onclick="csInterface.evalScript('debugMOGRTProperties()', function(r){ if(window.EPLogger){ window.EPLogger.log('debug','mogrt-inspect',r); } alert('Debug guardado en log. Exporta con 💾'); })">🔍</button>
+            <button id="btn-debug-mogrt" class="icon-btn" title="Debug MOGRT" style="font-size:12px;padding:2px 4px;" onclick="window._debugMOGRT()">🔍</button>
+            <script>window._debugMOGRT=function(){try{csInterface.evalScript("debugMOGRTProperties()",function(r){if(window.EPLogger)window.EPLogger.log("debug","mogrt-inspect",r.substring(0,3000));alert(r.substring(0,800));});}catch(ex){alert("Error: "+ex.message);}};</script>
             <button id="btn-save-log" class="icon-btn" title="Guardar log en Descargas" style="font-size:12px;padding:2px 4px;">💾</button>
             <button id="btn-reload" class="icon-btn" title="Recargar panel (verifica updates)" onclick="checkAndReload()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
