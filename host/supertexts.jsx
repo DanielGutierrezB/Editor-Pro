@@ -286,7 +286,7 @@ function _trySetTextValue(param, newText) {
     return false;
 }
 
-function _setMGTText(trackItem, newText, itemIdx, errors) {
+function _setMGTText(trackItem, newText, itemIdx, errors, titleOverride) {
     newText = _normalizeMogrtNewlines(newText);
 
     // --- Approach: getMGTComponent ---
@@ -294,7 +294,10 @@ function _setMGTText(trackItem, newText, itemIdx, errors) {
     // It can be either:
     //   A) A JSON string with textEditValue (AE Source Text) — use _trySetTextValue
     //   B) A plain string — use setValue directly
-    // We set ALL text properties we find (some MOGRTs have multiple text layers).
+    // For MOGRTs with Title+Text fields (Definition/Data/Step/Summary):
+    //   - "Title" prop → titleOverride (type label like "Dato", "Paso", "Resumen")
+    //   - "Text" prop → newText (supertext content)
+    // For MOGRTs with a single text field: set all to newText.
     try {
         if (typeof trackItem.getMGTComponent === "function") {
             var moComp = trackItem.getMGTComponent();
@@ -304,6 +307,7 @@ function _setMGTText(trackItem, newText, itemIdx, errors) {
                 var didSet = false;
 
                 // Collect all properties and classify them
+                var titleProps = [];     // props named "Title" (for titleOverride)
                 var textProps = [];      // props named "Text" or similar (primary targets)
                 var textEditProps = [];   // props with textEditValue (AE Source Text)
 
@@ -316,17 +320,24 @@ function _setMGTText(trackItem, newText, itemIdx, errors) {
                     propNames.push(dn);
 
                     var dl = dn.toLowerCase();
+
+                    // Detect "Title" property specifically (for type label)
+                    var isTitleName = (dl === "title") || (dl === "titulo") || (dl === "título");
+
                     var isTextName = (dl === "text") ||
                                      (dl.indexOf("text") !== -1) ||
                                      (dl.indexOf("texto") !== -1) ||
-                                     (dl.indexOf("titulo") !== -1) ||
-                                     (dl.indexOf("título") !== -1) ||
                                      (dl.indexOf("bullet") !== -1) ||
                                      (dl.indexOf("pregunta") !== -1) ||
                                      (dl.indexOf("definic") !== -1) ||
                                      (dl.indexOf("source") !== -1) ||
                                      (dl.indexOf("fuente") !== -1) ||
                                      (dl.indexOf("origen") !== -1);
+
+                    // If it's a Title prop with titleOverride, DON'T classify as generic text
+                    if (isTitleName && titleOverride) {
+                        isTextName = false;
+                    }
 
                     // Check what type of value this property has
                     var hasTextEdit = false;
@@ -342,12 +353,30 @@ function _setMGTText(trackItem, newText, itemIdx, errors) {
                         }
                     } catch(ev) {}
 
-                    if (hasTextEdit) textEditProps.push({ prop: prop, index: p, name: dn });
-                    if (isTextName) textProps.push({ prop: prop, index: p, name: dn, hasTextEdit: hasTextEdit });
+                    if (isTitleName && titleOverride) {
+                        titleProps.push({ prop: prop, index: p, name: dn, hasTextEdit: hasTextEdit });
+                    } else {
+                        if (hasTextEdit) textEditProps.push({ prop: prop, index: p, name: dn });
+                        if (isTextName) textProps.push({ prop: prop, index: p, name: dn, hasTextEdit: hasTextEdit });
+                    }
                 }
 
                 $.writeln("[_setMGTText] Item " + itemIdx + ": " + numProps + " props [" + propNames.join(", ") + "]");
-                $.writeln("[_setMGTText]   textProps (by name): " + textProps.length + ", textEditProps: " + textEditProps.length);
+                $.writeln("[_setMGTText]   titleProps: " + titleProps.length + ", textProps (by name): " + textProps.length + ", textEditProps: " + textEditProps.length);
+
+                // Strategy 0: Set Title property with titleOverride (type label)
+                if (titleOverride && titleProps.length > 0) {
+                    for (var ti = 0; ti < titleProps.length; ti++) {
+                        $.writeln("[_setMGTText]   Setting title override on [" + titleProps[ti].index + "] " + titleProps[ti].name + " = " + titleOverride);
+                        if (titleProps[ti].hasTextEdit) {
+                            if (_trySetTextValue(titleProps[ti].prop, titleOverride)) didSet = true;
+                        } else {
+                            try { titleProps[ti].prop.setValue(titleOverride, 1); didSet = true; } catch(e1) {
+                                try { titleProps[ti].prop.setValue(titleOverride); didSet = true; } catch(e2) {}
+                            }
+                        }
+                    }
+                }
 
                 // Strategy A: Set ALL textEditValue properties (these are AE Source Text layers)
                 for (var te = 0; te < textEditProps.length; te++) {
@@ -520,7 +549,16 @@ function insertSupertextMOGRTs(jsonPath) {
                 $.sleep(1000);
 
                 // 1. Texto — primero para no perder la referencia
-                var didSetText = _setMGTText(trackItem, st.text, i, errors);
+                // For MOGRTs with Title+Text (definition, data, step, summary):
+                // set Title to type label, Text to supertext content
+                var TYPE_TITLE_LABELS = {
+                    definition: "Definición",
+                    data: "Dato",
+                    step: "Paso",
+                    summary: "Resumen"
+                };
+                var titleLabel = TYPE_TITLE_LABELS[st.type] || null;
+                var didSetText = _setMGTText(trackItem, st.text, i, errors, titleLabel);
                 if (didSetText) textSet++;
                 $.sleep(200);
 
@@ -664,7 +702,14 @@ function replaceMOGRTClip(jsonPath) {
         $.sleep(1000);
 
         var errors = [];
-        _setMGTText(trackItem, data.text, 0, errors);
+        var REP_TYPE_LABELS = {
+            definition: "Definición",
+            data: "Dato",
+            step: "Paso",
+            summary: "Resumen"
+        };
+        var repTitleLabel = REP_TYPE_LABELS[data.type] || null;
+        _setMGTText(trackItem, data.text, 0, errors, repTitleLabel);
         $.sleep(200);
 
         try {
