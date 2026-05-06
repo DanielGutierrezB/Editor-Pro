@@ -265,6 +265,54 @@
         }
     }
 
+    function loadDefaultMOGRTs() {
+        try {
+            var extPath = csInterface.getSystemPath("extension");
+            if (!extPath || !fs || !pathMod) {
+                showToast("No se pudo detectar la ruta de la extensión", "error");
+                return;
+            }
+            var mogrtDir = pathMod.join(extPath, "mogrts");
+            if (!fs.existsSync(mogrtDir)) {
+                showToast("Carpeta mogrts/ no encontrada en la extensión", "error");
+                return;
+            }
+
+            var dirFiles = fs.readdirSync(mogrtDir);
+            var defaultAliases = {
+                title: ["title", "titulo", "título"],
+                bullet: ["bullet", "bullet_point", "bullets"],
+                definition: ["definition", "definicion", "definición"],
+                highlight: ["highlight", "highlights", "destacado"],
+                question: ["question", "pregunta", "preguntas"]
+            };
+
+            var matched = 0;
+            ST2_TYPES.forEach(function(t) {
+                var aliases = defaultAliases[t] || [t];
+                for (var fi = 0; fi < dirFiles.length; fi++) {
+                    var fname = dirFiles[fi];
+                    if (!fname.toLowerCase().endsWith(".mogrt")) continue;
+                    var base = fname.replace(/\.mogrt$/i, "").toLowerCase().replace(/[_\-\s]+/g, "");
+                    for (var a = 0; a < aliases.length; a++) {
+                        if (base === aliases[a] || base.indexOf(aliases[a]) !== -1) {
+                            state.mogrtPaths[t] = pathMod.join(mogrtDir, fname);
+                            matched++;
+                            fi = dirFiles.length;
+                            break;
+                        }
+                    }
+                }
+            });
+
+            localStorage.setItem("edupro_mogrt_paths", JSON.stringify(state.mogrtPaths));
+            loadMOGRTConfig();
+            showToast(matched + "/" + ST2_TYPES.length + " MOGRTs cargados desde defaults", "success");
+        } catch(e) {
+            showToast("Error cargando defaults: " + e.message, "error");
+        }
+    }
+
     function loadMOGRTFolder() {
         csInterface.evalScript("selectFolder()", function(result) {
             try {
@@ -2033,6 +2081,7 @@
         loadMOGRTConfig: loadMOGRTConfig,
         selectMOGRTFile: selectMOGRTFile,
         toggleMOGRTConfig: toggleMOGRTConfig,
+        loadDefaultMOGRTs: loadDefaultMOGRTs,
         loadMOGRTFolder: loadMOGRTFolder,
         setST2Progress: setST2Progress,
         batchOpen: st2BatchOpen,
