@@ -92,8 +92,8 @@
     // ═══════════════════════════════════════════════════════════════
 
     var ST2_TYPES = ["title", "bullet", "step", "definition", "data", "highlight", "summary", "question"];
-    var ST2_BULLET_SPACING = 70;
-    var ST2_EXTRA_LINE_SPACING = 45;
+    var ST2_BULLET_SPACING = 100;
+    var ST2_EXTRA_LINE_SPACING = 50;
 
     /**
      * Formatea el texto para el MOGRT:
@@ -114,7 +114,14 @@
             if (lines.length > 0) {
                 lines[0] = lines[0].trim().replace(/^[•·►▸▹‣⁃\-–—]\s*/, "");
             }
+            // Max 1 line break (2 lines)
+            if (lines.length > 2) lines = lines.slice(0, 2);
             t = lines.join("\n");
+        } else {
+            // Non-bullet types (definition, data, step, summary, etc.): also max 1 line break
+            var nLines = t.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+            if (nLines.length > 2) nLines = nLines.slice(0, 2);
+            t = nLines.join("\n");
         }
         if (t === t.toUpperCase() && t.length > 3) {
             t = t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
@@ -122,12 +129,12 @@
         return t;
     }
 
-    /** Cuenta líneas visibles en un texto (cada \n agrega una línea). */
+    /** Cuenta líneas visibles en un texto (cada \n agrega una línea). Cap at 2 (max 1 line break). */
     function _st2LineCount(text) {
         if (!text) return 1;
         var s = normalizeSupertextNewlines(text);
         var lines = s.split(/\r?\n/).length;
-        return Math.max(1, lines);
+        return Math.min(Math.max(1, lines), 2); // max 2 lines (1 line break)
     }
 
     // ── Pedagogical timing constants ──
@@ -1688,14 +1695,16 @@
                 var cascId = "c" + (cascadeCounter++);
 
                 // Calcular posiciones Y acumuladas teniendo en cuenta líneas por ítem
+                // El primer bullet (c=0) se importa sin mover — su posición nativa del MOGRT es la base.
+                // Los siguientes se desplazan hacia abajo relativamente.
                 var cascYOffsets = [];
+                cascYOffsets[0] = 0; // primer item: sin desplazar
                 var accumY = 0;
-                for (var cy = cascadeLen - 1; cy >= 0; cy--) {
-                    cascYOffsets[cy] = -accumY;
+                for (var cy = 0; cy < cascadeLen - 1; cy++) {
                     var lines = _st2LineCount(cascade[cy].text);
-                    accumY += ST2_BULLET_SPACING + (lines - 1) * ST2_EXTRA_LINE_SPACING;
+                    accumY += ST2_BULLET_SPACING + (lines > 1 ? ST2_EXTRA_LINE_SPACING : 0);
+                    cascYOffsets[cy + 1] = accumY;
                 }
-                if (cascYOffsets[0] !== undefined) cascYOffsets[0] -= titleSpacing;
 
                 for (var c = 0; c < cascadeLen; c++) {
                     var cst = cascade[c];
@@ -1738,12 +1747,14 @@
                 var bGroupLen = bGroup.length;
                 var bCascId = "c" + (cascadeCounter++);
 
+                // Primer bullet sin mover, los siguientes se desplazan hacia abajo
                 var bYOffsets = [];
+                bYOffsets[0] = 0; // primer bullet: posición nativa del MOGRT
                 var bAccumY = 0;
-                for (var by = bGroupLen - 1; by >= 0; by--) {
-                    bYOffsets[by] = -bAccumY;
+                for (var by = 0; by < bGroupLen - 1; by++) {
                     var bLines = _st2LineCount(bGroup[by].text);
-                    bAccumY += ST2_BULLET_SPACING + (bLines - 1) * ST2_EXTRA_LINE_SPACING;
+                    bAccumY += ST2_BULLET_SPACING + (bLines > 1 ? ST2_EXTRA_LINE_SPACING : 0);
+                    bYOffsets[by + 1] = bAccumY;
                 }
 
                 for (var g = 0; g < bGroupLen; g++) {
