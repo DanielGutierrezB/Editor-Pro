@@ -542,6 +542,9 @@ function insertSupertextMOGRTs(jsonPath) {
                 try { trackItem.name = "[" + typeTag + "] " + _mogrtOneLineName(st.text); } catch(eName) {}
 
                 // Label colors (Premiere 0-15): high contrast between types
+                // NOTE: setColorLabel only works on projectItems (bin items), NOT trackItems.
+                // Clips inherit color from their source projectItem at insertion time,
+                // but changing the projectItem color afterwards also updates timeline clips.
                 var TYPE_COLORS = {
                     title:      3,   // Lavender — matches UI indigo (#a5b4fc)
                     bullet:    10,   // Teal — matches UI green (#34d399)
@@ -551,7 +554,7 @@ function insertSupertextMOGRTs(jsonPath) {
                 };
                 var labelColor = TYPE_COLORS[st.type] !== undefined ? TYPE_COLORS[st.type] : 0;
                 try {
-                    // importMGT returns a limited object — find the real clip in the track
+                    // Find the projectItem in the bin via the trackItem's projectItem reference
                     var realClip = null;
                     var targetTrackObj = seq.videoTracks[targetTrack];
                     if (targetTrackObj) {
@@ -563,10 +566,15 @@ function insertSupertextMOGRTs(jsonPath) {
                             }
                         }
                     }
-                    if (realClip) {
-                        realClip.setColorLabel(labelColor);
-                    } else {
-                        trackItem.setColorLabel(labelColor);
+                    // Get the projectItem from the clip and set color there
+                    var pItem = null;
+                    if (realClip && realClip.projectItem) {
+                        pItem = realClip.projectItem;
+                    } else if (trackItem && trackItem.projectItem) {
+                        pItem = trackItem.projectItem;
+                    }
+                    if (pItem && typeof pItem.setColorLabel === "function") {
+                        pItem.setColorLabel(labelColor);
                     }
                 } catch(eLabel) {}
 
