@@ -543,11 +543,11 @@ function insertSupertextMOGRTs(jsonPath) {
 
                 // Label colors (Premiere 0-15): high contrast between types
                 var TYPE_COLORS = {
-                    title:      6,   // Amarillo
-                    bullet:     4,   // Cyan
-                    definition: 9,   // Naranja
-                    highlight:  7,   // Morado
-                    question:   3    // Verde
+                    title:      3,   // Lavender — matches UI indigo (#a5b4fc)
+                    bullet:    10,   // Teal — matches UI green (#34d399)
+                    definition: 7,   // Mango — matches UI amber (#fbbf24)
+                    highlight: 15,   // Yellow — matches UI yellow (#facc15)
+                    question:   6    // Rose — matches UI pink (#f472b6)
                 };
                 var labelColor = TYPE_COLORS[st.type] !== undefined ? TYPE_COLORS[st.type] : 0;
                 try {
