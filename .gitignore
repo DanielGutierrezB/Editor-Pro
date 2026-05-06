@@ -22,6 +22,8 @@ Thumbs.db
 .env
 .env.*
 
-# Update channel (local per-installation)
-.update-channel
+# Update SHA (local per-installation)
 .update-sha
+
+# Dist (too large for auto-update downloads)
+dist/

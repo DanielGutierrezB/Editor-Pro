@@ -144,39 +144,71 @@
     }
 
     // Download binary data to a file path, following up to 5 redirects.
+    // Includes a 120s timeout to prevent hanging.
     function _downloadToFile(url, destPath, redirectsLeft, callback) {
         if (redirectsLeft === undefined) redirectsLeft = 5;
+        var _called = false;
+        function _cb(err, result) {
+            if (_called) return;
+            _called = true;
+            callback(err, result);
+        }
         try {
             var https = require("https");
+            var http  = require("http");
             var fs    = require("fs");
             var urlMod = require("url");
             var parsed = urlMod.parse(url);
+            var httpMod = (parsed.protocol === "http:") ? http : https;
             var opts = {
                 hostname: parsed.hostname,
-                port: parsed.port || 443,
+                port: parsed.port || (parsed.protocol === "http:" ? 80 : 443),
                 path: parsed.path,
                 method: "GET",
-                headers: { "User-Agent": "Editor-Pro-Updater/1.0" }
+                headers: { "User-Agent": "Editor-Pro-Updater/1.0" },
+                timeout: 120000
             };
-            var req = https.request(opts, function(res) {
+            _log("Download: " + parsed.hostname + parsed.path);
+            var req = httpMod.request(opts, function(res) {
+                _log("Download response: HTTP " + res.statusCode);
                 if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location && redirectsLeft > 0) {
-                    return _downloadToFile(res.headers.location, destPath, redirectsLeft - 1, callback);
+                    return _downloadToFile(res.headers.location, destPath, redirectsLeft - 1, _cb);
                 }
+                if (res.statusCode !== 200) {
+                    return _cb(new Error("HTTP " + res.statusCode));
+                }
+                var totalSize = parseInt(res.headers["content-length"]) || 0;
+                var downloaded = 0;
                 var out = fs.createWriteStream(destPath);
+                res.on("data", function(chunk) {
+                    downloaded += chunk.length;
+                    if (totalSize > 0) {
+                        var pct = Math.round(downloaded / totalSize * 100);
+                        _setBtn("⬇ " + pct + "%", "Descargando: " + pct + "%");
+                    }
+                });
                 res.pipe(out);
                 out.on("finish", function() {
-                    out.close(function() { callback(null); });
+                    out.close(function() {
+                        _log("Download complete: " + downloaded + " bytes");
+                        _cb(null);
+                    });
                 });
                 out.on("error", function(e) {
                     fs.unlink(destPath, function() {});
-                    callback(e);
+                    _cb(e);
                 });
                 res.on("error", function(e) {
                     fs.unlink(destPath, function() {});
-                    callback(e);
+                    _cb(e);
                 });
             });
-            req.on("error", callback);
+            req.on("timeout", function() {
+                req.destroy();
+                fs.unlink(destPath, function() {});
+                _cb(new Error("Download timeout (120s)"));
+            });
+            req.on("error", _cb);
             req.end();
         } catch(e) {
             callback(e);
