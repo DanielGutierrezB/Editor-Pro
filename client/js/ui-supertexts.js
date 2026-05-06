@@ -164,9 +164,23 @@
                 var mogrtDir = pathMod.join(extPath, "mogrts");
                 if (fs.existsSync(mogrtDir)) {
                     var changed = false;
+                    var dirFiles = fs.readdirSync(mogrtDir);
                     ST2_TYPES.forEach(function(t) {
-                        if (!state.mogrtPaths[t]) {
+                        if (!state.mogrtPaths[t] || !fs.existsSync(state.mogrtPaths[t])) {
+                            // Try exact match first, then case-insensitive
                             var bundled = pathMod.join(mogrtDir, t + ".mogrt");
+                            if (!fs.existsSync(bundled)) {
+                                // Case-insensitive search
+                                var tLower = t.toLowerCase();
+                                for (var fi = 0; fi < dirFiles.length; fi++) {
+                                    var fname = dirFiles[fi];
+                                    var base = fname.replace(/\.mogrt$/i, "").toLowerCase();
+                                    if (base === tLower) {
+                                        bundled = pathMod.join(mogrtDir, fname);
+                                        break;
+                                    }
+                                }
+                            }
                             if (fs.existsSync(bundled)) {
                                 state.mogrtPaths[t] = bundled;
                                 changed = true;
