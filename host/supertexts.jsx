@@ -260,89 +260,104 @@ function _trySetTextValue(param, newText) {
 function _setMGTText(trackItem, newText, itemIdx, errors) {
     newText = _normalizeMogrtNewlines(newText);
 
-    // Helper: check if a property name looks like an editable text field
-    function _isTextProp(displayName) {
-        var dl = displayName.toLowerCase();
-        return (dl.indexOf("text") !== -1) ||
-               (dl.indexOf("texto") !== -1) ||
-               (dl.indexOf("titulo") !== -1) ||
-               (dl.indexOf("título") !== -1) ||
-               (dl.indexOf("bullet") !== -1) ||
-               (dl.indexOf("pregunta") !== -1) ||
-               (dl.indexOf("definic") !== -1) ||
-               (dl.indexOf("source") !== -1) ||
-               (dl.indexOf("fuente") !== -1) ||
-               (dl.indexOf("origen") !== -1);
-    }
-
-    // Helper: recursively search properties (handles Groups that contain text fields)
-    function _findAndSetText(propsContainer, depth) {
-        if (depth > 5) return false; // prevent infinite recursion
-        if (!propsContainer || !propsContainer.numItems) return false;
-
-        // Pass 1: look for text-like named properties
-        for (var p = 0; p < propsContainer.numItems; p++) {
-            var prop;
-            try { prop = propsContainer[p]; } catch(e) { continue; }
-            if (!prop) continue;
-            var dn = "";
-            try { dn = prop.displayName || ""; } catch(e) {}
-
-            if (_isTextProp(dn)) {
-                if (_trySetTextValue(prop, newText)) return true;
-                // If it's a group, recurse into it
-                try {
-                    if (prop.properties && prop.properties.numItems > 0) {
-                        if (_findAndSetText(prop.properties, depth + 1)) return true;
-                    }
-                } catch(eg) {}
-            }
-        }
-
-        // Pass 2: recurse into all groups
-        for (var g = 0; g < propsContainer.numItems; g++) {
-            var gProp;
-            try { gProp = propsContainer[g]; } catch(e) { continue; }
-            if (!gProp) continue;
-            try {
-                if (gProp.properties && gProp.properties.numItems > 0) {
-                    if (_findAndSetText(gProp.properties, depth + 1)) return true;
-                }
-            } catch(eg) {}
-        }
-
-        // Pass 3: try every property as last resort
-        for (var p2 = 0; p2 < propsContainer.numItems; p2++) {
-            var prop2;
-            try { prop2 = propsContainer[p2]; } catch(e) { continue; }
-            if (!prop2) continue;
-            if (_trySetTextValue(prop2, newText)) return true;
-        }
-
-        return false;
-    }
-
-    // --- Approach A: getMGTComponent (preferred, returns Essential Properties) ---
+    // --- Approach: getMGTComponent — iterate ALL properties, try to set text on each ---
+    // MOGRT Essential Graphics properties are flat (not nested groups in ExtendScript).
+    // We try every property: first text-named ones, then all others as fallback.
     try {
         if (typeof trackItem.getMGTComponent === "function") {
             var moComp = trackItem.getMGTComponent();
             if (moComp && moComp.properties && moComp.properties.numItems > 0) {
-                if (_findAndSetText(moComp.properties, 0)) return true;
-                errors.push("Item " + itemIdx + ": getMGTComponent tiene " + moComp.properties.numItems + " props pero ninguna aceptó texto");
+                var numProps = moComp.properties.numItems;
+                var propNames = [];
+
+                // Pass 1: try properties with text-like names
+                for (var p = 0; p < numProps; p++) {
+                    var prop;
+                    try { prop = moComp.properties[p]; } catch(e) { continue; }
+                    if (!prop) continue;
+                    var dn = "";
+                    try { dn = prop.displayName || ""; } catch(e) {}
+                    propNames.push(dn);
+
+                    var dl = dn.toLowerCase();
+                    var isText = (dl.indexOf("text") !== -1) ||
+                                 (dl.indexOf("texto") !== -1) ||
+                                 (dl.indexOf("titulo") !== -1) ||
+                                 (dl.indexOf("título") !== -1) ||
+                                 (dl.indexOf("bullet") !== -1) ||
+                                 (dl.indexOf("pregunta") !== -1) ||
+                                 (dl.indexOf("definic") !== -1) ||
+                                 (dl.indexOf("source") !== -1) ||
+                                 (dl.indexOf("fuente") !== -1) ||
+                                 (dl.indexOf("origen") !== -1);
+
+                    if (isText) {
+                        // Check if getValue returns a text-like object (has textEditValue)
+                        try {
+                            var val = prop.getValue();
+                            var isTextObj = false;
+                            if (typeof val === "string" && val.charAt(0) === "{") {
+                                var parsed = JSON.parse(val);
+                                isTextObj = (parsed.textEditValue !== undefined);
+                            } else if (typeof val === "object" && val !== null) {
+                                isTextObj = (val.textEditValue !== undefined);
+                            }
+                            if (isTextObj) {
+                                if (_trySetTextValue(prop, newText)) return true;
+                            }
+                        } catch(ev) {}
+                        // Try anyway even if not text obj
+                        if (_trySetTextValue(prop, newText)) return true;
+                    }
+                }
+
+                // Pass 2: try ALL properties — find first one with textEditValue
+                for (var p2 = 0; p2 < numProps; p2++) {
+                    var prop2;
+                    try { prop2 = moComp.properties[p2]; } catch(e) { continue; }
+                    if (!prop2) continue;
+                    try {
+                        var val2 = prop2.getValue();
+                        var isTextObj2 = false;
+                        if (typeof val2 === "string" && val2.charAt(0) === "{") {
+                            var parsed2 = JSON.parse(val2);
+                            isTextObj2 = (parsed2.textEditValue !== undefined);
+                        } else if (typeof val2 === "object" && val2 !== null) {
+                            isTextObj2 = (val2.textEditValue !== undefined);
+                        }
+                        if (isTextObj2) {
+                            if (_trySetTextValue(prop2, newText)) return true;
+                        }
+                    } catch(ev2) {}
+                }
+
+                errors.push("Item " + itemIdx + ": " + numProps + " props [" + propNames.join(", ") + "] — none accepted text");
             }
         }
     } catch(eMGT) {
         errors.push("Item " + itemIdx + ": getMGTComponent error — " + eMGT.message);
     }
 
-    // --- Approach B: iterate trackItem.components looking for text components ---
+    // --- Fallback: iterate trackItem.components ---
     try {
         var numComps = trackItem.components.numItems;
         for (var c = 0; c < numComps; c++) {
             var comp;
             try { comp = trackItem.components[c]; } catch(ec) { continue; }
-            if (comp && comp.properties && comp.properties.numItems > 0) {
-                if (_findAndSetText(comp.properties, 0)) return true;
+            if (!comp || !comp.properties) continue;
+            for (var pp = 0; pp < comp.properties.numItems; pp++) {
+                var pr;
+                try { pr = comp.properties[pp]; } catch(ep) { continue; }
+                if (!pr) continue;
+                try {
+                    var prVal = pr.getValue();
+                    if (typeof prVal === "string" && prVal.charAt(0) === "{") {
+                        var prParsed = JSON.parse(prVal);
+                        if (prParsed.textEditValue !== undefined) {
+                            if (_trySetTextValue(pr, newText)) return true;
+                        }
+                    }
+                } catch(epv) {}
             }
         }
     } catch(eComp) {
