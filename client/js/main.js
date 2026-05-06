@@ -620,7 +620,14 @@
 
     function _showVersion() {
         try {
-            var extensionPath = csInterface.getSystemPath("extension");
+            var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+            if (!extensionPath) extensionPath = csInterface.getSystemPath("extension");
+            if (extensionPath) {
+                // Strip file:/// prefix if present (Windows CSInterface quirk)
+                extensionPath = extensionPath.replace(/^file:\/{0,3}/, "");
+                // Decode URI components (%20 → space)
+                try { extensionPath = decodeURIComponent(extensionPath); } catch(_) {}
+            }
             var versionFile = path.join(extensionPath, "VERSION");
             if (fs.existsSync(versionFile)) {
                 var ver = fs.readFileSync(versionFile, "utf8").trim();
@@ -630,7 +637,7 @@
                     label.title = "Editor-Pro v" + ver;
                 }
             }
-        } catch(e) {}
+        } catch(e) { console.warn("[Editor-Pro] _showVersion error:", e.message); }
     }
     setTimeout(_showVersion, 500);
     setTimeout(_checkForUpdates, 5000);

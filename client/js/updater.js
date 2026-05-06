@@ -45,18 +45,27 @@
     // ─── Extension path ─────────────────────────────────────────────────────────
 
     function _getExtensionPath() {
+        var raw = null;
         try {
             // Try global csInterface first
             if (global.csInterface) {
-                var p = global.csInterface.getSystemPath("extension");
-                if (p) return p;
+                raw = global.csInterface.getSystemPath(SystemPath.EXTENSION) ||
+                      global.csInterface.getSystemPath("extension");
             }
             // Fallback: create a fresh instance
-            var csi = new CSInterface();
-            var p2 = csi.getSystemPath("extension");
-            if (p2) return p2;
+            if (!raw) {
+                var csi = new CSInterface();
+                raw = csi.getSystemPath(SystemPath.EXTENSION) ||
+                      csi.getSystemPath("extension");
+            }
         } catch(e) {
-            _log("Cannot get extension path: " + e.message);
+            _log("CSInterface path error: " + e.message);
+        }
+        if (raw) {
+            // Strip file:/// prefix (Windows CSInterface quirk)
+            raw = raw.replace(/^file:\/{0,3}/, "");
+            try { raw = decodeURIComponent(raw); } catch(_) {}
+            return raw;
         }
         // Last resort: derive from script location
         try {
