@@ -91,7 +91,7 @@
     // SMART SUPERTEXTS — MOGRT graphic clips on timeline
     // ═══════════════════════════════════════════════════════════════
 
-    var ST2_TYPES = ["title", "bullet", "definition", "highlight", "question"];
+    var ST2_TYPES = ["title", "bullet", "step", "definition", "data", "highlight", "summary", "question"];
     var ST2_BULLET_SPACING = 70;
     var ST2_EXTRA_LINE_SPACING = 45;
 
@@ -166,8 +166,11 @@
                     var bundledAliases = {
                         title: ["title", "titulo", "título"],
                         bullet: ["bullet", "bullet_point", "bullets"],
+                        step: ["step", "steps", "paso", "pasos"],
                         definition: ["definition", "definicion", "definición"],
+                        data: ["data", "datos", "dato"],
                         highlight: ["highlight", "highlights", "destacado"],
+                        summary: ["summary", "resumen"],
                         question: ["question", "pregunta", "preguntas"]
                     };
                     ST2_TYPES.forEach(function(t) {
@@ -280,8 +283,11 @@
             var defaultAliases = {
                 title: ["title", "titulo", "título"],
                 bullet: ["bullet", "bullet_point", "bullets"],
+                step: ["step", "steps", "paso", "pasos"],
                 definition: ["definition", "definicion", "definición"],
+                data: ["data", "datos", "dato"],
                 highlight: ["highlight", "highlights", "destacado"],
+                summary: ["summary", "resumen"],
                 question: ["question", "pregunta", "preguntas"]
             };
 
@@ -336,8 +342,11 @@
                 var TYPE_ALIASES = {
                     title: ["title", "titulo", "título"],
                     bullet: ["bullet", "bullet_point", "bullets"],
+                    step: ["step", "steps", "paso", "pasos"],
                     definition: ["definition", "definicion", "definición"],
+                    data: ["data", "datos", "dato"],
                     highlight: ["highlight", "highlights", "destacado"],
+                    summary: ["summary", "resumen"],
                     question: ["question", "pregunta", "preguntas"]
                 };
 

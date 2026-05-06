@@ -548,8 +548,11 @@ function insertSupertextMOGRTs(jsonPath) {
                 var TYPE_COLORS = {
                     title:      3,   // Lavender — matches UI indigo (#a5b4fc)
                     bullet:    10,   // Teal — matches UI green (#34d399)
+                    step:       8,   // Cerulean — matches UI info/blue
                     definition: 7,   // Mango — matches UI amber (#fbbf24)
+                    data:       9,   // Caribbean — matches UI highlight
                     highlight: 15,   // Yellow — matches UI yellow (#facc15)
+                    summary:    4,   // Iris — matches UI brand/purple
                     question:   6    // Rose — matches UI pink (#f472b6)
                 };
                 var labelColor = TYPE_COLORS[st.type] !== undefined ? TYPE_COLORS[st.type] : 0;
