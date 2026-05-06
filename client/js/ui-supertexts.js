@@ -150,7 +150,7 @@
     // Estimated reading speed: seconds per word for buffer calculation.
     var ST2_SECS_PER_WORD = 0.25;
     // Minimum on-screen duration for any element (avoids flash appearances).
-    var ST2_MIN_DURATION_SECS = 3.0;
+    var ST2_MIN_DURATION_SECS = 6.0;  // Hard rule: ningún supertext dura menos de 6s (duración natural del MOGRT)
 
     // Motion Pro: ligero adelanto respecto al audio (demasiado = el gráfico “va por delante” del profesor).
     var MP_ANTICIPATION_SECS = 0.35;

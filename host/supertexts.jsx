@@ -635,13 +635,14 @@ function insertSupertextMOGRTs(jsonPath) {
                 if (didSetText) textSet++;
                 $.sleep(200);
 
-                // 2. Duración: buscar el clip en la pista y fijar .end ahí
-                //    (importMGT devuelve un objeto que NO permite fijar .end en MOGRTs)
+                // 2. Duración: solo EXTENDER si dura más que el default del MOGRT (6s).
+                //    NUNCA recortar — recortar corta la animación de salida del MOGRT.
                 try {
                     var duration = endSecs - startSecs;
-                    if (duration > 0.01) {
+                    var MOGRT_DEFAULT_DURATION = 6.0;
+                    if (duration > MOGRT_DEFAULT_DURATION) {
                         if (!_setMogrtClipEnd(seq, targetTrack, startSecs, endSecs)) {
-                            errors.push("Item " + i + ": no se pudo fijar duración (" + duration.toFixed(1) + "s) en pista " + targetTrack);
+                            errors.push("Item " + i + ": no se pudo extender duración (" + duration.toFixed(1) + "s) en pista " + targetTrack);
                         }
                     }
                 } catch(eDur) {
