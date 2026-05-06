@@ -45,18 +45,27 @@
     // ─── Extension path ─────────────────────────────────────────────────────────
 
     function _getExtensionPath() {
+        var raw = null;
         try {
             // Try global csInterface first
             if (global.csInterface) {
-                var p = global.csInterface.getSystemPath("extension");
-                if (p) return p;
+                raw = global.csInterface.getSystemPath(SystemPath.EXTENSION) ||
+                      global.csInterface.getSystemPath("extension");
             }
             // Fallback: create a fresh instance
-            var csi = new CSInterface();
-            var p2 = csi.getSystemPath("extension");
-            if (p2) return p2;
+            if (!raw) {
+                var csi = new CSInterface();
+                raw = csi.getSystemPath(SystemPath.EXTENSION) ||
+                      csi.getSystemPath("extension");
+            }
         } catch(e) {
-            _log("Cannot get extension path: " + e.message);
+            _log("CSInterface path error: " + e.message);
+        }
+        if (raw) {
+            // Strip file:/// prefix (Windows CSInterface quirk)
+            raw = raw.replace(/^file:\/{0,3}/, "");
+            try { raw = decodeURIComponent(raw); } catch(_) {}
+            return raw;
         }
         // Last resort: derive from script location
         try {
@@ -319,17 +328,25 @@
 
     // ─── Public: checkForUpdates ────────────────────────────────────────────────
 
-    function checkForUpdates() {
+    function checkForUpdates(callback) {
         try {
             var localSha = _readLocalSha();
             var apiUrl = "https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/commits/" + GITHUB_BRANCH;
 
             _httpsGetText(apiUrl, 5, function(err, body) {
-                if (err) { _log("Check failed: " + err.message); return; }
+                if (err) {
+                    _log("Check failed: " + err.message);
+                    if (callback) callback(false);
+                    return;
+                }
                 try {
                     var data = JSON.parse(body);
                     var remoteSha = data.sha;
-                    if (!remoteSha) { _log("No SHA in response"); return; }
+                    if (!remoteSha) {
+                        _log("No SHA in response");
+                        if (callback) callback(false);
+                        return;
+                    }
 
                     _latestSha = remoteSha;
 
@@ -343,15 +360,19 @@
                             btn.innerHTML = "⬇";
                             btn.title = "Hay una actualización disponible — click para actualizar";
                         }
+                        if (callback) callback(true);
                     } else {
                         _log("Up to date: " + remoteSha.substr(0, 7));
+                        if (callback) callback(false);
                     }
                 } catch(e) {
                     _log("Parse error: " + e.message);
+                    if (callback) callback(false);
                 }
             });
         } catch(e) {
             _log("Unexpected error: " + e.message);
+            if (callback) callback(false);
         }
     }
 

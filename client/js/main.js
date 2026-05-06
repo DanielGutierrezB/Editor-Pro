@@ -225,6 +225,7 @@
         loadMOGRTConfig();
 
         on("mogrt-config-toggle", "click", toggleMOGRTConfig);
+        on("btn-mogrt-default", "click", loadDefaultMOGRTs);
         on("btn-mogrt-folder", "click", loadMOGRTFolder);
 
         // Smart Supertexts — Batch
@@ -520,6 +521,7 @@
     function selectMOGRTFile(type) { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.selectMOGRTFile(type); }
     function loadMOGRTConfig() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.loadMOGRTConfig(); }
     function toggleMOGRTConfig() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.toggleMOGRTConfig(); }
+    function loadDefaultMOGRTs() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.loadDefaultMOGRTs(); }
     function loadMOGRTFolder() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.loadMOGRTFolder(); }
     function st2BatchOpen() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchOpen(); }
     function st2BatchAnalyzeAll() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchAnalyzeAll(); }
@@ -618,7 +620,14 @@
 
     function _showVersion() {
         try {
-            var extensionPath = csInterface.getSystemPath("extension");
+            var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+            if (!extensionPath) extensionPath = csInterface.getSystemPath("extension");
+            if (extensionPath) {
+                // Strip file:/// prefix if present (Windows CSInterface quirk)
+                extensionPath = extensionPath.replace(/^file:\/{0,3}/, "");
+                // Decode URI components (%20 → space)
+                try { extensionPath = decodeURIComponent(extensionPath); } catch(_) {}
+            }
             var versionFile = path.join(extensionPath, "VERSION");
             if (fs.existsSync(versionFile)) {
                 var ver = fs.readFileSync(versionFile, "utf8").trim();
@@ -628,7 +637,7 @@
                     label.title = "Editor-Pro v" + ver;
                 }
             }
-        } catch(e) {}
+        } catch(e) { console.warn("[Editor-Pro] _showVersion error:", e.message); }
     }
     setTimeout(_showVersion, 500);
     setTimeout(_checkForUpdates, 5000);
@@ -646,15 +655,28 @@
     }
 
     window.checkAndReload = function() {
-        // If EPUpdater has an update ready, let it handle the full download+apply flow.
+        // If update already detected, apply immediately
         if (window.EPUpdater && window.EPUpdater.isUpdateAvailable()) {
             window.EPUpdater.doUpdate();
             return;
         }
-        // No update available — plain reload (stop server first).
+
+        // Otherwise, check for updates first, then decide
         var btn = document.getElementById("btn-reload");
-        if (btn) { btn.innerHTML = "⏳"; btn.title = "Recargando..."; }
-        _cleanupBeforeReload(function() { location.reload(); });
+        if (btn) { btn.innerHTML = "⏳"; btn.title = "Verificando updates..."; }
+
+        if (window.EPUpdater && window.EPUpdater.checkForUpdates) {
+            window.EPUpdater.checkForUpdates(function(hasUpdate) {
+                if (hasUpdate) {
+                    window.EPUpdater.doUpdate();
+                } else {
+                    if (btn) { btn.innerHTML = "⏳"; btn.title = "Recargando..."; }
+                    _cleanupBeforeReload(function() { location.reload(); });
+                }
+            });
+        } else {
+            _cleanupBeforeReload(function() { location.reload(); });
+        }
     };
 
     // ─── Start ───────────────────────────────────────────────────
