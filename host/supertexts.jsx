@@ -511,7 +511,25 @@ function insertSupertextMOGRTs(jsonPath) {
                     question:   3    // Verde
                 };
                 var labelColor = TYPE_COLORS[st.type] !== undefined ? TYPE_COLORS[st.type] : 0;
-                try { trackItem.setColorLabel(labelColor); } catch(eLabel) {}
+                try {
+                    // importMGT returns a limited object — find the real clip in the track
+                    var realClip = null;
+                    var targetTrackObj = seq.videoTracks[targetTrack];
+                    if (targetTrackObj) {
+                        for (var ci = targetTrackObj.clips.numItems - 1; ci >= 0; ci--) {
+                            var tc = targetTrackObj.clips[ci];
+                            if (Math.abs(tc.start.seconds - startSecs) < 0.1) {
+                                realClip = tc;
+                                break;
+                            }
+                        }
+                    }
+                    if (realClip) {
+                        realClip.setColorLabel(labelColor);
+                    } else {
+                        trackItem.setColorLabel(labelColor);
+                    }
+                } catch(eLabel) {}
 
                 // 4. Disolvencia de salida — DESACTIVADA (los MOGRTs manejan su propia animación)
                 // _addOutDissolve(seq, targetTrack, startSecs, 20);
