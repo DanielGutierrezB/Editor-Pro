@@ -623,3 +623,104 @@ function replaceMOGRTClip(jsonPath) {
     }
 }
 
+
+// ─── Debug: inspect MOGRT properties of selected clip ───
+function debugMOGRTProperties() {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: "No hay secuencia activa" });
+
+        // Find selected clip
+        var selectedClip = null;
+        for (var t = 0; t < seq.videoTracks.numTracks; t++) {
+            var track = seq.videoTracks[t];
+            for (var c = 0; c < track.clips.numItems; c++) {
+                var clip = track.clips[c];
+                if (clip.isSelected()) {
+                    selectedClip = clip;
+                    break;
+                }
+            }
+            if (selectedClip) break;
+        }
+        if (!selectedClip) return JSON.stringify({ error: "Selecciona un clip MOGRT en la timeline" });
+
+        var result = { clipName: selectedClip.name, approaches: {} };
+
+        // Approach A: getMGTComponent
+        try {
+            if (typeof selectedClip.getMGTComponent === "function") {
+                var moComp = selectedClip.getMGTComponent();
+                if (moComp && moComp.properties) {
+                    var props = [];
+                    for (var p = 0; p < moComp.properties.numItems; p++) {
+                        var prop = moComp.properties[p];
+                        var info = { index: p, displayName: "", valueType: "", valueSnippet: "" };
+                        try { info.displayName = prop.displayName || ""; } catch(e) {}
+                        try {
+                            var val = prop.getValue();
+                            info.valueType = typeof val;
+                            if (typeof val === "string") {
+                                info.valueSnippet = val.substring(0, 200);
+                                // Check if it has textEditValue
+                                if (val.charAt(0) === "{") {
+                                    try {
+                                        var parsed = JSON.parse(val);
+                                        info.hasTextEditValue = (parsed.textEditValue !== undefined);
+                                        if (parsed.textEditValue) info.textEditValue = parsed.textEditValue;
+                                    } catch(ep) {}
+                                }
+                            } else if (typeof val === "object" && val !== null) {
+                                info.hasTextEditValue = (val.textEditValue !== undefined);
+                                if (val.textEditValue) info.textEditValue = val.textEditValue;
+                                info.valueSnippet = JSON.stringify(val).substring(0, 200);
+                            } else {
+                                info.valueSnippet = String(val);
+                            }
+                        } catch(ev) { info.valueError = ev.message; }
+                        props.push(info);
+                    }
+                    result.approaches.getMGTComponent = { numProps: moComp.properties.numItems, props: props };
+                }
+            }
+        } catch(eA) {
+            result.approaches.getMGTComponent = { error: eA.message };
+        }
+
+        // Approach B: components
+        try {
+            var comps = [];
+            for (var c2 = 0; c2 < selectedClip.components.numItems; c2++) {
+                var comp = selectedClip.components[c2];
+                var cInfo = { displayName: "", matchName: "", props: [] };
+                try { cInfo.displayName = comp.displayName || ""; } catch(e) {}
+                try { cInfo.matchName = comp.matchName || ""; } catch(e) {}
+                for (var pp = 0; pp < comp.properties.numItems; pp++) {
+                    var pr = comp.properties[pp];
+                    var pInfo = { displayName: "", valueType: "" };
+                    try { pInfo.displayName = pr.displayName || ""; } catch(e) {}
+                    try {
+                        var pVal = pr.getValue();
+                        pInfo.valueType = typeof pVal;
+                        if (typeof pVal === "string" && pVal.charAt(0) === "{") {
+                            try {
+                                var pp2 = JSON.parse(pVal);
+                                pInfo.hasTextEditValue = (pp2.textEditValue !== undefined);
+                                if (pp2.textEditValue) pInfo.textEditValue = pp2.textEditValue;
+                            } catch(ep2) {}
+                        }
+                    } catch(epv) {}
+                    cInfo.props.push(pInfo);
+                }
+                comps.push(cInfo);
+            }
+            result.approaches.components = comps;
+        } catch(eB) {
+            result.approaches.components = { error: eB.message };
+        }
+
+        return JSON.stringify(result);
+    } catch(e) {
+        return JSON.stringify({ error: e.message });
+    }
+}
