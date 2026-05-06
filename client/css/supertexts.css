@@ -148,6 +148,7 @@
 .type-data { background: var(--highlight-bg); color: var(--highlight); }
 .type-summary { background: rgba(167, 139, 250, 0.1); color: var(--brand-start); }
 .type-highlight { background: rgba(250, 204, 21, 0.15); color: #facc15; }
+.type-question { background: rgba(244, 114, 182, 0.15); color: #f472b6; }
 
 .sg-title {
     font-size: 11px;

@@ -19,6 +19,7 @@ TIPOS DE SUPERTEXTO:
 - DEFINICIONES: términos nuevos
 - DATOS CLAVE: números, URLs, nombres técnicos
 - HIGHLIGHTS: frases memorables o reglas ("no toques la campaña…")
+- PREGUNTAS: cuando el profesor hace una pregunta retórica o directa a la audiencia (ej: "¿Qué pasaría si nos caemos?", "¿Cuál crees que es el error más común?"). **Usa type "question".** Captura la pregunta tal como la formula el profesor — estas ayudan a delimitar los momentos de reflexión y recalcarlos visualmente. Incluye los signos de interrogación ¿…?
 - RESUMEN: cierres de bloque
 
 AGRUPACIÓN (campo 'group') — DETECCIÓN EXHAUSTIVA DE LISTAS:
@@ -52,4 +53,4 @@ REGLAS DE TIEMPO:
 Responde ÚNICAMENTE con JSON válido, SIN markdown.
 
 FORMATO:
-{"supertexts":[{"time":10.0,"endTime":20.0,"text":"Configuración del agente","type":"title","importance":"high","reason":"Nuevo tema"},{"time":43.5,"endTime":55.0,"text":"3 escenarios en Meta","type":"title","importance":"high","reason":"Título de la lista","group":"escenarios-meta"},{"time":44.0,"endTime":55.0,"text":"No gasta","type":"bullet","importance":"high","reason":"Primer escenario","group":"escenarios-meta"},{"time":47.0,"endTime":55.0,"text":"Gasta sin convertir","type":"bullet","importance":"high","reason":"Segundo escenario","group":"escenarios-meta"},{"time":50.0,"endTime":55.0,"text":"Convierte caro","type":"bullet","importance":"high","reason":"Tercer escenario","group":"escenarios-meta"},{"time":62.0,"endTime":75.0,"text":"Creativo → CTR → CPC → CPA\nTodo empieza desde el creativo","type":"highlight","importance":"high","reason":"Cadena de métricas clave"}],"summary":"","totalFound":0}
+{"supertexts":[{"time":10.0,"endTime":20.0,"text":"Configuración del agente","type":"title","importance":"high","reason":"Nuevo tema"},{"time":43.5,"endTime":55.0,"text":"3 escenarios en Meta","type":"title","importance":"high","reason":"Título de la lista","group":"escenarios-meta"},{"time":44.0,"endTime":55.0,"text":"No gasta","type":"bullet","importance":"high","reason":"Primer escenario","group":"escenarios-meta"},{"time":47.0,"endTime":55.0,"text":"Gasta sin convertir","type":"bullet","importance":"high","reason":"Segundo escenario","group":"escenarios-meta"},{"time":50.0,"endTime":55.0,"text":"Convierte caro","type":"bullet","importance":"high","reason":"Tercer escenario","group":"escenarios-meta"},{"time":62.0,"endTime":75.0,"text":"Creativo → CTR → CPC → CPA\nTodo empieza desde el creativo","type":"highlight","importance":"high","reason":"Cadena de métricas clave"},{"time":80.0,"endTime":90.0,"text":"¿Qué pasaría si la campaña\nno genera conversiones?","type":"question","importance":"high","reason":"Pregunta retórica del profesor"}],"summary":"","totalFound":0}

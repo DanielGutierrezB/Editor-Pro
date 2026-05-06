@@ -91,7 +91,7 @@
     // SMART SUPERTEXTS — MOGRT graphic clips on timeline
     // ═══════════════════════════════════════════════════════════════
 
-    var ST2_TYPES = ["title", "bullet", "step", "definition", "data", "summary", "highlight"];
+    var ST2_TYPES = ["title", "bullet", "step", "definition", "data", "summary", "highlight", "question"];
     var ST2_BULLET_SPACING = 70;
     var ST2_EXTRA_LINE_SPACING = 45;
 
@@ -1207,7 +1207,7 @@
     }
 
     var _st2TypeFilter = null;
-    var ST2_TYPE_COLORS = { title: "var(--accent-bright)", bullet: "var(--success)", step: "var(--info)", definition: "var(--warning)", data: "var(--highlight)", summary: "var(--brand-start)", highlight: "#facc15" };
+    var ST2_TYPE_COLORS = { title: "var(--accent-bright)", bullet: "var(--success)", step: "var(--info)", definition: "var(--warning)", data: "var(--highlight)", summary: "var(--brand-start)", highlight: "#facc15", question: "#f472b6" };
 
     function renderSupertext2Results(result) {
         var summary = document.getElementById("st2-summary");
