@@ -98,6 +98,25 @@
                 return;
             }
 
+            // Auto-install node_modules if missing
+            var nodeModulesDir = pathMod.join(serverDir, "node_modules");
+            if (!fs.existsSync(nodeModulesDir)) {
+                console.log("[Motion-Pro] node_modules missing, running npm install...");
+                try {
+                    var npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+                    childProcess.execFileSync(npmCmd, ["install", "--production", "--no-optional"], {
+                        cwd: serverDir,
+                        timeout: 60000,
+                        stdio: "pipe"
+                    });
+                    console.log("[Motion-Pro] npm install complete");
+                } catch(npmErr) {
+                    console.error("[Motion-Pro] npm install failed:", npmErr.message);
+                    if (callback) callback(new Error("npm install failed: " + npmErr.message));
+                    return;
+                }
+            }
+
             // Kill any zombie process hogging the port before spawning
             self._killZombieOnPort(function() {
 
