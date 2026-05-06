@@ -483,9 +483,20 @@ function insertSupertextMOGRTs(jsonPath) {
                     errors.push("Item " + i + ": excepción ajustando duración — " + eDur.message);
                 }
 
-                // 3. Nombre legible en timeline
+                // 3. Nombre legible en timeline + color label por tipo
                 var typeTag = (st.type || "").toUpperCase();
                 try { trackItem.name = "[" + typeTag + "] " + _mogrtOneLineName(st.text); } catch(eName) {}
+
+                // Label colors (Premiere 0-15): high contrast between types
+                var TYPE_COLORS = {
+                    title:      6,   // Amarillo
+                    bullet:     4,   // Cyan
+                    definition: 9,   // Naranja
+                    highlight:  7,   // Morado
+                    question:   3    // Verde
+                };
+                var labelColor = TYPE_COLORS[st.type] !== undefined ? TYPE_COLORS[st.type] : 0;
+                try { trackItem.setColorLabel(labelColor); } catch(eLabel) {}
 
                 // 4. Disolvencia de salida — DESACTIVADA (los MOGRTs manejan su propia animación)
                 // _addOutDissolve(seq, targetTrack, startSecs, 20);
