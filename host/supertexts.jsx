@@ -487,8 +487,8 @@ function insertSupertextMOGRTs(jsonPath) {
                 var typeTag = (st.type || "").toUpperCase();
                 try { trackItem.name = "[" + typeTag + "] " + _mogrtOneLineName(st.text); } catch(eName) {}
 
-                // 4. Disolvencia de salida (Cross Dissolve al final del clip)
-                _addOutDissolve(seq, targetTrack, startSecs, 20);
+                // 4. Disolvencia de salida — DESACTIVADA (los MOGRTs manejan su propia animación)
+                // _addOutDissolve(seq, targetTrack, startSecs, 20);
 
                 // 5. Bullet Y position offset
                 var bulletPosY = parseFloat(st.bulletPositionY) || 0;
