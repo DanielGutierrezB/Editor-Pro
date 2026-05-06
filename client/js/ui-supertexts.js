@@ -165,23 +165,29 @@
                 if (fs.existsSync(mogrtDir)) {
                     var changed = false;
                     var dirFiles = fs.readdirSync(mogrtDir);
+                    var bundledAliases = {
+                        title: ["title", "titulo", "título"],
+                        bullet: ["bullet", "bullet_point", "bullets"],
+                        definition: ["definition", "definicion", "definición"],
+                        highlight: ["highlight", "highlights", "destacado"],
+                        question: ["question", "pregunta", "preguntas"]
+                    };
                     ST2_TYPES.forEach(function(t) {
                         if (!state.mogrtPaths[t] || !fs.existsSync(state.mogrtPaths[t])) {
-                            // Try exact match first, then case-insensitive
-                            var bundled = pathMod.join(mogrtDir, t + ".mogrt");
-                            if (!fs.existsSync(bundled)) {
-                                // Case-insensitive search
-                                var tLower = t.toLowerCase();
-                                for (var fi = 0; fi < dirFiles.length; fi++) {
-                                    var fname = dirFiles[fi];
-                                    var base = fname.replace(/\.mogrt$/i, "").toLowerCase();
-                                    if (base === tLower) {
+                            var aliases = bundledAliases[t] || [t];
+                            var bundled = null;
+                            for (var fi = 0; fi < dirFiles.length; fi++) {
+                                var fname = dirFiles[fi];
+                                var base = fname.replace(/\.mogrt$/i, "").toLowerCase().replace(/[_\-\s]+/g, "");
+                                for (var a = 0; a < aliases.length; a++) {
+                                    if (base === aliases[a] || base.indexOf(aliases[a]) !== -1) {
                                         bundled = pathMod.join(mogrtDir, fname);
                                         break;
                                     }
                                 }
+                                if (bundled) break;
                             }
-                            if (fs.existsSync(bundled)) {
+                            if (bundled && fs.existsSync(bundled)) {
                                 state.mogrtPaths[t] = bundled;
                                 changed = true;
                                 console.log("[Smart Supertexts] Auto-configured MOGRT for " + t + ": " + bundled);
@@ -280,16 +286,28 @@
                     return f.toLowerCase().indexOf(".mogrt") === f.length - 6 && f.charAt(0) !== ".";
                 });
 
+                // Map Spanish MOGRT names to types
+                var TYPE_ALIASES = {
+                    title: ["title", "titulo", "título"],
+                    bullet: ["bullet", "bullet_point", "bullets"],
+                    definition: ["definition", "definicion", "definición"],
+                    highlight: ["highlight", "highlights", "destacado"],
+                    question: ["question", "pregunta", "preguntas"]
+                };
+
                 var matched = 0;
                 ST2_TYPES.forEach(function(type) {
-                    var typeLower = type.toLowerCase();
+                    var aliases = TYPE_ALIASES[type] || [type];
                     for (var i = 0; i < mogrtFiles.length; i++) {
-                        var nameLower = mogrtFiles[i].toLowerCase().replace(".mogrt", "");
-                        if (nameLower === typeLower || nameLower.indexOf(typeLower) !== -1) {
-                            var fullPath = folderPath + path.sep + mogrtFiles[i];
-                            state.mogrtPaths[type] = fullPath;
-                            matched++;
-                            break;
+                        var nameLower = mogrtFiles[i].toLowerCase().replace(".mogrt", "").replace(/[_\-\s]+/g, "");
+                        for (var a = 0; a < aliases.length; a++) {
+                            if (nameLower === aliases[a] || nameLower.indexOf(aliases[a]) !== -1) {
+                                var fullPath = folderPath + path.sep + mogrtFiles[i];
+                                state.mogrtPaths[type] = fullPath;
+                                matched++;
+                                i = mogrtFiles.length; // break outer
+                                break;
+                            }
                         }
                     }
                 });
