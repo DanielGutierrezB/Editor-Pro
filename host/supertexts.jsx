@@ -259,40 +259,75 @@ function _trySetTextValue(param, newText) {
 
 function _setMGTText(trackItem, newText, itemIdx, errors) {
     newText = _normalizeMogrtNewlines(newText);
+
+    // Helper: check if a property name looks like an editable text field
+    function _isTextProp(displayName) {
+        var dl = displayName.toLowerCase();
+        return (dl.indexOf("text") !== -1) ||
+               (dl.indexOf("texto") !== -1) ||
+               (dl.indexOf("titulo") !== -1) ||
+               (dl.indexOf("título") !== -1) ||
+               (dl.indexOf("bullet") !== -1) ||
+               (dl.indexOf("pregunta") !== -1) ||
+               (dl.indexOf("definic") !== -1) ||
+               (dl.indexOf("source") !== -1) ||
+               (dl.indexOf("fuente") !== -1) ||
+               (dl.indexOf("origen") !== -1);
+    }
+
+    // Helper: recursively search properties (handles Groups that contain text fields)
+    function _findAndSetText(propsContainer, depth) {
+        if (depth > 5) return false; // prevent infinite recursion
+        if (!propsContainer || !propsContainer.numItems) return false;
+
+        // Pass 1: look for text-like named properties
+        for (var p = 0; p < propsContainer.numItems; p++) {
+            var prop;
+            try { prop = propsContainer[p]; } catch(e) { continue; }
+            if (!prop) continue;
+            var dn = "";
+            try { dn = prop.displayName || ""; } catch(e) {}
+
+            if (_isTextProp(dn)) {
+                if (_trySetTextValue(prop, newText)) return true;
+                // If it's a group, recurse into it
+                try {
+                    if (prop.properties && prop.properties.numItems > 0) {
+                        if (_findAndSetText(prop.properties, depth + 1)) return true;
+                    }
+                } catch(eg) {}
+            }
+        }
+
+        // Pass 2: recurse into all groups
+        for (var g = 0; g < propsContainer.numItems; g++) {
+            var gProp;
+            try { gProp = propsContainer[g]; } catch(e) { continue; }
+            if (!gProp) continue;
+            try {
+                if (gProp.properties && gProp.properties.numItems > 0) {
+                    if (_findAndSetText(gProp.properties, depth + 1)) return true;
+                }
+            } catch(eg) {}
+        }
+
+        // Pass 3: try every property as last resort
+        for (var p2 = 0; p2 < propsContainer.numItems; p2++) {
+            var prop2;
+            try { prop2 = propsContainer[p2]; } catch(e) { continue; }
+            if (!prop2) continue;
+            if (_trySetTextValue(prop2, newText)) return true;
+        }
+
+        return false;
+    }
+
     // --- Approach A: getMGTComponent (preferred, returns Essential Properties) ---
     try {
         if (typeof trackItem.getMGTComponent === "function") {
             var moComp = trackItem.getMGTComponent();
             if (moComp && moComp.properties && moComp.properties.numItems > 0) {
-                // Try each property in the MGT component — the first text-like one wins
-                for (var p = 0; p < moComp.properties.numItems; p++) {
-                    var prop = moComp.properties[p];
-                    if (!prop) continue;
-                    var dn = "";
-                    try { dn = prop.displayName; } catch(e) {}
-
-                    // Check if it looks like a text property (any language)
-                    var isText = (dn.indexOf("Text") !== -1) ||
-                                 (dn.indexOf("text") !== -1) ||
-                                 (dn.indexOf("Texto") !== -1) ||
-                                 (dn.indexOf("texto") !== -1) ||
-                                 (dn.indexOf("Source") !== -1) ||
-                                 (dn.indexOf("Fuente") !== -1) ||
-                                 (dn.indexOf("origen") !== -1);
-
-                    // If only 1 property, assume it's the text
-                    if (isText || moComp.properties.numItems === 1) {
-                        if (_trySetTextValue(prop, newText)) return true;
-                    }
-                }
-
-                // Last resort: try every property
-                for (var p2 = 0; p2 < moComp.properties.numItems; p2++) {
-                    var prop2 = moComp.properties[p2];
-                    if (!prop2) continue;
-                    if (_trySetTextValue(prop2, newText)) return true;
-                }
-
+                if (_findAndSetText(moComp.properties, 0)) return true;
                 errors.push("Item " + itemIdx + ": getMGTComponent tiene " + moComp.properties.numItems + " props pero ninguna aceptó texto");
             }
         }
@@ -306,24 +341,8 @@ function _setMGTText(trackItem, newText, itemIdx, errors) {
         for (var c = 0; c < numComps; c++) {
             var comp;
             try { comp = trackItem.components[c]; } catch(ec) { continue; }
-            var mn = "";
-            try { mn = comp.matchName || ""; } catch(em) {}
-            var cn = "";
-            try { cn = comp.displayName || ""; } catch(en) {}
-
-            if (mn.indexOf("Text") !== -1 || mn.indexOf("ADBE") !== -1 ||
-                cn.indexOf("Text") !== -1 || cn.indexOf("Texto") !== -1) {
-                for (var pp = 0; pp < comp.properties.numItems; pp++) {
-                    var pr;
-                    try { pr = comp.properties[pp]; } catch(ep) { continue; }
-                    var dname = "";
-                    try { dname = pr.displayName || ""; } catch(ed) {}
-                    if (dname.indexOf("Text") !== -1 || dname.indexOf("text") !== -1 ||
-                        dname.indexOf("Texto") !== -1 || dname.indexOf("texto") !== -1 ||
-                        dname.indexOf("Source") !== -1 || dname.indexOf("origen") !== -1) {
-                        if (_trySetTextValue(pr, newText)) return true;
-                    }
-                }
+            if (comp && comp.properties && comp.properties.numItems > 0) {
+                if (_findAndSetText(comp.properties, 0)) return true;
             }
         }
     } catch(eComp) {
@@ -464,12 +483,23 @@ function insertSupertextMOGRTs(jsonPath) {
                     errors.push("Item " + i + ": excepción ajustando duración — " + eDur.message);
                 }
 
-                // 3. Nombre legible en timeline
+                // 3. Nombre legible en timeline + color label por tipo
                 var typeTag = (st.type || "").toUpperCase();
                 try { trackItem.name = "[" + typeTag + "] " + _mogrtOneLineName(st.text); } catch(eName) {}
 
-                // 4. Disolvencia de salida (Cross Dissolve al final del clip)
-                _addOutDissolve(seq, targetTrack, startSecs, 20);
+                // Label colors (Premiere 0-15): high contrast between types
+                var TYPE_COLORS = {
+                    title:      6,   // Amarillo
+                    bullet:     4,   // Cyan
+                    definition: 9,   // Naranja
+                    highlight:  7,   // Morado
+                    question:   3    // Verde
+                };
+                var labelColor = TYPE_COLORS[st.type] !== undefined ? TYPE_COLORS[st.type] : 0;
+                try { trackItem.setColorLabel(labelColor); } catch(eLabel) {}
+
+                // 4. Disolvencia de salida — DESACTIVADA (los MOGRTs manejan su propia animación)
+                // _addOutDissolve(seq, targetTrack, startSecs, 20);
 
                 // 5. Bullet Y position offset
                 var bulletPosY = parseFloat(st.bulletPositionY) || 0;
