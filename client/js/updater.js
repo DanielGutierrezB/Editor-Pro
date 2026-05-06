@@ -173,7 +173,14 @@
             var src  = path.join(srcDir, item);
             var dest = path.join(destDir, item);
             var stat;
-            try { stat = fs.statSync(src); } catch(e) { return; }
+            // lstatSync instead of statSync: do NOT follow symlinks — skip them to
+            // prevent a malicious ZIP from using symlinks to read/copy files outside
+            // the extension directory.
+            try { stat = fs.lstatSync(src); } catch(e) { return; }
+            if (stat.isSymbolicLink()) {
+                _log("Skipping symlink: " + rel);
+                return;
+            }
             if (stat.isDirectory()) {
                 try {
                     if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
@@ -190,15 +197,9 @@
     // ─── Temp-dir cleanup ───────────────────────────────────────────────────────
 
     function _cleanupTemp(zipPath, extractDir) {
-        var fs  = require("fs");
-        var cp  = require("child_process");
-        var isWin = process.platform === "win32";
+        var fs = require("fs");
         try { fs.unlinkSync(zipPath); } catch(_) {}
-        if (isWin) {
-            try { cp.execSync('rmdir /s /q "' + extractDir + '"'); } catch(_) {}
-        } else {
-            try { cp.execSync("rm -rf '" + extractDir.replace(/'/g, "'\\''") + "'"); } catch(_) {}
-        }
+        try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch(_) {}
     }
 
     // ─── ZIP extraction ─────────────────────────────────────────────────────────
@@ -212,20 +213,17 @@
             return callback(new Error("mkdirSync failed: " + e.message));
         }
 
-        var cmd, opts;
         if (isWin) {
             // PowerShell Expand-Archive (available on Windows 10+)
-            opts = { timeout: 120000 };
             cp.execFile("powershell", [
                 "-NoProfile", "-NonInteractive", "-Command",
                 "Expand-Archive -LiteralPath '" + zipPath.replace(/'/g, "''") + "' -DestinationPath '" + extractDir.replace(/'/g, "''") + "' -Force"
-            ], opts, function(err, stdout, stderr) {
+            ], { timeout: 120000 }, function(err, stdout, stderr) {
                 if (err) return callback(new Error("Extraction failed: " + (stderr || err.message)));
                 callback(null);
             });
         } else {
-            cmd = "unzip -q \"" + zipPath + "\" -d \"" + extractDir + "\"";
-            cp.exec(cmd, { timeout: 120000 }, function(err, stdout, stderr) {
+            cp.execFile("unzip", ["-q", zipPath, "-d", extractDir], { timeout: 120000 }, function(err, stdout, stderr) {
                 if (err) return callback(new Error("Extraction failed: " + (stderr || err.message)));
                 callback(null);
             });
