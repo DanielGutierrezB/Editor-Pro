@@ -160,8 +160,8 @@
         // Auto-detect bundled MOGRTs if not already configured
         try {
             var extPath = csInterface.getSystemPath("extension");
-            if (extPath && pathMod && fs) {
-                var mogrtDir = pathMod.join(extPath, "mogrts");
+            if (extPath && path && fs) {
+                var mogrtDir = path.join(extPath, "mogrts");
                 if (fs.existsSync(mogrtDir)) {
                     var changed = false;
                     var dirFiles = fs.readdirSync(mogrtDir);
@@ -181,7 +181,7 @@
                                 var base = fname.replace(/\.mogrt$/i, "").toLowerCase().replace(/[_\-\s]+/g, "");
                                 for (var a = 0; a < aliases.length; a++) {
                                     if (base === aliases[a] || base.indexOf(aliases[a]) !== -1) {
-                                        bundled = pathMod.join(mogrtDir, fname);
+                                        bundled = path.join(mogrtDir, fname);
                                         break;
                                     }
                                 }
@@ -268,11 +268,11 @@
     function loadDefaultMOGRTs() {
         try {
             var extPath = csInterface.getSystemPath("extension");
-            if (!extPath || !fs || !pathMod) {
+            if (!extPath || !fs || !path) {
                 showToast("No se pudo detectar la ruta de la extensión", "error");
                 return;
             }
-            var mogrtDir = pathMod.join(extPath, "mogrts");
+            var mogrtDir = path.join(extPath, "mogrts");
             if (!fs.existsSync(mogrtDir)) {
                 showToast("Carpeta mogrts/ no encontrada en la extensión", "error");
                 return;
@@ -296,7 +296,7 @@
                     var base = fname.replace(/\.mogrt$/i, "").toLowerCase().replace(/[_\-\s]+/g, "");
                     for (var a = 0; a < aliases.length; a++) {
                         if (base === aliases[a] || base.indexOf(aliases[a]) !== -1) {
-                            state.mogrtPaths[t] = pathMod.join(mogrtDir, fname);
+                            state.mogrtPaths[t] = path.join(mogrtDir, fname);
                             matched++;
                             fi = dirFiles.length;
                             break;
