@@ -47,6 +47,10 @@ echo "→ Preparing extension files..."
 cp -R "$SCRIPT_DIR/CSXS"   "$BUILD/ext/CSXS"
 cp -R "$SCRIPT_DIR/client"  "$BUILD/ext/client"
 cp -R "$SCRIPT_DIR/host"    "$BUILD/ext/host"
+if [ -f "$SCRIPT_DIR/VERSION" ]; then
+    cp "$SCRIPT_DIR/VERSION" "$BUILD/ext/VERSION"
+    echo "  ✓ VERSION file included ($(cat "$SCRIPT_DIR/VERSION"))"
+fi
 if [ -d "$SCRIPT_DIR/Prompts" ]; then
     cp -R "$SCRIPT_DIR/Prompts" "$BUILD/ext/Prompts"
 fi
