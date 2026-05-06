@@ -21,3 +21,7 @@ Thumbs.db
 # Environment
 .env
 .env.*
+
+# Update channel (local per-installation)
+.update-channel
+.update-sha

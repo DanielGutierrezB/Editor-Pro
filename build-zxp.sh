@@ -1,8 +1,12 @@
 #!/bin/bash
 # ─── Editor-Pro — ZXP Builder ───
+# Usage: ./build-zxp.sh [channel]
+#   channel: "main" (default, stable) or "workspace-daniel" (dev)
+#   Example: ./build-zxp.sh workspace-daniel
 
 set -e
 
+CHANNEL="${1:-main}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Try local node_modules first, then AE-SpellCheck's
@@ -89,26 +93,36 @@ if [ -n "$CURRENT_SHA" ]; then
     echo "  ✓ .update-sha written ($CURRENT_SHA)"
 fi
 
+# Write update channel so the updater pulls from the right branch
+echo "$CHANNEL" > "$BUILD/ext/.update-channel"
+echo "  ✓ .update-channel set to: $CHANNEL"
+
 echo "  ✓ Files staged (including Motion-Pro)"
 
 echo "→ Packaging ZXP..."
+if [ "$CHANNEL" = "main" ]; then
+    ZXP_NAME="EditorPro.zxp"
+else
+    ZXP_NAME="EditorPro-dev.zxp"
+fi
+
 "$ZXPCMD" -sign \
     "$BUILD/ext" \
-    "$BUILD/EditorPro.zxp" \
+    "$BUILD/$ZXP_NAME" \
     "$BUILD/cert.p12" \
     "$CERT_PASS"
 echo "  ✓ ZXP signed"
 
 mkdir -p "$OUTPUT_DIR"
-cp "$BUILD/EditorPro.zxp" "$OUTPUT_DIR/EditorPro.zxp"
+cp "$BUILD/$ZXP_NAME" "$OUTPUT_DIR/$ZXP_NAME"
 rm -rf "$BUILD"
 
-SIZE=$(du -h "$OUTPUT_DIR/EditorPro.zxp" | cut -f1)
+SIZE=$(du -h "$OUTPUT_DIR/$ZXP_NAME" | cut -f1)
 echo ""
 echo "════════════════════════════════════════════"
-echo "  Build complete!"
+echo "  Build complete! (channel: $CHANNEL)"
 echo ""
-echo "  Output: dist/EditorPro.zxp ($SIZE)"
+echo "  Output: dist/$ZXP_NAME ($SIZE)"
 echo ""
 echo "  To install:"
 echo "  1. Download ZXP Installer: aescripts.com/learn/zxp-installer/"

@@ -4,8 +4,23 @@
 
     var GITHUB_OWNER  = "DanielGutierrezB";
     var GITHUB_REPO   = "Editor-Pro";
-    var GITHUB_BRANCH = "workspace-daniel";
     var LOG_PREFIX    = "[Editor-Pro Updater]";
+
+    // Read update channel from .update-channel file, default to "main"
+    var GITHUB_BRANCH = (function() {
+        try {
+            var _fs = require("fs");
+            var _path = require("path");
+            var _cs = new CSInterface();
+            var _ext = _cs.getSystemPath("extension");
+            var _chFile = _path.join(_ext, ".update-channel");
+            if (_fs.existsSync(_chFile)) {
+                var ch = _fs.readFileSync(_chFile, "utf8").trim();
+                if (ch) return ch;
+            }
+        } catch(_) {}
+        return "main";
+    })();
 
     // Directories (relative to extension root) that must never be overwritten
     var PRESERVED_PREFIXES = [
