@@ -110,11 +110,9 @@
         var t = normalizeSupertextNewlines(text || "");
         if (isGrouped && (type === "bullet" || type === "step")) {
             var lines = t.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+            // Strip any existing bullet markers — the MOGRT already provides them visually
             if (lines.length > 0) {
-                var first = lines[0].trim();
-                if (!/^\d+[\.\)\-]/.test(first) && !/^[•·►▸▹‣⁃\-–—]/.test(first)) {
-                    lines[0] = "• " + first;
-                }
+                lines[0] = lines[0].trim().replace(/^[•·►▸▹‣⁃\-–—]\s*/, "");
             }
             t = lines.join("\n");
         }
