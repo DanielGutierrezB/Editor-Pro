@@ -193,6 +193,11 @@ function _trySetTextValue(param, newText) {
     // causing words beyond that limit to render with wrong position/size.
     try {
         var raw = param.getValue();
+        // Log what we're working with for debugging
+        var rawType = typeof raw;
+        var rawSnippet = (typeof raw === "string") ? raw.substring(0, 150) : JSON.stringify(raw).substring(0, 150);
+        $.writeln("[_trySetTextValue] displayName=" + (param.displayName || "?") + " type=" + rawType + " snippet=" + rawSnippet);
+        
         if (typeof raw === "object" || (typeof raw === "string" && raw.charAt(0) === "{")) {
             var obj = (typeof raw === "string") ? JSON.parse(raw) : raw;
             var newLen = newText.length;
@@ -243,16 +248,40 @@ function _trySetTextValue(param, newText) {
                 }
             }
 
-            param.setValue(JSON.stringify(obj), true);
+            var jsonStr = JSON.stringify(obj);
+            $.writeln("[_trySetTextValue] Setting JSON (len=" + jsonStr.length + "): " + jsonStr.substring(0, 200));
+            param.setValue(jsonStr, 1);
+            
+            // Verify it took
+            try {
+                var verify = param.getValue();
+                var vObj = (typeof verify === "string") ? JSON.parse(verify) : verify;
+                $.writeln("[_trySetTextValue] After setValue, textEditValue=" + (vObj.textEditValue || "MISSING").substring(0, 50));
+            } catch(ev) {}
+            
             return true;
         }
-    } catch(e1) {}
+    } catch(e1) {
+        $.writeln("[_trySetTextValue] Strategy 1 FAILED: " + e1.message);
+    }
 
     // Strategy 2: set as plain string with updateUI flag
-    try { param.setValue(newText, true); return true; } catch(e2) {}
+    try {
+        $.writeln("[_trySetTextValue] Trying Strategy 2: plain string with updateUI");
+        param.setValue(newText, 1);
+        return true;
+    } catch(e2) {
+        $.writeln("[_trySetTextValue] Strategy 2 FAILED: " + e2.message);
+    }
 
     // Strategy 3: set as plain string without flag
-    try { param.setValue(newText); return true; } catch(e3) {}
+    try {
+        $.writeln("[_trySetTextValue] Trying Strategy 3: plain string no flag");
+        param.setValue(newText);
+        return true;
+    } catch(e3) {
+        $.writeln("[_trySetTextValue] Strategy 3 FAILED: " + e3.message);
+    }
 
     return false;
 }
