@@ -25,4 +25,3 @@ Thumbs.db
 # Update channel (local per-installation)
 .update-channel
 .update-sha
-mogrts/

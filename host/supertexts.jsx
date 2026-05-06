@@ -289,17 +289,24 @@ function _trySetTextValue(param, newText) {
 function _setMGTText(trackItem, newText, itemIdx, errors) {
     newText = _normalizeMogrtNewlines(newText);
 
-    // --- Approach: getMGTComponent — iterate ALL properties, try to set text on each ---
-    // MOGRT Essential Graphics properties are flat (not nested groups in ExtendScript).
-    // We try every property: first text-named ones, then all others as fallback.
+    // --- Approach: getMGTComponent ---
+    // All MOGRTs have a property named "Text" (displayName) that controls the visible text.
+    // It can be either:
+    //   A) A JSON string with textEditValue (AE Source Text) — use _trySetTextValue
+    //   B) A plain string — use setValue directly
+    // We set ALL text properties we find (some MOGRTs have multiple text layers).
     try {
         if (typeof trackItem.getMGTComponent === "function") {
             var moComp = trackItem.getMGTComponent();
             if (moComp && moComp.properties && moComp.properties.numItems > 0) {
                 var numProps = moComp.properties.numItems;
                 var propNames = [];
+                var didSet = false;
 
-                // Pass 1: try properties with text-like names
+                // Collect all properties and classify them
+                var textProps = [];      // props named "Text" or similar (primary targets)
+                var textEditProps = [];   // props with textEditValue (AE Source Text)
+
                 for (var p = 0; p < numProps; p++) {
                     var prop;
                     try { prop = moComp.properties[p]; } catch(e) { continue; }
@@ -309,56 +316,59 @@ function _setMGTText(trackItem, newText, itemIdx, errors) {
                     propNames.push(dn);
 
                     var dl = dn.toLowerCase();
-                    var isText = (dl.indexOf("text") !== -1) ||
-                                 (dl.indexOf("texto") !== -1) ||
-                                 (dl.indexOf("titulo") !== -1) ||
-                                 (dl.indexOf("título") !== -1) ||
-                                 (dl.indexOf("bullet") !== -1) ||
-                                 (dl.indexOf("pregunta") !== -1) ||
-                                 (dl.indexOf("definic") !== -1) ||
-                                 (dl.indexOf("source") !== -1) ||
-                                 (dl.indexOf("fuente") !== -1) ||
-                                 (dl.indexOf("origen") !== -1);
+                    var isTextName = (dl === "text") ||
+                                     (dl.indexOf("text") !== -1) ||
+                                     (dl.indexOf("texto") !== -1) ||
+                                     (dl.indexOf("titulo") !== -1) ||
+                                     (dl.indexOf("título") !== -1) ||
+                                     (dl.indexOf("bullet") !== -1) ||
+                                     (dl.indexOf("pregunta") !== -1) ||
+                                     (dl.indexOf("definic") !== -1) ||
+                                     (dl.indexOf("source") !== -1) ||
+                                     (dl.indexOf("fuente") !== -1) ||
+                                     (dl.indexOf("origen") !== -1);
 
-                    if (isText) {
-                        // Check if getValue returns a text-like object (has textEditValue)
-                        try {
-                            var val = prop.getValue();
-                            var isTextObj = false;
-                            if (typeof val === "string" && val.charAt(0) === "{") {
+                    // Check what type of value this property has
+                    var hasTextEdit = false;
+                    try {
+                        var val = prop.getValue();
+                        if (typeof val === "string" && val.charAt(0) === "{") {
+                            try {
                                 var parsed = JSON.parse(val);
-                                isTextObj = (parsed.textEditValue !== undefined);
-                            } else if (typeof val === "object" && val !== null) {
-                                isTextObj = (val.textEditValue !== undefined);
-                            }
-                            if (isTextObj) {
-                                if (_trySetTextValue(prop, newText)) return true;
-                            }
-                        } catch(ev) {}
-                        // Try anyway even if not text obj
-                        if (_trySetTextValue(prop, newText)) return true;
+                                hasTextEdit = (parsed.textEditValue !== undefined);
+                            } catch(ep) {}
+                        } else if (typeof val === "object" && val !== null) {
+                            hasTextEdit = (val.textEditValue !== undefined);
+                        }
+                    } catch(ev) {}
+
+                    if (hasTextEdit) textEditProps.push({ prop: prop, index: p, name: dn });
+                    if (isTextName) textProps.push({ prop: prop, index: p, name: dn, hasTextEdit: hasTextEdit });
+                }
+
+                $.writeln("[_setMGTText] Item " + itemIdx + ": " + numProps + " props [" + propNames.join(", ") + "]");
+                $.writeln("[_setMGTText]   textProps (by name): " + textProps.length + ", textEditProps: " + textEditProps.length);
+
+                // Strategy A: Set ALL textEditValue properties (these are AE Source Text layers)
+                for (var te = 0; te < textEditProps.length; te++) {
+                    $.writeln("[_setMGTText]   Setting textEditValue on [" + textEditProps[te].index + "] " + textEditProps[te].name);
+                    if (_trySetTextValue(textEditProps[te].prop, newText)) didSet = true;
+                }
+
+                // Strategy B: Set text-named properties that are plain strings (not JSON/textEditValue)
+                for (var tn = 0; tn < textProps.length; tn++) {
+                    if (textProps[tn].hasTextEdit) continue; // already handled in Strategy A
+                    var tProp = textProps[tn].prop;
+                    $.writeln("[_setMGTText]   Setting plain string on [" + textProps[tn].index + "] " + textProps[tn].name);
+                    try { tProp.setValue(newText, 1); didSet = true; } catch(e1) {
+                        $.writeln("[_setMGTText]   setValue(text,1) failed: " + e1.message);
+                        try { tProp.setValue(newText); didSet = true; } catch(e2) {
+                            $.writeln("[_setMGTText]   setValue(text) failed: " + e2.message);
+                        }
                     }
                 }
 
-                // Pass 2: try ALL properties — find first one with textEditValue
-                for (var p2 = 0; p2 < numProps; p2++) {
-                    var prop2;
-                    try { prop2 = moComp.properties[p2]; } catch(e) { continue; }
-                    if (!prop2) continue;
-                    try {
-                        var val2 = prop2.getValue();
-                        var isTextObj2 = false;
-                        if (typeof val2 === "string" && val2.charAt(0) === "{") {
-                            var parsed2 = JSON.parse(val2);
-                            isTextObj2 = (parsed2.textEditValue !== undefined);
-                        } else if (typeof val2 === "object" && val2 !== null) {
-                            isTextObj2 = (val2.textEditValue !== undefined);
-                        }
-                        if (isTextObj2) {
-                            if (_trySetTextValue(prop2, newText)) return true;
-                        }
-                    } catch(ev2) {}
-                }
+                if (didSet) return true;
 
                 errors.push("Item " + itemIdx + ": " + numProps + " props [" + propNames.join(", ") + "] — none accepted text");
             }
@@ -670,6 +680,90 @@ function replaceMOGRTClip(jsonPath) {
     }
 }
 
+
+// ─── Debug: inspect ALL 5 MOGRT files and dump their text properties ───
+function debugAllMOGRTs(mogrtPathsJson) {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: "No hay secuencia activa" });
+
+        var paths = JSON.parse(mogrtPathsJson);
+        var results = {};
+        var trackIdx = seq.videoTracks.numTracks - 1;
+        var timeSecs = 0;
+
+        var types = ["title", "bullet", "definition", "highlight", "question"];
+        for (var ti = 0; ti < types.length; ti++) {
+            var type = types[ti];
+            var mogrtPath = paths[type];
+            if (!mogrtPath) { results[type] = { error: "No path" }; continue; }
+            var mogrtFile = new File(mogrtPath);
+            if (!mogrtFile.exists) { results[type] = { error: "Not found" }; continue; }
+
+            try {
+                var timeTicks = String(Math.round(timeSecs * TICKS_PER_SECOND));
+                var trackItem = seq.importMGT(mogrtFile.fsName, timeTicks, trackIdx, 0);
+                if (!trackItem) { results[type] = { error: "importMGT null" }; timeSecs += 10; continue; }
+
+                $.sleep(1500);
+
+                var props = [];
+                if (typeof trackItem.getMGTComponent === "function") {
+                    var moComp = trackItem.getMGTComponent();
+                    if (moComp && moComp.properties) {
+                        for (var p = 0; p < moComp.properties.numItems; p++) {
+                            var prop = moComp.properties[p];
+                            var info = { i: p, name: "" };
+                            try { info.name = prop.displayName || ""; } catch(e) {}
+                            try {
+                                var val = prop.getValue();
+                                info.type = typeof val;
+                                if (typeof val === "string") {
+                                    if (val.charAt(0) === "{") {
+                                        try {
+                                            var parsed = JSON.parse(val);
+                                            if (parsed.textEditValue !== undefined) {
+                                                info.textEditValue = String(parsed.textEditValue).substring(0, 50);
+                                            }
+                                            info.keys = [];
+                                            for (var k in parsed) { if (parsed.hasOwnProperty(k)) info.keys.push(k); }
+                                        } catch(ep) {}
+                                    }
+                                    info.val = val.substring(0, 80);
+                                } else if (typeof val === "object" && val !== null) {
+                                    if (val.textEditValue !== undefined) {
+                                        info.textEditValue = String(val.textEditValue).substring(0, 50);
+                                    }
+                                    info.val = JSON.stringify(val).substring(0, 80);
+                                } else {
+                                    info.val = String(val).substring(0, 50);
+                                }
+                            } catch(ev) { info.err = ev.message; }
+                            props.push(info);
+                        }
+                    }
+                }
+
+                results[type] = { n: props.length, props: props };
+
+                // Cleanup
+                try {
+                    var track = seq.videoTracks[trackIdx];
+                    for (var ci = track.clips.numItems - 1; ci >= 0; ci--) {
+                        if (Math.abs(track.clips[ci].start.seconds - timeSecs) < 1.0) {
+                            track.clips[ci].remove(true, true); break;
+                        }
+                    }
+                } catch(eR) {}
+            } catch(eT) { results[type] = { error: eT.message }; }
+            timeSecs += 10;
+        }
+
+        return JSON.stringify({ success: true, mogrts: results });
+    } catch(e) {
+        return JSON.stringify({ error: e.message });
+    }
+}
 
 // ─── Debug: inspect MOGRT properties of selected clip ───
 function debugMOGRTProperties() {
