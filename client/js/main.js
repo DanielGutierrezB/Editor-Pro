@@ -648,15 +648,28 @@
     }
 
     window.checkAndReload = function() {
-        // If EPUpdater has an update ready, let it handle the full download+apply flow.
+        // If update already detected, apply immediately
         if (window.EPUpdater && window.EPUpdater.isUpdateAvailable()) {
             window.EPUpdater.doUpdate();
             return;
         }
-        // No update available — plain reload (stop server first).
+
+        // Otherwise, check for updates first, then decide
         var btn = document.getElementById("btn-reload");
-        if (btn) { btn.innerHTML = "⏳"; btn.title = "Recargando..."; }
-        _cleanupBeforeReload(function() { location.reload(); });
+        if (btn) { btn.innerHTML = "⏳"; btn.title = "Verificando updates..."; }
+
+        if (window.EPUpdater && window.EPUpdater.checkForUpdates) {
+            window.EPUpdater.checkForUpdates(function(hasUpdate) {
+                if (hasUpdate) {
+                    window.EPUpdater.doUpdate();
+                } else {
+                    if (btn) { btn.innerHTML = "⏳"; btn.title = "Recargando..."; }
+                    _cleanupBeforeReload(function() { location.reload(); });
+                }
+            });
+        } else {
+            _cleanupBeforeReload(function() { location.reload(); });
+        }
     };
 
     // ─── Start ───────────────────────────────────────────────────

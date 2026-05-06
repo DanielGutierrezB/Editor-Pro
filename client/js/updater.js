@@ -319,17 +319,25 @@
 
     // ─── Public: checkForUpdates ────────────────────────────────────────────────
 
-    function checkForUpdates() {
+    function checkForUpdates(callback) {
         try {
             var localSha = _readLocalSha();
             var apiUrl = "https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/commits/" + GITHUB_BRANCH;
 
             _httpsGetText(apiUrl, 5, function(err, body) {
-                if (err) { _log("Check failed: " + err.message); return; }
+                if (err) {
+                    _log("Check failed: " + err.message);
+                    if (callback) callback(false);
+                    return;
+                }
                 try {
                     var data = JSON.parse(body);
                     var remoteSha = data.sha;
-                    if (!remoteSha) { _log("No SHA in response"); return; }
+                    if (!remoteSha) {
+                        _log("No SHA in response");
+                        if (callback) callback(false);
+                        return;
+                    }
 
                     _latestSha = remoteSha;
 
@@ -343,15 +351,19 @@
                             btn.innerHTML = "⬇";
                             btn.title = "Hay una actualización disponible — click para actualizar";
                         }
+                        if (callback) callback(true);
                     } else {
                         _log("Up to date: " + remoteSha.substr(0, 7));
+                        if (callback) callback(false);
                     }
                 } catch(e) {
                     _log("Parse error: " + e.message);
+                    if (callback) callback(false);
                 }
             });
         } catch(e) {
             _log("Unexpected error: " + e.message);
+            if (callback) callback(false);
         }
     }
 
