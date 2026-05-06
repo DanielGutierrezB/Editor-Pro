@@ -1694,13 +1694,23 @@
                 var titleSpacing = ST2_BULLET_SPACING * 0.4;
                 var cascId = "c" + (cascadeCounter++);
 
-                // Calcular posiciones Y acumuladas teniendo en cuenta líneas por ítem
-                // El primer bullet (c=0) se importa sin mover — su posición nativa del MOGRT es la base.
-                // Los siguientes se desplazan hacia abajo relativamente.
+                // Calcular posiciones Y acumuladas.
+                // Título (cascade[0]) y primer bullet (cascade[1]) ambos sin desplazar — cada MOGRT
+                // tiene su posición nativa y van en tracks distintos.
+                // Solo desde el segundo bullet en adelante se acumulan offsets.
                 var cascYOffsets = [];
-                cascYOffsets[0] = 0; // primer item: sin desplazar
+                // Find first bullet index (skip title)
+                var firstBulletIdx = 0;
+                for (var fi = 0; fi < cascadeLen; fi++) {
+                    if (cascade[fi].type !== "title") { firstBulletIdx = fi; break; }
+                }
+                // Title and first bullet: no displacement
+                for (var zi = 0; zi <= firstBulletIdx; zi++) {
+                    cascYOffsets[zi] = 0;
+                }
+                // Subsequent bullets: accumulate from first bullet
                 var accumY = 0;
-                for (var cy = 0; cy < cascadeLen - 1; cy++) {
+                for (var cy = firstBulletIdx; cy < cascadeLen - 1; cy++) {
                     var lines = _st2LineCount(cascade[cy].text);
                     accumY += ST2_BULLET_SPACING + (lines > 1 ? ST2_EXTRA_LINE_SPACING : 0);
                     cascYOffsets[cy + 1] = accumY;
