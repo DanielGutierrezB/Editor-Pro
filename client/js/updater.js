@@ -46,11 +46,26 @@
 
     function _getExtensionPath() {
         try {
-            return global.csInterface.getSystemPath("extension");
+            // Try global csInterface first
+            if (global.csInterface) {
+                var p = global.csInterface.getSystemPath("extension");
+                if (p) return p;
+            }
+            // Fallback: create a fresh instance
+            var csi = new CSInterface();
+            var p2 = csi.getSystemPath("extension");
+            if (p2) return p2;
         } catch(e) {
             _log("Cannot get extension path: " + e.message);
-            return null;
         }
+        // Last resort: derive from script location
+        try {
+            var path = require("path");
+            return path.resolve(__dirname, "..", "..");
+        } catch(e2) {
+            _log("Fallback path also failed: " + e2.message);
+        }
+        return null;
     }
 
     // ─── SHA persistence ────────────────────────────────────────────────────────
