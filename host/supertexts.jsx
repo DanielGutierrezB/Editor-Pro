@@ -436,6 +436,79 @@ function _setMGTText(trackItem, newText, itemIdx, errors, titleOverride) {
     return false;
 }
 
+// Set absolute position (X, Y in pixels) on a clip's Motion component
+function _setClipPositionAbsolute(trackItem, posX, posY, errors, idx) {
+    try {
+        for (var c = 0; c < trackItem.components.numItems; c++) {
+            var comp;
+            try { comp = trackItem.components[c]; } catch(ec) { continue; }
+            var mn = "";
+            try { mn = comp.matchName || ""; } catch(em) {}
+            var dn = "";
+            try { dn = comp.displayName || ""; } catch(ed) {}
+            if (mn === "AE.ADBE Motion" || dn === "Motion" || dn === "Movimiento") {
+                var posProp = null;
+                for (var pp = 0; pp < comp.properties.numItems; pp++) {
+                    var pr;
+                    try { pr = comp.properties[pp]; } catch(ep) { continue; }
+                    var pdn = "";
+                    try { pdn = pr.displayName || ""; } catch(epd) {}
+                    if (pdn === "Position" || pdn === "Posición" || pdn === "Posicion") {
+                        posProp = pr;
+                        break;
+                    }
+                }
+                if (posProp) {
+                    var seqW = 1920;
+                    var seqH = 1080;
+                    try { seqW = app.project.activeSequence.frameSizeHorizontal || 1920; } catch(ew) {}
+                    try { seqH = app.project.activeSequence.frameSizeVertical || 1080; } catch(eh) {}
+                    var pos = posProp.getValue();
+                    pos[0] = posX / seqW;
+                    pos[1] = posY / seqH;
+                    posProp.setValue(pos, true);
+                }
+                break;
+            }
+        }
+    } catch(ePos) {
+        if (errors) errors.push("Item " + idx + ": error ajustando posición absoluta — " + ePos.message);
+    }
+}
+
+// Set scale (percentage) on a clip's Motion component
+function _setClipScale(trackItem, scalePct, errors, idx) {
+    try {
+        for (var c = 0; c < trackItem.components.numItems; c++) {
+            var comp;
+            try { comp = trackItem.components[c]; } catch(ec) { continue; }
+            var mn = "";
+            try { mn = comp.matchName || ""; } catch(em) {}
+            var dn = "";
+            try { dn = comp.displayName || ""; } catch(ed) {}
+            if (mn === "AE.ADBE Motion" || dn === "Motion" || dn === "Movimiento") {
+                var scaleProp = null;
+                for (var pp = 0; pp < comp.properties.numItems; pp++) {
+                    var pr;
+                    try { pr = comp.properties[pp]; } catch(ep) { continue; }
+                    var pdn = "";
+                    try { pdn = pr.displayName || ""; } catch(epd) {}
+                    if (pdn === "Scale" || pdn === "Escala") {
+                        scaleProp = pr;
+                        break;
+                    }
+                }
+                if (scaleProp) {
+                    scaleProp.setValue(scalePct, true);
+                }
+                break;
+            }
+        }
+    } catch(eScale) {
+        if (errors) errors.push("Item " + idx + ": error ajustando escala — " + eScale.message);
+    }
+}
+
 function _setClipPositionY(trackItem, offsetPx, errors, idx) {
     if (offsetPx === 0) return;
     try {
@@ -622,7 +695,15 @@ function insertSupertextMOGRTs(jsonPath) {
                 // 4. Disolvencia de salida — DESACTIVADA (los MOGRTs manejan su propia animación)
                 // _addOutDissolve(seq, targetTrack, startSecs, 20);
 
-                // 5. Bullet Y position offset
+                // 5. Title absolute position + scale (when title accompanies bullets)
+                if (st.titlePositionX !== undefined && st.titlePositionY !== undefined) {
+                    _setClipPositionAbsolute(trackItem, parseFloat(st.titlePositionX), parseFloat(st.titlePositionY), errors, i);
+                }
+                if (st.titleScale !== undefined) {
+                    _setClipScale(trackItem, parseFloat(st.titleScale), errors, i);
+                }
+
+                // 6. Bullet Y position offset
                 var bulletPosY = parseFloat(st.bulletPositionY) || 0;
                 if (bulletPosY !== 0) {
                     _setClipPositionY(trackItem, bulletPosY, errors, i);

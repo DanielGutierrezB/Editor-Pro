@@ -1722,7 +1722,7 @@
 
                     var entryTime = _st2Anticipate(cst.time);
 
-                    items.push({
+                    var itemObj = {
                         time: entryTime,
                         endTime: _st2EnsureMinDuration(entryTime, cascadeEnd),
                         text: _st2FormatText(cst.text, cType, true),
@@ -1731,7 +1731,25 @@
                         bulletTrackOffset: c,
                         bulletPositionY: cascYOffsets[c],
                         _cascadeId: cascId
-                    });
+                    };
+
+                    // When a title accompanies bullets, reposition & scale it
+                    if (cType === "title" && cascadeLen > 1) {
+                        var titleLines = _st2LineCount(cst.text);
+                        if (titleLines > 1) {
+                            // 2+ lines: Daniel's values
+                            itemObj.titlePositionX = 491.1;
+                            itemObj.titlePositionY = 196.0;
+                            itemObj.titleScale = 64.5;
+                        } else {
+                            // 1 line: same X, slightly lower Y
+                            itemObj.titlePositionX = 491.1;
+                            itemObj.titlePositionY = 220.0;
+                            itemObj.titleScale = 64.5;
+                        }
+                    }
+
+                    items.push(itemObj);
                 }
                 i++;
                 continue;
