@@ -91,7 +91,7 @@
     // SMART SUPERTEXTS — MOGRT graphic clips on timeline
     // ═══════════════════════════════════════════════════════════════
 
-    var ST2_TYPES = ["title", "bullet", "step", "definition", "data", "summary", "highlight", "question"];
+    var ST2_TYPES = ["title", "bullet", "definition", "highlight", "question"];
     var ST2_BULLET_SPACING = 70;
     var ST2_EXTRA_LINE_SPACING = 45;
 
@@ -156,6 +156,30 @@
             if (saved) state.mogrtPaths = JSON.parse(saved);
         } catch(e) {}
         state.mogrtTrackIndex = localStorage.getItem("edupro_mogrt_track") || "auto";
+
+        // Auto-detect bundled MOGRTs if not already configured
+        try {
+            var extPath = csInterface.getSystemPath("extension");
+            if (extPath && pathMod && fs) {
+                var mogrtDir = pathMod.join(extPath, "mogrts");
+                if (fs.existsSync(mogrtDir)) {
+                    var changed = false;
+                    ST2_TYPES.forEach(function(t) {
+                        if (!state.mogrtPaths[t]) {
+                            var bundled = pathMod.join(mogrtDir, t + ".mogrt");
+                            if (fs.existsSync(bundled)) {
+                                state.mogrtPaths[t] = bundled;
+                                changed = true;
+                                console.log("[Smart Supertexts] Auto-configured MOGRT for " + t + ": " + bundled);
+                            }
+                        }
+                    });
+                    if (changed) {
+                        localStorage.setItem("edupro_mogrt_paths", JSON.stringify(state.mogrtPaths));
+                    }
+                }
+            }
+        } catch(e) { console.warn("[Smart Supertexts] Auto-detect MOGRTs error:", e.message); }
 
         ST2_TYPES.forEach(function(t) {
             var fileEl = document.getElementById("st2-mogrt-file-" + t);

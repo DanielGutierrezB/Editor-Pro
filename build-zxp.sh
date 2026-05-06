@@ -51,6 +51,10 @@ if [ -f "$SCRIPT_DIR/VERSION" ]; then
     cp "$SCRIPT_DIR/VERSION" "$BUILD/ext/VERSION"
     echo "  ✓ VERSION file included ($(cat "$SCRIPT_DIR/VERSION"))"
 fi
+if [ -d "$SCRIPT_DIR/mogrts" ]; then
+    cp -R "$SCRIPT_DIR/mogrts" "$BUILD/ext/mogrts"
+    echo "  ✓ MOGRTs bundled ($(ls "$SCRIPT_DIR/mogrts" | wc -l | tr -d ' ') files)"
+fi
 if [ -d "$SCRIPT_DIR/Prompts" ]; then
     cp -R "$SCRIPT_DIR/Prompts" "$BUILD/ext/Prompts"
 fi
