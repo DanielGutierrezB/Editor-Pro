@@ -523,6 +523,12 @@
     function toggleMOGRTConfig() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.toggleMOGRTConfig(); }
     function loadDefaultMOGRTs() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.loadDefaultMOGRTs(); }
     function loadMOGRTFolder() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.loadMOGRTFolder(); }
+    window.debugSelectedMOGRT = function() {
+        csInterface.evalScript("debugMOGRTProperties()", function(r) {
+            if (window.EPLogger) window.EPLogger.log("debug", "mogrt-inspect", r.substring(0, 3000));
+            alert(r.substring(0, 800));
+        });
+    };
     function st2BatchOpen() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchOpen(); }
     function st2BatchAnalyzeAll() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchAnalyzeAll(); }
     function st2BatchCreateAll() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchCreateAll(); }
