@@ -767,12 +767,45 @@
 }
 
 /* ── Control Panel Tab ── */
+#st2-tab-control {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
 .st2-ctrl-header {
     display: flex;
     align-items: center;
     gap: 8px;
     margin-bottom: 8px;
     flex-shrink: 0;
+}
+.st2-ctrl-filter-bar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+}
+.st2-ctrl-filter-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.05);
+    color: var(--text-secondary);
+    user-select: none;
+    transition: background 0.15s, border-color 0.15s;
+}
+.st2-ctrl-filter-tag:hover {
+    background: rgba(255,255,255,0.1);
+}
+.st2-ctrl-filter-tag.active {
+    background: rgba(99,102,241,0.2);
+    border-color: rgba(99,102,241,0.5);
+    color: var(--accent-bright);
 }
 .st2-ctrl-toolbar {
     display: flex;

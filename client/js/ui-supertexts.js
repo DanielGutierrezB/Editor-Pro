@@ -2404,16 +2404,25 @@
     // ═════════════════════════════════════════════════════════════
 
     var _st2CtrlClips = [];
+    var _st2CtrlTypeFilter = null;
+
+    function _st2CtrlGetType(clip) {
+        var m = (clip.name || '').match(/^\[([A-Z]+)\]/);
+        return m ? m[1].toLowerCase() : 'unknown';
+    }
 
     function _st2CtrlScan() {
         var statusEl = document.getElementById('st2-ctrl-status');
         if (statusEl) statusEl.textContent = 'Escaneando...';
+        _st2CtrlTypeFilter = null;
 
         csInterface.evalScript('scanMOGRTClips()', function(res) {
             try {
                 var data = JSON.parse(res);
                 if (data.error) { showToast(data.error, 'error'); if (statusEl) statusEl.textContent = ''; return; }
                 _st2CtrlClips = data.clips || [];
+                // Mark all selected by default
+                _st2CtrlClips.forEach(function(c) { c.selected = true; });
                 if (statusEl) statusEl.textContent = _st2CtrlClips.length + ' clips MOGRT';
                 _st2CtrlRender();
             } catch(e) {
@@ -2433,19 +2442,99 @@
             list.innerHTML = '';
             if (empty) empty.classList.remove('hidden');
             if (toolbar) toolbar.classList.add('hidden');
+            // Remove filter bar if exists
+            var existingFilter = document.getElementById('st2-ctrl-filter-bar');
+            if (existingFilter) existingFilter.remove();
             return;
         }
         if (empty) empty.classList.add('hidden');
 
+        // Build type filter bar
+        var typeCounts = {};
+        _st2CtrlClips.forEach(function(c) {
+            var t = _st2CtrlGetType(c);
+            typeCounts[t] = (typeCounts[t] || 0) + 1;
+        });
+
+        var filterBar = document.getElementById('st2-ctrl-filter-bar');
+        if (!filterBar) {
+            filterBar = document.createElement('div');
+            filterBar.id = 'st2-ctrl-filter-bar';
+            filterBar.className = 'st2-ctrl-filter-bar';
+            // Insert before toolbar
+            if (toolbar && toolbar.parentNode) toolbar.parentNode.insertBefore(filterBar, toolbar);
+        }
+        filterBar.innerHTML = '';
+        var typeKeys = Object.keys(typeCounts).sort();
+        // "All" pill
+        var allPill = document.createElement('span');
+        allPill.className = 'st2-ctrl-filter-tag' + (!_st2CtrlTypeFilter ? ' active' : '');
+        allPill.textContent = 'Todos (' + _st2CtrlClips.length + ')';
+        allPill.addEventListener('click', function() {
+            _st2CtrlTypeFilter = null;
+            _st2CtrlApplyFilter();
+        });
+        filterBar.appendChild(allPill);
+        typeKeys.forEach(function(t) {
+            var pill = document.createElement('span');
+            pill.className = 'st2-ctrl-filter-tag' + (_st2CtrlTypeFilter === t ? ' active' : '');
+            var col = ST2_TYPE_COLORS[t] || 'var(--text-secondary)';
+            pill.style.color = (_st2CtrlTypeFilter === t) ? '' : col;
+            pill.textContent = typeCounts[t] + ' ' + t;
+            pill.addEventListener('click', function() {
+                _st2CtrlTypeFilter = (_st2CtrlTypeFilter === t) ? null : t;
+                _st2CtrlApplyFilter();
+            });
+            filterBar.appendChild(pill);
+        });
+
+        // Render clip list
+        _st2CtrlRenderList();
+
+        if (toolbar) toolbar.classList.remove('hidden');
+    }
+
+    function _st2CtrlApplyFilter() {
+        // Update filter pills
+        var filterBar = document.getElementById('st2-ctrl-filter-bar');
+        if (filterBar) {
+            filterBar.querySelectorAll('.st2-ctrl-filter-tag').forEach(function(pill, i) {
+                if (i === 0) {
+                    pill.classList.toggle('active', !_st2CtrlTypeFilter);
+                } else {
+                    var pillType = pill.textContent.replace(/^\d+\s+/, '');
+                    pill.classList.toggle('active', _st2CtrlTypeFilter === pillType);
+                }
+            });
+        }
+        // Update selection: select only filtered type, deselect others
+        if (_st2CtrlTypeFilter) {
+            _st2CtrlClips.forEach(function(c) {
+                c.selected = (_st2CtrlGetType(c) === _st2CtrlTypeFilter);
+            });
+        } else {
+            _st2CtrlClips.forEach(function(c) { c.selected = true; });
+        }
+        _st2CtrlRenderList();
+    }
+
+    function _st2CtrlRenderList() {
+        var list = document.getElementById('st2-ctrl-list');
+        if (!list) return;
         list.innerHTML = '';
-        _st2CtrlClips.forEach(function(clip, idx) {
+
+        var visible = _st2CtrlTypeFilter
+            ? _st2CtrlClips.filter(function(c) { return _st2CtrlGetType(c) === _st2CtrlTypeFilter; })
+            : _st2CtrlClips;
+
+        visible.forEach(function(clip) {
+            var idx = _st2CtrlClips.indexOf(clip);
             var el = document.createElement('div');
-            el.className = 'supertext-item st-checked';
+            el.className = 'supertext-item' + (clip.selected ? ' st-checked' : ' st-unchecked');
             el.dataset.ctrlIdx = idx;
 
             var clipName = clip.name || 'MOGRT';
-            var typeMatch = clipName.match(/^\[([A-Z]+)\]/);
-            var typeTag = typeMatch ? typeMatch[1].toLowerCase() : 'unknown';
+            var typeTag = _st2CtrlGetType(clip);
             var typeClass = 'type-' + typeTag;
             var textPreview = clipName.replace(/^\[[A-Z]+\]\s*/, '');
             var startTime = clip.startTime !== undefined ? formatTimeFull(clip.startTime) : '?';
@@ -2453,7 +2542,7 @@
 
             el.innerHTML =
                 '<label class="st-checkbox-wrap">' +
-                    '<input type="checkbox" class="st2-ctrl-check" data-idx="' + idx + '" checked>' +
+                    '<input type="checkbox" class="st2-ctrl-check" data-idx="' + idx + '"' + (clip.selected ? ' checked' : '') + '>' +
                 '</label>' +
                 '<div class="st-time">' + startTime + '</div>' +
                 '<div class="st-content">' +
@@ -2468,10 +2557,9 @@
             list.appendChild(el);
         });
 
-        if (toolbar) toolbar.classList.remove('hidden');
         _st2CtrlUpdateCount();
 
-        // Bind checkbox changes
+        // Bind checkbox changes (fresh listeners since innerHTML was replaced)
         list.addEventListener('change', function(e) {
             var chk = e.target.closest('.st2-ctrl-check');
             if (chk) {
@@ -2488,13 +2576,13 @@
     }
 
     function _st2CtrlUpdateCount() {
-        var count = _st2CtrlClips.filter(function(c) { return c.selected !== false; }).length;
+        var count = _st2CtrlClips.filter(function(c) { return c.selected; }).length;
         var el = document.getElementById('st2-ctrl-sel-count');
         if (el) el.textContent = count + ' seleccionados:';
     }
 
     function _st2CtrlApply() {
-        var selected = _st2CtrlClips.filter(function(c) { return c.selected !== false; });
+        var selected = _st2CtrlClips.filter(function(c) { return c.selected; });
         if (selected.length === 0) { showToast('Selecciona al menos un clip', 'info'); return; }
 
         var toolbar = document.getElementById('st2-ctrl-toolbar');
