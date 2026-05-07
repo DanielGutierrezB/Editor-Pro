@@ -693,7 +693,7 @@
 
 /* ── Smart Supertexts Accordion Layout ── */
 /* When expanded, Smart Supertexts auto-fills the entire panel like fullscreen */
-.st2-tool-card:has(.tool-card-body:not(.hidden)) {
+.st2-tool-card.st2-expanded {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;

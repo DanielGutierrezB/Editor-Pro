@@ -2407,6 +2407,27 @@
         // Resize on window resize
         window.addEventListener('resize', _st2ResizeOpenStep);
 
+        // Auto-expand to fullscreen when tool card body is shown
+        var st2Card = document.querySelector('.st2-tool-card');
+        var st2Body = st2Card ? st2Card.querySelector('.tool-card-body') : null;
+        if (st2Body) {
+            var observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(m) {
+                    if (m.attributeName === 'class') {
+                        var isVisible = !st2Body.classList.contains('hidden');
+                        st2Card.classList.toggle('st2-expanded', isVisible);
+                        if (isVisible) {
+                            document.body.style.overflow = 'hidden';
+                            setTimeout(_st2ResizeOpenStep, 50);
+                        } else {
+                            document.body.style.overflow = '';
+                        }
+                    }
+                });
+            });
+            observer.observe(st2Body, { attributes: true, attributeFilter: ['class'] });
+        }
+
         // Control panel: scan button
         var scanBtn = document.getElementById('btn-st2-ctrl-scan');
         if (scanBtn) scanBtn.addEventListener('click', _st2CtrlScan);
@@ -2434,28 +2455,39 @@
         }
         if (!openBody) return;
 
-        // Calculate: total card height - (all step headers + card header + padding)
-        var cardRect = toolCard.getBoundingClientRect();
-        var totalHeight = cardRect.height;
+        // Reset to measure correctly
+        openBody.style.maxHeight = 'none';
+        openBody.style.overflowY = 'auto';
 
-        // Subtract card header
+        // Total card height
+        var totalHeight = toolCard.getBoundingClientRect().height;
+
+        // Measure everything EXCEPT the open body
         var cardHeader = toolCard.querySelector('.tool-card-header');
-        var headerHeight = cardHeader ? cardHeader.offsetHeight : 40;
+        var usedHeight = cardHeader ? cardHeader.offsetHeight : 0;
 
-        // Subtract all step headers (they're always visible)
-        var stepHeaders = cardBody.querySelectorAll('.st2-step-header');
-        var headersHeight = 0;
-        for (var h = 0; h < stepHeaders.length; h++) {
-            headersHeight += stepHeaders[h].closest('.rec-step').offsetHeight - (stepHeaders[h].closest('.rec-step').querySelector('.rec-step-body:not(.hidden)') ? stepHeaders[h].closest('.rec-step').querySelector('.rec-step-body:not(.hidden)').offsetHeight : 0);
-        }
+        // Each step header height (just the clickable header, not the body)
+        cardBody.querySelectorAll('.st2-step-header').forEach(function(sh) {
+            usedHeight += sh.offsetHeight;
+            // Add the step's border/margin
+            var step = sh.closest('.rec-step');
+            if (step) {
+                var style = window.getComputedStyle(step);
+                usedHeight += parseInt(style.marginTop || 0) + parseInt(style.marginBottom || 0);
+                usedHeight += parseInt(style.borderTopWidth || 0) + parseInt(style.borderBottomWidth || 0);
+            }
+        });
 
-        // Available height = total - header - step headers - padding
-        var padding = 24; // top + bottom padding of card body
-        var available = totalHeight - headerHeight - headersHeight - padding;
+        // Add card body padding
+        var bodyStyle = window.getComputedStyle(cardBody);
+        usedHeight += parseInt(bodyStyle.paddingTop || 0) + parseInt(bodyStyle.paddingBottom || 0);
+        // Add open step's border-top (the body has a border-top from rec-step-body)
+        usedHeight += 1;
+
+        var available = totalHeight - usedHeight;
         if (available < 200) available = 200;
 
         openBody.style.maxHeight = available + 'px';
-        openBody.style.overflowY = 'auto';
 
         // Toggle buttons in static HTML (if any)
         document.querySelectorAll('.st2-toggle').forEach(function(btn) {
