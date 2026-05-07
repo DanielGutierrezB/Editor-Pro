@@ -2697,29 +2697,46 @@
             html += '<div class="st2-prop-control">';
 
             if (cp.type === 'color') {
-                // Color picker
+                // Color swatch + picker
                 var colorVal = cp.values[0] || '#ffffff';
                 html += '<input type="color" class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + colorVal + '">';
+
             } else if (cp.type === 'checkbox') {
-                // Toggle switch
+                // Toggle switch (like Premiere)
                 var isOn = cp.values[0] === true;
                 html += '<button type="button" class="st2-toggle' + (isOn ? ' on' : '') + ' st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-value="' + isOn + '"></button>';
-            } else if (cp.type === 'number') {
-                // Number input (slider or dropdown index)
-                var numVal = cp.values[0] || 0;
-                html += '<input type="number" class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + numVal + '" style="width:60px;font-size:10px;padding:3px;background:#2a2a2a;color:#e0e0e0;border:1px solid rgba(255,255,255,0.15);border-radius:4px">';
+
+            } else if (cp.type === 'dropdown') {
+                // Dropdown menu with indexed options
+                var dropVal = cp.values[0] || 0;
+                var opts = cp.propInfo.options || [];
+                html += '<select class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-subtype="dropdown">';
+                html += '<option value="">Sin cambio</option>';
+                for (var oi = 0; oi < opts.length; oi++) {
+                    html += '<option value="' + opts[oi] + '"' + (opts[oi] === dropVal ? ' selected' : '') + '>Opci\u00f3n ' + (oi + 1) + '</option>';
+                }
+                html += '</select>';
+
+            } else if (cp.type === 'slider') {
+                // Slider with numeric input
+                var sliderVal = cp.values[0] || 0;
+                html += '<input type="range" class="st2-ctrl-slider st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + sliderVal + '" min="0" max="100" step="0.1">';
+                html += '<input type="number" class="st2-ctrl-slider-num" data-prop="' + esc(cp.name) + '" value="' + sliderVal + '" step="0.1" style="width:50px;font-size:10px;padding:3px;background:#2a2a2a;color:#e0e0e0;border:1px solid rgba(255,255,255,0.15);border-radius:4px;margin-left:4px">';
+
             } else if (cp.type === 'text') {
-                // Text with font info
+                // Text property: show current font + font weight dropdown
                 var fontName = cp.propInfo.fontStyle || '';
-                var shortFont = fontName.replace('DMSans-', '');
-                html += '<span style="font-size:9px;color:var(--text-muted);margin-right:6px">' + esc(shortFont) + '</span>';
+                var shortFont = fontName.replace(/^[A-Za-z]+-/, '');
+                html += '<span style="font-size:9px;color:var(--text-muted);margin-right:4px">' + esc(shortFont || 'font') + '</span>';
                 html += '<select class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-subtype="font">';
-                html += '<option value="">Font...</option>';
+                html += '<option value="">Sin cambio</option>';
                 ST2_FONT_WEIGHTS.forEach(function(fw) {
                     html += '<option value="' + fw.value + '"' + (fw.value === fontName ? ' selected' : '') + '>' + fw.label + '</option>';
                 });
                 html += '</select>';
+
             } else if (cp.type === 'string') {
+                // Read-only string display
                 html += '<span style="font-size:9px;color:var(--text-muted)">' + esc(String(cp.values[0] || '').substring(0, 30)) + '</span>';
             }
 
@@ -2753,6 +2770,22 @@
         // Number inputs — track changes
         container.querySelectorAll('input[type="number"]').forEach(function(inp) {
             inp.addEventListener('change', function() { this.dataset.changed = 'true'; });
+        });
+
+        // Slider + number sync
+        container.querySelectorAll('.st2-ctrl-slider').forEach(function(slider) {
+            var propName = slider.dataset.prop;
+            var numInput = container.querySelector('.st2-ctrl-slider-num[data-prop="' + propName + '"]');
+            slider.addEventListener('input', function() {
+                this.dataset.changed = 'true';
+                if (numInput) numInput.value = this.value;
+            });
+            if (numInput) {
+                numInput.addEventListener('change', function() {
+                    slider.value = this.value;
+                    slider.dataset.changed = 'true';
+                });
+            }
         });
 
         // Select changes
@@ -2790,10 +2823,14 @@
                 // Number (slider or dropdown index)
                 props[propName] = parseFloat(ctrl.value);
             } else if (ctrl.tagName === 'SELECT') {
-                if (ctrl.dataset.subtype === 'font' && ctrl.value) {
+                if (!ctrl.value) return; // "Sin cambio" selected
+                if (ctrl.dataset.subtype === 'font') {
                     // Font weight change on text property
                     props[propName] = { fontStyle: ctrl.value };
-                } else if (ctrl.value) {
+                } else if (ctrl.dataset.subtype === 'dropdown') {
+                    // Dropdown: send as integer index
+                    props[propName] = parseInt(ctrl.value);
+                } else {
                     props[propName] = parseFloat(ctrl.value);
                     if (isNaN(props[propName])) props[propName] = ctrl.value;
                 }

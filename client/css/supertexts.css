@@ -800,6 +800,24 @@
 .st2-prop-control .st2-toggle.on::after {
     transform: translateX(16px);
 }
+.st2-prop-control input[type="range"] {
+    flex: 1;
+    min-width: 60px;
+    height: 4px;
+    -webkit-appearance: none;
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+.st2-prop-control input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent-bright);
+    cursor: pointer;
+}
 .st2-prop-control input[type="color"] {
     width: 36px;
     height: 24px;

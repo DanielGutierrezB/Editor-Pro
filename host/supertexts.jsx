@@ -982,7 +982,57 @@ function scanMOGRTClips() {
                             info.type = "checkbox";
                             info.value = val;
                         } else if (vt === "number") {
-                            info.type = "number";
+                            // Check if it's an integer (likely dropdown/menu) vs float (slider)
+                            var isInt = (val === Math.floor(val));
+                            // Try to get min/max for slider detection
+                            var hasRange = false;
+                            try {
+                                // MGT properties don't expose min/max directly,
+                                // but we can detect dropdown by trying setValue with known patterns.
+                                // For now, use name-based heuristics + integer detection.
+                                hasRange = true;
+                            } catch(er) {}
+
+                            // Known dropdown property names (from MOGRT definition analysis)
+                            var dnLower = dn.toLowerCase();
+                            var isDropdown = (dnLower === "color" || dnLower === "colour" ||
+                                             dnLower === "style" || dnLower === "tipo" ||
+                                             dnLower === "mode" || dnLower === "modo" ||
+                                             dnLower === "preset" || dnLower === "theme" ||
+                                             dnLower === "layout" || dnLower === "position");
+
+                            if (isDropdown || (isInt && val >= 0 && val <= 20)) {
+                                // Likely a dropdown menu — try to detect options by probing
+                                info.type = "dropdown";
+                                info.value = val;
+                                // Try to detect options by saving current, testing values, restoring
+                                var options = [];
+                                var savedVal = val;
+                                // Probe values 0-10 to find valid options
+                                for (var optIdx = 0; optIdx <= 10; optIdx++) {
+                                    try {
+                                        prop.setValue(optIdx, 1);
+                                        var readBack = prop.getValue();
+                                        if (typeof readBack === "number" && readBack === optIdx) {
+                                            options.push(optIdx);
+                                        } else {
+                                            break; // Hit invalid index, stop
+                                        }
+                                    } catch(eOpt) {
+                                        break;
+                                    }
+                                }
+                                // Restore original value
+                                try { prop.setValue(savedVal, 1); } catch(eRestore) {}
+                                if (options.length > 1) {
+                                    info.options = options;
+                                } else {
+                                    // Not really a dropdown, treat as slider
+                                    info.type = "slider";
+                                }
+                            } else {
+                                info.type = "slider";
+                            }
                             info.value = val;
                         } else if (vt === "string" && val.charAt(0) === "{") {
                             // JSON text property
@@ -995,7 +1045,6 @@ function scanMOGRTClips() {
                                     info.fontSize = (parsed.fontSizeEditValue && parsed.fontSizeEditValue[0]) || 0;
                                 } else {
                                     info.type = "json";
-                                    info.value = val.substring(0, 100);
                                 }
                             } catch(ep) {
                                 info.type = "string";
@@ -1010,7 +1059,6 @@ function scanMOGRTClips() {
                                 var bb = Math.round(val[2] * 255);
                                 info.value = "#" + (rr < 16 ? "0" : "") + rr.toString(16) + (gg < 16 ? "0" : "") + gg.toString(16) + (bb < 16 ? "0" : "") + bb.toString(16);
                             } else if (val.length !== undefined) {
-                                // Group — skip (it's a container, not editable directly)
                                 info.type = "group";
                             } else if (val.textEditValue !== undefined) {
                                 info.type = "text";
@@ -1019,25 +1067,19 @@ function scanMOGRTClips() {
                                 info.fontSize = (val.fontSizeEditValue && val.fontSizeEditValue[0]) || 0;
                             } else {
                                 info.type = "object";
-                                info.value = JSON.stringify(val).substring(0, 100);
                             }
                         } else if (vt === "string") {
                             info.type = "string";
                             info.value = val.substring(0, 100);
                         }
-
-                        // Detect dropdown/menu type by checking menucontent
-                        // Premiere stores dropdown index as number but has menu options
-                        // We detect by looking for specific known patterns or check if it's an integer with known menu props
                     } catch(ev) {
                         info.type = "unknown";
                         info.error = ev.message;
                     }
 
-                    // Skip group containers
-                    if (info.type !== "group") {
-                        props.push(info);
-                    }
+                    // Skip non-editable types
+                    if (info.type === "group" || info.type === "json" || info.type === "object" || info.type === "unknown") continue;
+                    props.push(info);
                 }
 
                 clips.push({
