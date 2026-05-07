@@ -186,11 +186,12 @@ function _setMogrtClipEnd(seq, trackIdx, startSecs, endSecs) {
     return false;
 }
 
-function _trySetTextValue(param, newText) {
+function _trySetTextValue(param, newText, fontStyle) {
     // Strategy 1: parse as JSON, modify textEditValue + fontTextRunLength + strDB
     // fontTextRunLength MUST match the new text length; if it stays at the old
     // default (e.g. 29 chars) AE will only style/animate that many characters,
     // causing words beyond that limit to render with wrong position/size.
+    // Optional fontStyle: PostScript font name (e.g. "DMSans-Bold") to change weight.
     try {
         var raw = param.getValue();
         // Log what we're working with for debugging
@@ -217,6 +218,12 @@ function _trySetTextValue(param, newText) {
             // Sync all font arrays to single run covering full text
             if (obj.fontEditValue && obj.fontEditValue.length > 1) {
                 obj.fontEditValue = [obj.fontEditValue[0]];
+            }
+            // Apply font style override if provided
+            if (fontStyle && obj.fontEditValue) {
+                for (var fsi = 0; fsi < obj.fontEditValue.length; fsi++) {
+                    obj.fontEditValue[fsi] = fontStyle;
+                }
             }
             if (obj.fontSizeEditValue && obj.fontSizeEditValue.length > 1) {
                 obj.fontSizeEditValue = [obj.fontSizeEditValue[0]];
@@ -546,6 +553,105 @@ function _setClipPositionY(trackItem, offsetPx, errors, idx) {
     }
 }
 
+/**
+ * Sets arbitrary MOGRT properties by displayName after import.
+ * @param {TrackItem} trackItem - the imported MOGRT clip
+ * @param {Object} properties - key=displayName, value depends on property type:
+ *   text+font: { text: "...", fontStyle: "DMSans-Bold" } or just string for text-only
+ *   color: [r, g, b, a] (0-1 floats)
+ *   checkbox: true/false
+ *   slider: number
+ *   dropdown: integer index (0-based) or string option name
+ * @param {number} itemIdx - for error reporting
+ * @param {Array} errors - error collector
+ */
+function _setMGTProperties(trackItem, properties, itemIdx, errors) {
+    if (!properties || typeof properties !== "object") return;
+    try {
+        if (typeof trackItem.getMGTComponent !== "function") {
+            errors.push("Item " + itemIdx + ": getMGTComponent not available for properties");
+            return;
+        }
+        var moComp = trackItem.getMGTComponent();
+        if (!moComp || !moComp.properties) return;
+
+        var numProps = moComp.properties.numItems;
+
+        // Build lookup: lowercase displayName → prop
+        var propMap = {};
+        for (var p = 0; p < numProps; p++) {
+            var prop;
+            try { prop = moComp.properties[p]; } catch(e) { continue; }
+            if (!prop) continue;
+            var dn = "";
+            try { dn = prop.displayName || ""; } catch(e) {}
+            if (dn) propMap[dn.toLowerCase().replace(/^\s+|\s+$/g, "")] = prop;
+        }
+
+        for (var key in properties) {
+            if (!properties.hasOwnProperty(key)) continue;
+            var val = properties[key];
+            var lookupKey = key.toLowerCase().replace(/^\s+|\s+$/g, "");
+            var targetProp = propMap[lookupKey];
+            if (!targetProp) {
+                $.writeln("[_setMGTProperties] Item " + itemIdx + ": prop '" + key + "' not found. Available: " + Object.keys(propMap).join(", "));
+                continue;
+            }
+
+            try {
+                // Detect property type from current value
+                var curVal = targetProp.getValue();
+                var curType = typeof curVal;
+
+                // Text+font property (JSON with textEditValue)
+                if (typeof val === "object" && val !== null && !Array.isArray(val) && (val.text !== undefined || val.fontStyle !== undefined)) {
+                    // It's a text+font override
+                    var newText = val.text;
+                    var fontOverride = val.fontStyle || null;
+                    if (newText !== undefined && newText !== null) {
+                        newText = _normalizeMogrtNewlines(newText);
+                        _trySetTextValue(targetProp, newText, fontOverride);
+                    } else if (fontOverride) {
+                        // Font change only, keep existing text
+                        var existing = curVal;
+                        if (curType === "string" && curVal.charAt(0) === "{") {
+                            var parsed = JSON.parse(curVal);
+                            var existText = parsed.textEditValue || "";
+                            _trySetTextValue(targetProp, existText, fontOverride);
+                        }
+                    }
+                }
+                // Color: array [r,g,b,a]
+                else if (Array.isArray(val) && val.length >= 3) {
+                    targetProp.setValue(val, 1);
+                    $.writeln("[_setMGTProperties] Item " + itemIdx + ": set color '" + key + "' = [" + val.join(",") + "]");
+                }
+                // Boolean (checkbox)
+                else if (typeof val === "boolean") {
+                    targetProp.setValue(val, 1);
+                    $.writeln("[_setMGTProperties] Item " + itemIdx + ": set checkbox '" + key + "' = " + val);
+                }
+                // Number (slider or dropdown index)
+                else if (typeof val === "number") {
+                    targetProp.setValue(val, 1);
+                    $.writeln("[_setMGTProperties] Item " + itemIdx + ": set number '" + key + "' = " + val);
+                }
+                // String for dropdown by option name
+                else if (typeof val === "string") {
+                    // Try to find the option index by name — dropdown values are integers
+                    // The menucontent order in definition.json matches the index
+                    targetProp.setValue(val, 1);
+                    $.writeln("[_setMGTProperties] Item " + itemIdx + ": set string '" + key + "' = " + val);
+                }
+            } catch(eProp) {
+                errors.push("Item " + itemIdx + ": error setting '" + key + "': " + eProp.message);
+            }
+        }
+    } catch(e) {
+        errors.push("Item " + itemIdx + ": _setMGTProperties error — " + e.message);
+    }
+}
+
 function insertSupertextMOGRTs(jsonPath) {
     try {
         var seq = app.project.activeSequence;
@@ -710,6 +816,12 @@ function insertSupertextMOGRTs(jsonPath) {
                     _setClipPositionY(trackItem, bulletPosY, errors, i);
                 }
 
+                // 7. MOGRT property overrides (color, font style, checkboxes, dropdowns)
+                if (st.mogrtProps) {
+                    $.sleep(200);
+                    _setMGTProperties(trackItem, st.mogrtProps, i, errors);
+                }
+
             } catch(eItem) {
                 errors.push("Item " + i + ": " + eItem.message);
             }
@@ -793,6 +905,12 @@ function replaceMOGRTClip(jsonPath) {
         var repTitleLabel = REP_TYPE_LABELS[data.type] || null;
         _setMGTText(trackItem, data.text, 0, errors, repTitleLabel);
         $.sleep(200);
+
+        // MOGRT property overrides for replace too
+        if (data.mogrtProps) {
+            $.sleep(200);
+            _setMGTProperties(trackItem, data.mogrtProps, 0, errors);
+        }
 
         try {
             if (!isNaN(endTime)) {

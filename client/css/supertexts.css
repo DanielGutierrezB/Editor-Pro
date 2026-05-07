@@ -691,3 +691,71 @@
     border-left: 2px solid var(--accent);
 }
 
+/* ── MOGRT Property Controls ── */
+.st-props-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+    align-items: center;
+}
+.st-props-row select {
+    font-size: 9px;
+    padding: 2px 4px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 3px;
+    cursor: pointer;
+    max-width: 90px;
+}
+.st-props-row select:hover {
+    border-color: rgba(255,255,255,0.25);
+}
+.st2-prop-toggle {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 9px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+.st2-prop-toggle input[type="checkbox"] {
+    width: 12px;
+    height: 12px;
+    margin: 0;
+    cursor: pointer;
+}
+
+/* ── Bulk Toolbar ── */
+.st2-bulk-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: rgba(99,102,241,0.1);
+    border: 1px solid rgba(99,102,241,0.25);
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+}
+.st2-bulk-toolbar.hidden { display: none; }
+.st2-bulk-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent-bright);
+}
+.st2-bulk-toolbar select {
+    font-size: 9px;
+    padding: 2px 4px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 3px;
+    cursor: pointer;
+}
+.st2-bulk-toolbar .st2-prop-toggle {
+    font-size: 10px;
+}
+

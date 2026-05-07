@@ -1327,6 +1327,28 @@
     var _st2TypeFilter = null;
     var ST2_TYPE_COLORS = { title: "var(--accent-bright)", bullet: "var(--success)", step: "var(--info)", definition: "var(--warning)", data: "var(--highlight)", summary: "var(--brand-start)", highlight: "#facc15", question: "#f472b6" };
 
+    // ── MOGRT property control definitions ──
+    var ST2_FONT_WEIGHTS = [
+        { label: "Regular", value: "DMSans-Regular" },
+        { label: "Medium", value: "DMSans-Medium" },
+        { label: "SemiBold", value: "DMSans-SemiBold" },
+        { label: "Bold", value: "DMSans-Bold" },
+        { label: "ExtraBold", value: "DMSans-ExtraBold" },
+        { label: "Black", value: "DMSans-Black" }
+    ];
+    var ST2_COLOR_PRESETS = {
+        definition: ["Vampire", "Green", "White"],
+        data:       ["Vampire", "Green", "White"],
+        step:       ["Vampire", "Green", "White"],
+        summary:    ["Vampire", "Green", "White"],
+        highlight:  ["White", "Vampire", "Green", "Yellow"]
+    };
+    var ST2_DEFAULT_FONT = {
+        title: "DMSans-Bold", bullet: "DMSans-Bold", highlight: "DMSans-Bold",
+        question: "DMSans-Bold", definition: "DMSans-Regular", data: "DMSans-Regular",
+        step: "DMSans-Regular", summary: "DMSans-Regular"
+    };
+
     function renderSupertext2Results(result) {
         var summary = document.getElementById("st2-summary");
         summary.innerHTML = escSupertextHtml(result.summary || state.supertexts2.length + " momentos clave identificados");
@@ -1429,6 +1451,39 @@
             var curType = st.type || "bullet";
             var typeClass = "type-" + curType;
 
+            // Build MOGRT property controls HTML
+            var propsHtml = '';
+            // Font weight (all types)
+            var curFont = (st.mogrtProps && st.mogrtProps.fontStyle) || ST2_DEFAULT_FONT[curType] || 'DMSans-Bold';
+            var fontOpts = ST2_FONT_WEIGHTS.map(function(fw) {
+                return '<option value="' + fw.value + '"' + (fw.value === curFont ? ' selected' : '') + '>' + fw.label + '</option>';
+            }).join('');
+            propsHtml += '<select class="st2-prop-font" data-idx="' + idx + '" title="Font weight">' + fontOpts + '</select>';
+
+            // Color preset (definition/data/step/summary/highlight)
+            var colorPresets = ST2_COLOR_PRESETS[curType];
+            if (colorPresets) {
+                var curColor = (st.mogrtProps && st.mogrtProps.colorPreset !== undefined) ? st.mogrtProps.colorPreset : 1;
+                var colorOpts = colorPresets.map(function(cp, ci) {
+                    return '<option value="' + ci + '"' + (ci === curColor ? ' selected' : '') + '>' + cp + '</option>';
+                }).join('');
+                propsHtml += '<select class="st2-prop-color" data-idx="' + idx + '" title="Color preset">' + colorOpts + '</select>';
+            }
+
+            // Show Bullets (bullet only)
+            if (curType === 'bullet') {
+                var showBul = (st.mogrtProps && st.mogrtProps.showBullets !== undefined) ? st.mogrtProps.showBullets : true;
+                propsHtml += '<label class="st2-prop-toggle" title="Show bullets"><input type="checkbox" class="st2-prop-showbullets" data-idx="' + idx + '"' + (showBul ? ' checked' : '') + '><span>Bullets</span></label>';
+            }
+
+            // Titulo: Recuadro off + Animación Salida
+            if (curType === 'title') {
+                var recOff = (st.mogrtProps && st.mogrtProps.recuadroOff !== undefined) ? st.mogrtProps.recuadroOff : true;
+                var animSal = (st.mogrtProps && st.mogrtProps.animacionSalida !== undefined) ? st.mogrtProps.animacionSalida : true;
+                propsHtml += '<label class="st2-prop-toggle" title="Recuadro"><input type="checkbox" class="st2-prop-recuadro" data-idx="' + idx + '"' + (recOff ? ' checked' : '') + '><span>Recuadro</span></label>';
+                propsHtml += '<label class="st2-prop-toggle" title="Animación salida"><input type="checkbox" class="st2-prop-animsalida" data-idx="' + idx + '"' + (animSal ? ' checked' : '') + '><span>Anim. Salida</span></label>';
+            }
+
             el.innerHTML =
                 '<label class="st-checkbox-wrap">' +
                     '<input type="checkbox" class="st2-check" data-idx="' + idx + '"' + (st.checked ? " checked" : "") + '>' +
@@ -1442,6 +1497,7 @@
                         '<span style="font-size:9px;color:var(--text-muted)">' + dur.toFixed(1) + 's</span>' +
                         '<button class="btn btn-xs btn-ghost st2-replace-btn hidden" data-idx="' + idx + '" title="Reemplazar clip en timeline">↻</button>' +
                     '</div>' +
+                    '<div class="st-props-row">' + propsHtml + '</div>' +
                     (st.reason ? '<div style="font-size:9px;color:var(--text-muted);margin-top:2px">' + escSupertextHtml(st.reason) + '</div>' : '') +
                 '</div>';
 
@@ -1498,17 +1554,56 @@
                 return;
             }
             var item = e.target.closest(".supertext-item");
-            if (item && !e.target.closest(".st-checkbox-wrap") && !e.target.closest(".st2-type-select")) {
+            if (item && !e.target.closest(".st-checkbox-wrap") && !e.target.closest(".st2-type-select") && !e.target.closest(".st-props-row")) {
                 var stIdx = parseInt(item.dataset.st2Idx);
                 if (!isNaN(stIdx) && state.supertexts2[stIdx]) navigateToTime(state.supertexts2[stIdx].time);
             }
         });
 
         list.addEventListener("change", function(e) {
+            // ── MOGRT property controls ──
+            var fontSel = e.target.closest(".st2-prop-font");
+            if (fontSel) {
+                var fi = parseInt(fontSel.dataset.idx);
+                if (!state.supertexts2[fi].mogrtProps) state.supertexts2[fi].mogrtProps = {};
+                state.supertexts2[fi].mogrtProps.fontStyle = fontSel.value;
+                return;
+            }
+            var colorSel = e.target.closest(".st2-prop-color");
+            if (colorSel) {
+                var ci2 = parseInt(colorSel.dataset.idx);
+                if (!state.supertexts2[ci2].mogrtProps) state.supertexts2[ci2].mogrtProps = {};
+                state.supertexts2[ci2].mogrtProps.colorPreset = parseInt(colorSel.value);
+                return;
+            }
+            var showBul = e.target.closest(".st2-prop-showbullets");
+            if (showBul) {
+                var bi = parseInt(showBul.dataset.idx);
+                if (!state.supertexts2[bi].mogrtProps) state.supertexts2[bi].mogrtProps = {};
+                state.supertexts2[bi].mogrtProps.showBullets = showBul.checked;
+                return;
+            }
+            var recuadro = e.target.closest(".st2-prop-recuadro");
+            if (recuadro) {
+                var ri = parseInt(recuadro.dataset.idx);
+                if (!state.supertexts2[ri].mogrtProps) state.supertexts2[ri].mogrtProps = {};
+                state.supertexts2[ri].mogrtProps.recuadroOff = recuadro.checked;
+                return;
+            }
+            var animSal = e.target.closest(".st2-prop-animsalida");
+            if (animSal) {
+                var ai = parseInt(animSal.dataset.idx);
+                if (!state.supertexts2[ai].mogrtProps) state.supertexts2[ai].mogrtProps = {};
+                state.supertexts2[ai].mogrtProps.animacionSalida = animSal.checked;
+                return;
+            }
+
             var sel = e.target.closest(".st2-type-select");
             if (sel) {
                 var idx = parseInt(sel.dataset.idx);
                 state.supertexts2[idx].type = sel.value;
+                // Re-render to update property controls for new type
+                renderSupertext2Results(result);
                 var badge = list.querySelector('.st-type-badge[data-idx="' + idx + '"]');
                 if (badge) {
                     badge.className = "st-type-badge type-" + sel.value;
@@ -1538,6 +1633,127 @@
         var allChecked = state.supertexts2.every(function(st) { return st.checked; });
         var checkedCount = state.supertexts2.filter(function(st) { return st.checked; }).length;
         btn.textContent = allChecked ? "Deseleccionar todos" : "Seleccionar todos (" + checkedCount + "/" + state.supertexts2.length + ")";
+        _st2UpdateBulkToolbar();
+    }
+
+    /**
+     * Multi-select toolbar: apply a property change to all checked items.
+     */
+    function _st2UpdateBulkToolbar() {
+        var toolbar = document.getElementById("st2-bulk-toolbar");
+        if (!toolbar) {
+            // Create toolbar if it doesn't exist
+            var container = document.getElementById("st2-results");
+            if (!container) return;
+            toolbar = document.createElement("div");
+            toolbar.id = "st2-bulk-toolbar";
+            toolbar.className = "st2-bulk-toolbar hidden";
+            var refNode = document.getElementById("st2-list");
+            if (refNode) container.insertBefore(toolbar, refNode);
+            else container.appendChild(toolbar);
+        }
+
+        var checked = state.supertexts2.filter(function(st) { return st.checked; });
+        if (checked.length < 2) {
+            toolbar.classList.add("hidden");
+            return;
+        }
+        toolbar.classList.remove("hidden");
+
+        // Determine common types
+        var types = {};
+        checked.forEach(function(st) { types[st.type || "bullet"] = true; });
+        var hasColorPreset = checked.some(function(st) { return !!ST2_COLOR_PRESETS[st.type]; });
+        var hasBullets = !!types.bullet;
+        var hasTitle = !!types.title;
+
+        var html = '<span class="st2-bulk-label">' + checked.length + ' seleccionados:</span>';
+
+        // Font weight
+        var fontOpts = ST2_FONT_WEIGHTS.map(function(fw) {
+            return '<option value="' + fw.value + '">' + fw.label + '</option>';
+        }).join('');
+        html += '<select class="st2-bulk-font" title="Font weight para seleccionados"><option value="">Font...</option>' + fontOpts + '</select>';
+
+        // Color preset (if any selected type supports it)
+        if (hasColorPreset) {
+            // Use union of all presets
+            var allPresets = {};
+            checked.forEach(function(st) {
+                var presets = ST2_COLOR_PRESETS[st.type];
+                if (presets) presets.forEach(function(p) { allPresets[p] = true; });
+            });
+            var presetOpts = Object.keys(allPresets).map(function(p, i) {
+                return '<option value="' + p + '">' + p + '</option>';
+            }).join('');
+            html += '<select class="st2-bulk-color" title="Color para seleccionados"><option value="">Color...</option>' + presetOpts + '</select>';
+        }
+
+        // Show Bullets toggle
+        if (hasBullets) {
+            html += '<label class="st2-prop-toggle"><input type="checkbox" class="st2-bulk-showbullets" checked><span>Bullets</span></label>';
+        }
+
+        toolbar.innerHTML = html;
+
+        // Bind events
+        var bulkFont = toolbar.querySelector(".st2-bulk-font");
+        if (bulkFont) bulkFont.addEventListener("change", function() {
+            var val = this.value;
+            if (!val) return;
+            state.supertexts2.forEach(function(st) {
+                if (!st.checked) return;
+                if (!st.mogrtProps) st.mogrtProps = {};
+                st.mogrtProps.fontStyle = val;
+            });
+            // Update visible selects
+            document.querySelectorAll(".st2-prop-font").forEach(function(sel) {
+                var idx = parseInt(sel.dataset.idx);
+                if (state.supertexts2[idx] && state.supertexts2[idx].checked) sel.value = val;
+            });
+            showToast(checked.length + " items → " + val.replace("DMSans-", ""), "success");
+            this.value = "";
+        });
+
+        var bulkColor = toolbar.querySelector(".st2-bulk-color");
+        if (bulkColor) bulkColor.addEventListener("change", function() {
+            var val = this.value;
+            if (!val) return;
+            state.supertexts2.forEach(function(st) {
+                if (!st.checked) return;
+                var presets = ST2_COLOR_PRESETS[st.type];
+                if (!presets) return;
+                var idx = presets.indexOf(val);
+                if (idx === -1) return;
+                if (!st.mogrtProps) st.mogrtProps = {};
+                st.mogrtProps.colorPreset = idx;
+            });
+            // Update visible selects
+            document.querySelectorAll(".st2-prop-color").forEach(function(sel) {
+                var idx = parseInt(sel.dataset.idx);
+                var st = state.supertexts2[idx];
+                if (st && st.checked && st.mogrtProps && st.mogrtProps.colorPreset !== undefined) {
+                    sel.value = st.mogrtProps.colorPreset;
+                }
+            });
+            showToast(checked.length + " items → " + val, "success");
+            this.value = "";
+        });
+
+        var bulkBullets = toolbar.querySelector(".st2-bulk-showbullets");
+        if (bulkBullets) bulkBullets.addEventListener("change", function() {
+            var val = this.checked;
+            state.supertexts2.forEach(function(st) {
+                if (!st.checked || st.type !== "bullet") return;
+                if (!st.mogrtProps) st.mogrtProps = {};
+                st.mogrtProps.showBullets = val;
+            });
+            document.querySelectorAll(".st2-prop-showbullets").forEach(function(cb) {
+                var idx = parseInt(cb.dataset.idx);
+                if (state.supertexts2[idx] && state.supertexts2[idx].checked) cb.checked = val;
+            });
+            showToast("Bullets " + (val ? "on" : "off") + " para seleccionados", "success");
+        });
     }
 
     function st2ExcludeByTrack() {
@@ -1662,6 +1878,48 @@
         }
     }
 
+    /**
+     * Converts UI mogrtProps into the format ExtendScript expects:
+     * key = displayName in MOGRT, value = appropriate type.
+     */
+    function _st2BuildMogrtProps(st) {
+        if (!st.mogrtProps) return null;
+        var props = {};
+        var type = st.type || "bullet";
+        var mp = st.mogrtProps;
+
+        // Font style: apply to "Text" property (and "Title" for definition types)
+        if (mp.fontStyle) {
+            props["Text"] = { fontStyle: mp.fontStyle };
+            // For definition/data/step/summary, also set Title font
+            if (type === "definition" || type === "data" || type === "step" || type === "summary") {
+                props["Title"] = { fontStyle: mp.fontStyle };
+            }
+        }
+
+        // Color preset dropdown
+        if (mp.colorPreset !== undefined) {
+            props["Color"] = parseInt(mp.colorPreset);
+        }
+
+        // Show Bullets checkbox
+        if (mp.showBullets !== undefined) {
+            props["Show Bullets"] = !!mp.showBullets;
+        }
+
+        // Titulo: Recuadro off
+        if (mp.recuadroOff !== undefined) {
+            props["Recuadro off"] = !!mp.recuadroOff;
+        }
+
+        // Titulo: Animación Salida
+        if (mp.animacionSalida !== undefined) {
+            props["Animaci\u00f3n Salida"] = !!mp.animacionSalida;
+        }
+
+        return Object.keys(props).length > 0 ? props : null;
+    }
+
     function buildST2Payload(selected) {
         var sorted = selected.slice().sort(function(a, b) { return a.time - b.time; });
 
@@ -1732,6 +1990,8 @@
                         bulletPositionY: cascYOffsets[c],
                         _cascadeId: cascId
                     };
+                    var cstProps = _st2BuildMogrtProps(cst);
+                    if (cstProps) itemObj.mogrtProps = cstProps;
 
                     // When a title accompanies bullets, reposition & scale it
                     if (cType === "title" && cascadeLen > 1) {
@@ -1788,7 +2048,7 @@
                 for (var g = 0; g < bGroupLen; g++) {
                     var bEntryTime = _st2Anticipate(bGroup[g].time);
 
-                    items.push({
+                    var bItemObj = {
                         time: bEntryTime,
                         endTime: _st2EnsureMinDuration(bEntryTime, bGroupEnd),
                         text: _st2FormatText(bGroup[g].text, "bullet", true),
@@ -1797,7 +2057,10 @@
                         bulletTrackOffset: g,
                         bulletPositionY: bYOffsets[g],
                         _cascadeId: bCascId
-                    });
+                    };
+                    var bGroupProps = _st2BuildMogrtProps(bGroup[g]);
+                    if (bGroupProps) bItemObj.mogrtProps = bGroupProps;
+                    items.push(bItemObj);
                 }
                 i = j;
                 continue;
@@ -1810,7 +2073,7 @@
             var entryIndep = _st2Anticipate(st.time);
             var endIndep = _st2EnsureMinDuration(entryIndep, rawEnd + readBuf);
 
-            items.push({
+            var indepObj = {
                 time: entryIndep,
                 endTime: endIndep,
                 text: _st2FormatText(st.text, type, false),
@@ -1819,7 +2082,10 @@
                 bulletTrackOffset: 0,
                 bulletPositionY: 0,
                 _cascadeId: "s" + (cascadeCounter++)
-            });
+            };
+            var indepProps = _st2BuildMogrtProps(st);
+            if (indepProps) indepObj.mogrtProps = indepProps;
+            items.push(indepObj);
             i++;
         }
 
