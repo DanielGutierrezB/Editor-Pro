@@ -2511,18 +2511,27 @@
     var _st2CtrlTypeFilter = null;
     var _st2MogrtSchemas = null; // Loaded from mogrts/schemas.json
 
-    function _st2LoadMogrtSchemas() {
-        if (_st2MogrtSchemas) return; // already loaded
+    function _st2LoadMogrtSchemas(forceReload) {
+        if (_st2MogrtSchemas && Object.keys(_st2MogrtSchemas).length > 0 && !forceReload) return; // already loaded
+        _st2MogrtSchemas = null;
         try {
-            var extPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+            var extPath = csInterface.getSystemPath(SystemPath.EXTENSION) || csInterface.getSystemPath('extension');
             var schemaPath = path.join(extPath, 'mogrts', 'schemas.json');
+            console.log('[MOGRT] Looking for schemas at: ' + schemaPath);
             if (fs.existsSync(schemaPath)) {
-                _st2MogrtSchemas = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
-                $.writeln && $.writeln('[MOGRT] Loaded schemas: ' + Object.keys(_st2MogrtSchemas).join(', '));
+                var raw = fs.readFileSync(schemaPath, 'utf8');
+                _st2MogrtSchemas = JSON.parse(raw);
+                var keys = Object.keys(_st2MogrtSchemas);
+                console.log('[MOGRT] Loaded ' + keys.length + ' schemas: ' + keys.join(', '));
+                if (keys.length === 0) {
+                    console.warn('[MOGRT] schemas.json is empty! Regenerate with: python3 scripts/gen-mogrt-schemas.py');
+                }
             } else {
+                console.warn('[MOGRT] schemas.json not found at: ' + schemaPath);
                 _st2MogrtSchemas = {};
             }
         } catch(e) {
+            console.error('[MOGRT] Error loading schemas: ' + e.message + '\n' + e.stack);
             _st2MogrtSchemas = {};
         }
     }
@@ -2564,7 +2573,9 @@
             }
         }
         var tmpSchema = path.join(os.tmpdir(), 'EditorPro_MogrtSchemas.json');
-        fs.writeFileSync(tmpSchema, JSON.stringify(schemasForES), 'utf8');
+        var schemasJSON = JSON.stringify(schemasForES);
+        console.log('[MOGRT] Writing schema for ES (' + Object.keys(schemasForES).length + ' types, ' + schemasJSON.length + ' bytes) to: ' + tmpSchema);
+        fs.writeFileSync(tmpSchema, schemasJSON, 'utf8');
         var safeSchemaPath = tmpSchema.replace(/\\/g, '/');
 
         csInterface.evalScript('scanMOGRTClips("' + escExtend(safeSchemaPath) + '")', function(res) {
