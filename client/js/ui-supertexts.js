@@ -2963,8 +2963,16 @@
                 var data = JSON.parse(res);
                 if (data.error) { showToast(data.error, 'error'); return; }
                 showToast(data.modified + ' clips modificados', 'success');
-                // Re-scan to refresh values
+                // Re-scan to refresh values, preserving current filter
+                var savedFilter = _st2CtrlTypeFilter;
                 _st2CtrlScan();
+                // Restore filter after scan completes
+                setTimeout(function() {
+                    if (savedFilter) {
+                        _st2CtrlTypeFilter = savedFilter;
+                        _st2CtrlApplyFilter();
+                    }
+                }, 500);
             } catch(e) {
                 showToast('Error: ' + e.message, 'error');
             }

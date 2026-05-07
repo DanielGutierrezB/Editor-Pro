@@ -604,7 +604,8 @@ function _setMGTProperties(trackItem, properties, itemIdx, errors) {
                 var curType = typeof curVal;
 
                 // Text+font property (JSON with textEditValue)
-                if (typeof val === "object" && val !== null && !Array.isArray(val) && (val.text !== undefined || val.fontStyle !== undefined)) {
+                var isArr = (typeof val === "object" && val !== null && val.length !== undefined && typeof val.length === "number");
+                if (typeof val === "object" && val !== null && !isArr && (val.text !== undefined || val.fontStyle !== undefined)) {
                     // It's a text+font override
                     var newText = val.text;
                     var fontOverride = val.fontStyle || null;
@@ -622,7 +623,7 @@ function _setMGTProperties(trackItem, properties, itemIdx, errors) {
                     }
                 }
                 // Color: array [r,g,b,a]
-                else if (Array.isArray(val) && val.length >= 3) {
+                else if (isArr && val.length >= 3) {
                     targetProp.setValue(val, 1);
                     $.writeln("[_setMGTProperties] Item " + itemIdx + ": set color '" + key + "' = [" + val.join(",") + "]");
                 }
