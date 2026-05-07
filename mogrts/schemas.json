@@ -49,7 +49,7 @@
     "duration": 6
   },
   "DATA": {
-    "capsuleName": "Definition",
+    "capsuleName": "Data",
     "properties": [
       {
         "name": "Title",
@@ -258,7 +258,7 @@
     "duration": 6
   },
   "STEP": {
-    "capsuleName": "Definition",
+    "capsuleName": "Step",
     "properties": [
       {
         "name": "Title",
@@ -323,7 +323,7 @@
     "duration": 6
   },
   "SUMMARY": {
-    "capsuleName": "Definition",
+    "capsuleName": "Summary",
     "properties": [
       {
         "name": "Title",
