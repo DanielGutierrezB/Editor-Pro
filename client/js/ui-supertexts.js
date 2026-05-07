@@ -2501,14 +2501,6 @@
         if (available < 200) available = 200;
 
         openBody.style.maxHeight = available + 'px';
-
-        // Toggle buttons in static HTML (if any)
-        document.querySelectorAll('.st2-toggle').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var isOn = this.classList.toggle('on');
-                this.dataset.value = isOn ? 'true' : 'false';
-            });
-        });
     }
 
     // ═════════════════════════════════════════════════════════════
@@ -2668,20 +2660,23 @@
 
         _st2CtrlUpdateCount();
 
-        // Bind checkbox changes (fresh listeners since innerHTML was replaced)
-        list.addEventListener('change', function(e) {
-            var chk = e.target.closest('.st2-ctrl-check');
-            if (chk) {
-                var idx = parseInt(chk.dataset.idx);
-                _st2CtrlClips[idx].selected = chk.checked;
-                var row = chk.closest('.supertext-item');
-                if (row) {
-                    row.classList.toggle('st-checked', chk.checked);
-                    row.classList.toggle('st-unchecked', !chk.checked);
+        // Bind checkbox changes via delegation (only once)
+        if (!list._st2Bound) {
+            list._st2Bound = true;
+            list.addEventListener('change', function(e) {
+                var chk = e.target.closest('.st2-ctrl-check');
+                if (chk) {
+                    var idx = parseInt(chk.dataset.idx);
+                    _st2CtrlClips[idx].selected = chk.checked;
+                    var row = chk.closest('.supertext-item');
+                    if (row) {
+                        row.classList.toggle('st-checked', chk.checked);
+                        row.classList.toggle('st-unchecked', !chk.checked);
+                    }
+                    _st2CtrlUpdateCount();
                 }
-                _st2CtrlUpdateCount();
-            }
-        });
+            });
+        }
     }
 
     function _st2CtrlUpdateCount() {

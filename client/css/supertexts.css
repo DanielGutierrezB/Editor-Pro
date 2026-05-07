@@ -21,6 +21,7 @@
     transition: all var(--transition);
     align-items: center;
     flex-wrap: wrap;
+    min-height: 0; /* responsive height */
 }
 .supertext-item:hover, .suggestion-item:hover {
     background: var(--bg-hover);
@@ -882,28 +883,7 @@
     border-color: rgba(99,102,241,0.5);
     color: var(--accent-bright);
 }
-.st2-ctrl-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 8px;
-    background: rgba(99,102,241,0.1);
-    border: 1px solid rgba(99,102,241,0.25);
-    border-radius: var(--radius-sm);
-    margin-bottom: 6px;
-    flex-wrap: wrap;
-    flex-shrink: 0;
-}
-.st2-ctrl-toolbar.hidden { display: none; }
-.st2-ctrl-toolbar select {
-    font-size: 9px;
-    padding: 2px 4px;
-    background: #2a2a2a;
-    color: #e0e0e0;
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 3px;
-    cursor: pointer;
-}
+/* (st2-ctrl-toolbar removed — replaced by dynamic st2-props-panel) */
 .st2-ctrl-list {
     flex: 1;
     min-height: 0;
@@ -934,8 +914,7 @@
     border-color: rgba(255,255,255,0.25);
 }
 .st-props-row select option,
-.st2-bulk-toolbar select option,
-.st2-ctrl-toolbar select option {
+.st2-bulk-toolbar select option {
     background: #2a2a2a;
     color: #e0e0e0;
 }
