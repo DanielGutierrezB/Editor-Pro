@@ -1,0 +1,471 @@
+{
+  "BULLET": {
+    "capsuleName": "Bullet Point",
+    "properties": [
+      {
+        "name": "Text",
+        "type": "text",
+        "id": "498dc089-6d2d-4b26-aba5-4ba854a68d17",
+        "font": "DMSans-Bold",
+        "fontSize": 45,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Bullet 1 Start",
+        "type": "slider",
+        "id": "2ed334f2-b6ae-44af-9ee2-b8280ed9e37e",
+        "min": 0,
+        "max": 100,
+        "default": 1
+      },
+      {
+        "name": "Text Color",
+        "type": "color",
+        "id": "09d5e461-ce69-464a-8cb1-5f90badcefb1",
+        "default": "#ffffff"
+      },
+      {
+        "name": "Show Bullets",
+        "type": "checkbox",
+        "id": "d1644581-afaf-4be9-b11f-af6b96851467",
+        "default": true
+      }
+    ],
+    "effects": [
+      "ADBE Checkbox Control",
+      "ADBE Color Control",
+      "ADBE Fill",
+      "ADBE Glo2",
+      "ADBE Slider Control"
+    ],
+    "fonts": [
+      "DMSans-Bold"
+    ],
+    "duration": 6
+  },
+  "DATA": {
+    "capsuleName": "Definition",
+    "properties": [
+      {
+        "name": "Title",
+        "type": "text",
+        "id": "0254ba59-8292-44f8-9800-ad20115b9e22",
+        "font": "DMSans-Bold",
+        "fontSize": 60,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Title Color",
+        "type": "color",
+        "id": "4ddc7a5f-5687-4416-b14d-657ab7105147",
+        "default": "#ffffff"
+      },
+      {
+        "name": "Text",
+        "type": "text",
+        "id": "fe66d58c-1eab-400c-a4ca-8a7debe07ca2",
+        "font": "DMSans-Regular",
+        "fontSize": 55,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Text Color",
+        "type": "color",
+        "id": "c2e8949b-8d7d-4fbe-959a-b99f2235000f",
+        "default": "#ffffff"
+      },
+      {
+        "name": "Color",
+        "type": "dropdown",
+        "id": "5b155b90-db29-4e6f-89c2-068d93a668e0",
+        "options": [
+          "Vampire",
+          "Green",
+          "White"
+        ],
+        "default": 1
+      }
+    ],
+    "effects": [
+      "ADBE 4ColorGradient",
+      "ADBE Drop Shadow",
+      "ADBE Fill",
+      "ADBE Glo2"
+    ],
+    "fonts": [
+      "DMSans-Bold",
+      "DMSans-Regular"
+    ],
+    "duration": 6
+  },
+  "DEFINITION": {
+    "capsuleName": "Definition",
+    "properties": [
+      {
+        "name": "Title",
+        "type": "text",
+        "id": "0254ba59-8292-44f8-9800-ad20115b9e22",
+        "font": "DMSans-Bold",
+        "fontSize": 60,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Title Color",
+        "type": "color",
+        "id": "4ddc7a5f-5687-4416-b14d-657ab7105147",
+        "default": "#ffffff"
+      },
+      {
+        "name": "Text",
+        "type": "text",
+        "id": "fe66d58c-1eab-400c-a4ca-8a7debe07ca2",
+        "font": "DMSans-Regular",
+        "fontSize": 55,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Text Color",
+        "type": "color",
+        "id": "c2e8949b-8d7d-4fbe-959a-b99f2235000f",
+        "default": "#ffffff"
+      },
+      {
+        "name": "Color",
+        "type": "dropdown",
+        "id": "5b155b90-db29-4e6f-89c2-068d93a668e0",
+        "options": [
+          "Vampire",
+          "Green",
+          "White"
+        ],
+        "default": 1
+      }
+    ],
+    "effects": [
+      "ADBE 4ColorGradient",
+      "ADBE Drop Shadow",
+      "ADBE Fill",
+      "ADBE Glo2"
+    ],
+    "fonts": [
+      "DMSans-Bold",
+      "DMSans-Regular"
+    ],
+    "duration": 6
+  },
+  "HIGHLIGHT": {
+    "capsuleName": "Highlights",
+    "properties": [
+      {
+        "name": "Text Color",
+        "type": "color",
+        "id": "c7cd138e-d2db-4684-8eed-29a3be6d51c5",
+        "default": "#ffffff"
+      },
+      {
+        "name": "Text",
+        "type": "text",
+        "id": "20ac3f5b-cf18-47a0-9d96-2d8ee4537cdd",
+        "font": "DMSans-Bold",
+        "fontSize": 85,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Color",
+        "type": "dropdown",
+        "id": "051a353d-7eb7-44d7-bf02-fa6161707a0d",
+        "options": [
+          "White",
+          "Vampire",
+          "Green",
+          "Yellow"
+        ],
+        "default": 3
+      }
+    ],
+    "effects": [
+      "ADBE 4ColorGradient",
+      "ADBE Drop Shadow",
+      "ADBE Fill",
+      "ADBE Glo2",
+      "VISINF Grain Implant"
+    ],
+    "fonts": [
+      "DMSans-Bold"
+    ],
+    "duration": 6
+  },
+  "QUESTION": {
+    "capsuleName": "Question",
+    "properties": [
+      {
+        "name": "Text",
+        "type": "text",
+        "id": "aa130df8-aa00-431b-91f6-6f8617b0e020",
+        "font": "DMSans-Bold",
+        "fontSize": 70,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Text Color",
+        "type": "color",
+        "id": "4abe891d-ad5e-4047-993e-3b928b56766f",
+        "default": "#ffffff"
+      }
+    ],
+    "effects": [
+      "ADBE Fill",
+      "ADBE Geometry2"
+    ],
+    "fonts": [
+      "DMSans-Bold"
+    ],
+    "duration": 6
+  },
+  "STEP": {
+    "capsuleName": "Definition",
+    "properties": [
+      {
+        "name": "Title",
+        "type": "text",
+        "id": "0254ba59-8292-44f8-9800-ad20115b9e22",
+        "font": "DMSans-Bold",
+        "fontSize": 60,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Title Color",
+        "type": "color",
+        "id": "4ddc7a5f-5687-4416-b14d-657ab7105147",
+        "default": "#ffffff"
+      },
+      {
+        "name": "Text",
+        "type": "text",
+        "id": "fe66d58c-1eab-400c-a4ca-8a7debe07ca2",
+        "font": "DMSans-Regular",
+        "fontSize": 55,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Text Color",
+        "type": "color",
+        "id": "c2e8949b-8d7d-4fbe-959a-b99f2235000f",
+        "default": "#ffffff"
+      },
+      {
+        "name": "Color",
+        "type": "dropdown",
+        "id": "5b155b90-db29-4e6f-89c2-068d93a668e0",
+        "options": [
+          "Vampire",
+          "Green",
+          "White"
+        ],
+        "default": 1
+      }
+    ],
+    "effects": [
+      "ADBE 4ColorGradient",
+      "ADBE Drop Shadow",
+      "ADBE Fill",
+      "ADBE Glo2"
+    ],
+    "fonts": [
+      "DMSans-Bold",
+      "DMSans-Regular"
+    ],
+    "duration": 6
+  },
+  "SUMMARY": {
+    "capsuleName": "Definition",
+    "properties": [
+      {
+        "name": "Title",
+        "type": "text",
+        "id": "0254ba59-8292-44f8-9800-ad20115b9e22",
+        "font": "DMSans-Bold",
+        "fontSize": 60,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Title Color",
+        "type": "color",
+        "id": "4ddc7a5f-5687-4416-b14d-657ab7105147",
+        "default": "#ffffff"
+      },
+      {
+        "name": "Text",
+        "type": "text",
+        "id": "fe66d58c-1eab-400c-a4ca-8a7debe07ca2",
+        "font": "DMSans-Regular",
+        "fontSize": 55,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Text Color",
+        "type": "color",
+        "id": "c2e8949b-8d7d-4fbe-959a-b99f2235000f",
+        "default": "#ffffff"
+      },
+      {
+        "name": "Color",
+        "type": "dropdown",
+        "id": "5b155b90-db29-4e6f-89c2-068d93a668e0",
+        "options": [
+          "Vampire",
+          "Green",
+          "White"
+        ],
+        "default": 1
+      }
+    ],
+    "effects": [
+      "ADBE 4ColorGradient",
+      "ADBE Drop Shadow",
+      "ADBE Fill",
+      "ADBE Glo2"
+    ],
+    "fonts": [
+      "DMSans-Bold",
+      "DMSans-Regular"
+    ],
+    "duration": 6
+  },
+  "TITLE": {
+    "capsuleName": "Titulo",
+    "properties": [
+      {
+        "name": "Text Color",
+        "type": "color",
+        "id": "46183281-f8ce-4599-8424-92b96c07b1a6",
+        "default": "#141515"
+      },
+      {
+        "name": "Text",
+        "type": "text",
+        "id": "a968698b-6942-460a-ad62-4c92c5092fee",
+        "font": "DMSans-Bold",
+        "fontSize": 92,
+        "faux": {
+          "bold": false,
+          "italic": false,
+          "allCaps": false,
+          "smallCaps": false
+        }
+      },
+      {
+        "name": "Padding",
+        "type": "slider",
+        "id": "23babc3d-d548-40af-8bb3-81c3e79fe0d5",
+        "min": 0,
+        "max": 100,
+        "default": 43
+      },
+      {
+        "name": "Stroke 1 Stroke Width",
+        "type": "slider",
+        "id": "6259593d-9c12-4014-bcb2-bee66614bb62",
+        "min": 0,
+        "max": 32768,
+        "default": 0
+      },
+      {
+        "name": "Rectangle Roundness",
+        "type": "slider",
+        "id": "22e1aeea-afbe-40c0-ac26-dbd2506474cf",
+        "min": 0,
+        "max": 100,
+        "default": 52.5
+      },
+      {
+        "name": "Stroke 1 Color",
+        "type": "color",
+        "id": "32751a01-226e-4f7d-8012-905e734255c7",
+        "default": "#d80b0b"
+      },
+      {
+        "name": "Fill 1 Color",
+        "type": "color",
+        "id": "85d687be-5f86-419f-8faf-e84954b82d30",
+        "default": "#ffffff"
+      },
+      {
+        "name": "Recuadro off",
+        "type": "checkbox",
+        "id": "8b5e205b-3b07-40b9-a717-a18c022774be",
+        "default": true
+      },
+      {
+        "name": "Animación Salida",
+        "type": "checkbox",
+        "id": "10f27b78-94b5-456b-9d89-28ce953484ae",
+        "default": true
+      }
+    ],
+    "effects": [
+      "ADBE Checkbox Control",
+      "ADBE Fill",
+      "ADBE Slider Control"
+    ],
+    "fonts": [
+      "DMSans-Bold"
+    ],
+    "duration": 6
+  }
+}

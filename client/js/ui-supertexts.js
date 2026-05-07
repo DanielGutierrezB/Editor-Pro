@@ -2509,6 +2509,28 @@
 
     var _st2CtrlClips = [];
     var _st2CtrlTypeFilter = null;
+    var _st2MogrtSchemas = null; // Loaded from mogrts/schemas.json
+
+    function _st2LoadMogrtSchemas() {
+        if (_st2MogrtSchemas) return; // already loaded
+        try {
+            var extPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+            var schemaPath = path.join(extPath, 'mogrts', 'schemas.json');
+            if (fs.existsSync(schemaPath)) {
+                _st2MogrtSchemas = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+                $.writeln && $.writeln('[MOGRT] Loaded schemas: ' + Object.keys(_st2MogrtSchemas).join(', '));
+            } else {
+                _st2MogrtSchemas = {};
+            }
+        } catch(e) {
+            _st2MogrtSchemas = {};
+        }
+    }
+
+    function _st2GetSchemaForType(typeTag) {
+        if (!_st2MogrtSchemas) _st2LoadMogrtSchemas();
+        return _st2MogrtSchemas[typeTag.toUpperCase()] || null;
+    }
 
     function _st2CtrlGetType(clip) {
         var m = (clip.name || '').match(/^\[([A-Z]+)\]/);
@@ -2521,13 +2543,60 @@
         _st2CtrlTypeFilter = null;
         _st2CtrlLastSelectedKey = '';
 
-        csInterface.evalScript('scanMOGRTClips()', function(res) {
+        // Load MOGRT schemas if not already loaded
+        _st2LoadMogrtSchemas();
+
+        // Write schemas to temp file for ExtendScript to read
+        var schemasForES = {};
+        if (_st2MogrtSchemas) {
+            for (var key in _st2MogrtSchemas) {
+                if (!_st2MogrtSchemas.hasOwnProperty(key)) continue;
+                var s = _st2MogrtSchemas[key];
+                // Build a simple prop map: { propName: { type, min, max, options } }
+                var propMap = {};
+                (s.properties || []).forEach(function(p) {
+                    var entry = { type: p.type };
+                    if (p.type === 'slider') { entry.min = p.min; entry.max = p.max; }
+                    if (p.type === 'dropdown') { entry.options = p.options; }
+                    propMap[p.name] = entry;
+                });
+                schemasForES[key] = propMap;
+            }
+        }
+        var tmpSchema = path.join(os.tmpdir(), 'EditorPro_MogrtSchemas.json');
+        fs.writeFileSync(tmpSchema, JSON.stringify(schemasForES), 'utf8');
+        var safeSchemaPath = tmpSchema.replace(/\\/g, '/');
+
+        csInterface.evalScript('scanMOGRTClips("' + escExtend(safeSchemaPath) + '")', function(res) {
             try {
                 var data = JSON.parse(res);
                 if (data.error) { showToast(data.error, 'error'); if (statusEl) statusEl.textContent = ''; return; }
                 _st2CtrlClips = data.clips || [];
-                // Mark all selected by default
-                _st2CtrlClips.forEach(function(c) { c.selected = true; });
+                // Enrich clips with schema info
+                _st2CtrlClips.forEach(function(c) {
+                    c.selected = true;
+                    var typeTag = _st2CtrlGetType(c);
+                    var schema = _st2GetSchemaForType(typeTag);
+                    if (schema) {
+                        // Merge schema info into clip properties
+                        (c.properties || []).forEach(function(p) {
+                            var schemaProp = schema.properties.find(function(sp) { return sp.name === p.name; });
+                            if (schemaProp) {
+                                if (schemaProp.type === 'slider') {
+                                    p.min = schemaProp.min;
+                                    p.max = schemaProp.max;
+                                }
+                                if (schemaProp.type === 'dropdown') {
+                                    p.options = schemaProp.options;
+                                }
+                                if (schemaProp.type === 'text') {
+                                    p.defaultFont = schemaProp.font;
+                                    p.defaultFontSize = schemaProp.fontSize;
+                                }
+                            }
+                        });
+                    }
+                });
                 if (statusEl) statusEl.textContent = _st2CtrlClips.length + ' clips MOGRT';
                 _st2CtrlRender();
             } catch(e) {
