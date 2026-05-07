@@ -2729,47 +2729,46 @@
             html += '<div class="st2-prop-control">';
 
             if (cp.type === 'color') {
-                // Color swatch + picker
+                // Color picker swatch
                 var colorVal = cp.values[0] || '#ffffff';
                 html += '<input type="color" class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + colorVal + '">';
 
             } else if (cp.type === 'checkbox') {
-                // Toggle switch (like Premiere)
+                // Toggle switch
                 var isOn = cp.values[0] === true;
                 html += '<button type="button" class="st2-toggle' + (isOn ? ' on' : '') + ' st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-value="' + isOn + '"></button>';
 
             } else if (cp.type === 'dropdown') {
-                // Dropdown menu with indexed options
+                // Dropdown with named options
                 var dropVal = cp.values[0] || 0;
                 var opts = cp.propInfo.options || [];
                 html += '<select class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-subtype="dropdown">';
                 html += '<option value="">Sin cambio</option>';
                 for (var oi = 0; oi < opts.length; oi++) {
-                    html += '<option value="' + opts[oi] + '"' + (opts[oi] === dropVal ? ' selected' : '') + '>Opci\u00f3n ' + (oi + 1) + '</option>';
+                    html += '<option value="' + oi + '"' + (oi === dropVal ? ' selected' : '') + '>' + esc(String(opts[oi])) + '</option>';
                 }
                 html += '</select>';
 
             } else if (cp.type === 'slider') {
-                // Slider with numeric input
+                // Slider with number input
                 var sliderVal = cp.values[0] || 0;
-                html += '<input type="range" class="st2-ctrl-slider st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + sliderVal + '" min="0" max="100" step="0.1">';
-                html += '<input type="number" class="st2-ctrl-slider-num" data-prop="' + esc(cp.name) + '" value="' + sliderVal + '" step="0.1" style="width:50px;font-size:10px;padding:3px;background:#2a2a2a;color:#e0e0e0;border:1px solid rgba(255,255,255,0.15);border-radius:4px;margin-left:4px">';
+                var sMin = cp.propInfo.min !== undefined ? cp.propInfo.min : 0;
+                var sMax = cp.propInfo.max !== undefined ? cp.propInfo.max : 100;
+                html += '<input type="range" class="st2-ctrl-slider st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + sliderVal + '" min="' + sMin + '" max="' + sMax + '" step="0.5">';
+                html += '<input type="number" class="st2-ctrl-slider-num" data-prop="' + esc(cp.name) + '" value="' + sliderVal + '" step="0.5" style="width:50px;font-size:10px;padding:3px;background:#2a2a2a;color:#e0e0e0;border:1px solid rgba(255,255,255,0.15);border-radius:4px;margin-left:4px">';
 
             } else if (cp.type === 'text') {
-                // Text property: show current font + font weight dropdown
+                // Text: show preview + font weight dropdown
                 var fontName = cp.propInfo.fontStyle || '';
                 var shortFont = fontName.replace(/^[A-Za-z]+-/, '');
-                html += '<span style="font-size:9px;color:var(--text-muted);margin-right:4px">' + esc(shortFont || 'font') + '</span>';
+                var textPreview = String(cp.values[0] || '').substring(0, 25);
+                html += '<span style="font-size:9px;color:var(--text-muted);margin-right:4px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(textPreview) + '</span>';
                 html += '<select class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-subtype="font">';
-                html += '<option value="">Sin cambio</option>';
+                html += '<option value="">' + esc(shortFont || 'Font...') + '</option>';
                 ST2_FONT_WEIGHTS.forEach(function(fw) {
                     html += '<option value="' + fw.value + '"' + (fw.value === fontName ? ' selected' : '') + '>' + fw.label + '</option>';
                 });
                 html += '</select>';
-
-            } else if (cp.type === 'string') {
-                // Read-only string display
-                html += '<span style="font-size:9px;color:var(--text-muted)">' + esc(String(cp.values[0] || '').substring(0, 30)) + '</span>';
             }
 
             html += '</div></div>';

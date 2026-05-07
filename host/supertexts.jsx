@@ -963,7 +963,29 @@ function scanMOGRTClips() {
                 var endSecs = 0;
                 try { endSecs = parseFloat(clip.end.seconds); } catch(e) {}
 
-                // Read all editable properties
+                // Known property definitions from our MOGRTs
+                var KNOWN_PROPS = {
+                    // Shared
+                    "Text":           { type: "text" },
+                    "Text Color":     { type: "color" },
+                    "Title":          { type: "text" },
+                    "Title Color":    { type: "color" },
+                    // Bullet
+                    "Bullet 1 Start": { type: "slider", min: 0, max: 100 },
+                    "Show Bullets":   { type: "checkbox" },
+                    // Definition/Data/Step/Summary + Highlight
+                    "Color":          { type: "dropdown", options: ["Vampire", "Green", "White", "Yellow"] },
+                    // Titulo
+                    "Fill 1 Color":   { type: "color" },
+                    "Stroke 1 Color": { type: "color" },
+                    "Padding":        { type: "slider", min: 0, max: 100 },
+                    "Stroke 1 Stroke Width": { type: "slider", min: 0, max: 100 },
+                    "Rectangle Roundness":   { type: "slider", min: 0, max: 100 },
+                    "Recuadro off":          { type: "checkbox" },
+                    "Animaci\u00f3n Salida":      { type: "checkbox" }
+                };
+
+                // Read properties
                 var props = [];
                 for (var p = 0; p < moComp.properties.numItems; p++) {
                     var prop;
@@ -973,112 +995,51 @@ function scanMOGRTClips() {
                     try { dn = prop.displayName || ""; } catch(e) {}
                     if (!dn) continue;
 
-                    var info = { name: dn, index: p };
+                    var known = KNOWN_PROPS[dn];
+                    // Skip unknown properties
+                    if (!known) continue;
+
+                    var info = { name: dn, index: p, type: known.type };
                     try {
                         var val = prop.getValue();
-                        var vt = typeof val;
 
-                        if (vt === "boolean") {
-                            info.type = "checkbox";
-                            info.value = val;
-                        } else if (vt === "number") {
-                            // Check if it's an integer (likely dropdown/menu) vs float (slider)
-                            var isInt = (val === Math.floor(val));
-                            // Try to get min/max for slider detection
-                            var hasRange = false;
-                            try {
-                                // MGT properties don't expose min/max directly,
-                                // but we can detect dropdown by trying setValue with known patterns.
-                                // For now, use name-based heuristics + integer detection.
-                                hasRange = true;
-                            } catch(er) {}
-
-                            // Known dropdown property names (from MOGRT definition analysis)
-                            var dnLower = dn.toLowerCase();
-                            var isDropdown = (dnLower === "color" || dnLower === "colour" ||
-                                             dnLower === "style" || dnLower === "tipo" ||
-                                             dnLower === "mode" || dnLower === "modo" ||
-                                             dnLower === "preset" || dnLower === "theme" ||
-                                             dnLower === "layout" || dnLower === "position");
-
-                            if (isDropdown || (isInt && val >= 0 && val <= 20)) {
-                                // Likely a dropdown menu — try to detect options by probing
-                                info.type = "dropdown";
-                                info.value = val;
-                                // Try to detect options by saving current, testing values, restoring
-                                var options = [];
-                                var savedVal = val;
-                                // Probe values 0-10 to find valid options
-                                for (var optIdx = 0; optIdx <= 10; optIdx++) {
-                                    try {
-                                        prop.setValue(optIdx, 1);
-                                        var readBack = prop.getValue();
-                                        if (typeof readBack === "number" && readBack === optIdx) {
-                                            options.push(optIdx);
-                                        } else {
-                                            break; // Hit invalid index, stop
-                                        }
-                                    } catch(eOpt) {
-                                        break;
-                                    }
-                                }
-                                // Restore original value
-                                try { prop.setValue(savedVal, 1); } catch(eRestore) {}
-                                if (options.length > 1) {
-                                    info.options = options;
-                                } else {
-                                    // Not really a dropdown, treat as slider
-                                    info.type = "slider";
-                                }
-                            } else {
-                                info.type = "slider";
-                            }
-                            info.value = val;
-                        } else if (vt === "string" && val.charAt(0) === "{") {
-                            // JSON text property
-                            try {
-                                var parsed = JSON.parse(val);
-                                if (parsed.textEditValue !== undefined) {
-                                    info.type = "text";
-                                    info.value = parsed.textEditValue;
-                                    info.fontStyle = (parsed.fontEditValue && parsed.fontEditValue[0]) || "";
-                                    info.fontSize = (parsed.fontSizeEditValue && parsed.fontSizeEditValue[0]) || 0;
-                                } else {
-                                    info.type = "json";
-                                }
-                            } catch(ep) {
-                                info.type = "string";
-                                info.value = val.substring(0, 100);
-                            }
-                        } else if (vt === "object" && val !== null) {
-                            if (val.length !== undefined && val.length >= 3 && val.length <= 4 && typeof val[0] === "number") {
-                                // Color array [r,g,b,a]
-                                info.type = "color";
+                        if (known.type === "color") {
+                            // Color: [r,g,b,a] 0-1 floats → hex
+                            if (typeof val === "object" && val !== null && val.length >= 3) {
                                 var rr = Math.round(val[0] * 255);
                                 var gg = Math.round(val[1] * 255);
                                 var bb = Math.round(val[2] * 255);
                                 info.value = "#" + (rr < 16 ? "0" : "") + rr.toString(16) + (gg < 16 ? "0" : "") + gg.toString(16) + (bb < 16 ? "0" : "") + bb.toString(16);
-                            } else if (val.length !== undefined) {
-                                info.type = "group";
-                            } else if (val.textEditValue !== undefined) {
-                                info.type = "text";
-                                info.value = val.textEditValue;
+                            }
+                        } else if (known.type === "checkbox") {
+                            info.value = (typeof val === "boolean") ? val : !!val;
+                        } else if (known.type === "slider") {
+                            info.value = (typeof val === "number") ? val : parseFloat(val) || 0;
+                            info.min = known.min || 0;
+                            info.max = known.max || 100;
+                        } else if (known.type === "dropdown") {
+                            info.value = (typeof val === "number") ? val : parseInt(val) || 0;
+                            info.options = known.options || [];
+                        } else if (known.type === "text") {
+                            // Parse text JSON
+                            var textVal = val;
+                            if (typeof val === "string" && val.charAt(0) === "{") {
+                                try {
+                                    var parsed = JSON.parse(val);
+                                    info.value = parsed.textEditValue || "";
+                                    info.fontStyle = (parsed.fontEditValue && parsed.fontEditValue[0]) || "";
+                                    info.fontSize = (parsed.fontSizeEditValue && parsed.fontSizeEditValue[0]) || 0;
+                                } catch(ep) { info.value = ""; }
+                            } else if (typeof val === "object" && val !== null && val.textEditValue !== undefined) {
+                                info.value = val.textEditValue || "";
                                 info.fontStyle = (val.fontEditValue && val.fontEditValue[0]) || "";
                                 info.fontSize = (val.fontSizeEditValue && val.fontSizeEditValue[0]) || 0;
-                            } else {
-                                info.type = "object";
                             }
-                        } else if (vt === "string") {
-                            info.type = "string";
-                            info.value = val.substring(0, 100);
                         }
                     } catch(ev) {
-                        info.type = "unknown";
-                        info.error = ev.message;
+                        continue;
                     }
 
-                    // Skip non-editable types
-                    if (info.type === "group" || info.type === "json" || info.type === "object" || info.type === "unknown") continue;
                     props.push(info);
                 }
 
