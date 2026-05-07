@@ -2579,6 +2579,51 @@
         var count = _st2CtrlClips.filter(function(c) { return c.selected; }).length;
         var el = document.getElementById('st2-ctrl-sel-count');
         if (el) el.textContent = count + ' seleccionados:';
+        _st2CtrlUpdateToolbarControls();
+    }
+
+    /** Show/hide toolbar controls based on filtered type */
+    function _st2CtrlUpdateToolbarControls() {
+        var toolbar = document.getElementById('st2-ctrl-toolbar');
+        if (!toolbar) return;
+        var fontEl = toolbar.querySelector('.st2-ctrl-font');
+        var colorEl = toolbar.querySelector('.st2-ctrl-color');
+        var bulletsEl = toolbar.querySelector('.st2-ctrl-showbullets');
+        var bulletsLabel = bulletsEl ? bulletsEl.closest('.st2-prop-toggle') : null;
+
+        // Determine which types are currently selected
+        var selectedTypes = {};
+        _st2CtrlClips.forEach(function(c) {
+            if (c.selected) selectedTypes[_st2CtrlGetType(c)] = true;
+        });
+        var types = Object.keys(selectedTypes);
+
+        // Font: always visible
+        if (fontEl) fontEl.style.display = '';
+
+        // Color: only for definition/data/step/summary/highlight
+        var hasColor = types.some(function(t) { return !!ST2_COLOR_PRESETS[t]; });
+        if (colorEl) colorEl.style.display = hasColor ? '' : 'none';
+
+        // Update color options based on filtered types
+        if (colorEl && hasColor) {
+            var allPresets = {};
+            types.forEach(function(t) {
+                var presets = ST2_COLOR_PRESETS[t];
+                if (presets) presets.forEach(function(p) { allPresets[p] = true; });
+            });
+            var currentVal = colorEl.value;
+            colorEl.innerHTML = '<option value="">Color...</option>';
+            Object.keys(allPresets).forEach(function(p) {
+                var opt = document.createElement('option');
+                opt.value = p; opt.textContent = p;
+                colorEl.appendChild(opt);
+            });
+            colorEl.value = currentVal;
+        }
+
+        // Bullets: only for bullet type
+        if (bulletsLabel) bulletsLabel.style.display = selectedTypes.bullet ? '' : 'none';
     }
 
     function _st2CtrlApply() {
