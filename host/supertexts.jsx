@@ -1004,12 +1004,17 @@ function scanMOGRTClips() {
                         var val = prop.getValue();
 
                         if (known.type === "color") {
-                            // Color: [r,g,b,a] 0-1 floats → hex
+                            // Color: [r,g,b,a] 0-1 floats → #RRGGBB hex
                             if (typeof val === "object" && val !== null && val.length >= 3) {
-                                var rr = Math.round(val[0] * 255);
-                                var gg = Math.round(val[1] * 255);
-                                var bb = Math.round(val[2] * 255);
-                                info.value = "#" + (rr < 16 ? "0" : "") + rr.toString(16) + (gg < 16 ? "0" : "") + gg.toString(16) + (bb < 16 ? "0" : "") + bb.toString(16);
+                                var rr = Math.min(255, Math.max(0, Math.round(val[0] * 255)));
+                                var gg = Math.min(255, Math.max(0, Math.round(val[1] * 255)));
+                                var bb = Math.min(255, Math.max(0, Math.round(val[2] * 255)));
+                                var hexR = rr.toString(16); if (hexR.length < 2) hexR = "0" + hexR;
+                                var hexG = gg.toString(16); if (hexG.length < 2) hexG = "0" + hexG;
+                                var hexB = bb.toString(16); if (hexB.length < 2) hexB = "0" + hexB;
+                                info.value = "#" + hexR + hexG + hexB;
+                            } else {
+                                info.value = "#ffffff";
                             }
                         } else if (known.type === "checkbox") {
                             info.value = (typeof val === "boolean") ? val : !!val;

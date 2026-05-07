@@ -2736,9 +2736,10 @@
             html += '<div class="st2-prop-control">';
 
             if (cp.type === 'color') {
-                // Color picker swatch
+                // Color picker swatch — ensure valid #RRGGBB
                 var colorVal = cp.values[0] || '#ffffff';
-                html += '<input type="color" class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + colorVal + '">';
+                if (!colorVal || colorVal.length !== 7 || colorVal[0] !== '#') colorVal = '#ffffff';
+                html += '<input type="color" class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + colorVal + '" title="' + esc(cp.name) + ': ' + colorVal + '">';
 
             } else if (cp.type === 'checkbox') {
                 // Toggle switch
