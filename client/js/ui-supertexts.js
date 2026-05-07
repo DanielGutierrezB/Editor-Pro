@@ -1487,13 +1487,17 @@
                 propsHtml += '<label class="st2-prop-toggle" title="Animación salida"><input type="checkbox" class="st2-prop-animsalida" data-idx="' + idx + '"' + (animSal ? ' checked' : '') + '><span>Anim. Salida</span></label>';
             }
 
+            // Compact single-line text
+            var displayText = (st.text || '').replace(/[\r\n]+/g, ' ').substring(0, 60);
+            if ((st.text || '').length > 60) displayText += '…';
+
             el.innerHTML =
                 '<label class="st-checkbox-wrap">' +
                     '<input type="checkbox" class="st2-check" data-idx="' + idx + '"' + (st.checked ? " checked" : "") + '>' +
                 '</label>' +
                 '<div class="st-time">' + formatTimeFull(st.time) + '</div>' +
                 '<div class="st-content">' +
-                    '<div class="st-text">' + escSupertextHtml(st.text) + '</div>' +
+                    '<span class="st-text">' + esc(displayText) + '</span>' +
                     '<div class="st-meta-row">' +
                         '<span class="st-type-badge ' + typeClass + '" data-idx="' + idx + '">' + esc(curType) + '</span>' +
                         '<select class="st2-type-select" data-idx="' + idx + '">' + typeOptions + '</select>' +
@@ -1501,7 +1505,6 @@
                         '<button class="btn btn-xs btn-ghost st2-replace-btn hidden" data-idx="' + idx + '" title="Reemplazar clip en timeline">↻</button>' +
                     '</div>' +
                     '<div class="st-props-row">' + propsHtml + '</div>' +
-                    (st.reason ? '<div style="font-size:9px;color:var(--text-muted);margin-top:2px">' + escSupertextHtml(st.reason) + '</div>' : '') +
                 '</div>';
 
             var sel = el.querySelector(".st2-type-select");
@@ -2425,7 +2428,10 @@
                         st2Card.classList.toggle('st2-expanded', isVisible);
                         if (isVisible) {
                             document.body.style.overflow = 'hidden';
+                            // Multiple recalculations to catch layout settling
                             setTimeout(_st2ResizeOpenStep, 50);
+                            setTimeout(_st2ResizeOpenStep, 200);
+                            setTimeout(_st2ResizeOpenStep, 500);
                         } else {
                             document.body.style.overflow = '';
                         }
