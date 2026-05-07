@@ -2737,10 +2737,12 @@
             html += '<div class="st2-prop-control">';
 
             if (cp.type === 'color') {
-                // Color picker swatch — ensure valid #RRGGBB
+                // Color swatch with popup picker
                 var colorVal = cp.values[0] || '#ffffff';
                 if (!colorVal || colorVal.length !== 7 || colorVal[0] !== '#') colorVal = '#ffffff';
-                html += '<input type="color" class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + colorVal + '" title="' + esc(cp.name) + ': ' + colorVal + '">';
+                html += '<div style="position:relative">';
+                html += '<div class="st2-color-swatch st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-value="' + colorVal + '" style="background:' + colorVal + '" title="' + colorVal + '"></div>';
+                html += '</div>';
 
             } else if (cp.type === 'checkbox') {
                 // Toggle switch
@@ -2802,9 +2804,74 @@
             });
         });
 
-        // Color inputs — track changes
-        container.querySelectorAll('input[type="color"]').forEach(function(inp) {
-            inp.addEventListener('input', function() { this.dataset.changed = 'true'; });
+        // Color swatches — open popup picker on click
+        var COLOR_PALETTE = [
+            '#ffffff', '#e0e0e0', '#9e9e9e', '#616161', '#212121', '#000000',
+            '#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
+            '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39',
+            '#ffeb3b', '#ffc107', '#ff9800', '#ff5722', '#795548', '#607d8b',
+            '#72339f', '#33ff57', '#ff3333', '#3333ff', '#ffff33', '#33ffff'
+        ];
+        container.querySelectorAll('.st2-color-swatch').forEach(function(swatch) {
+            swatch.addEventListener('click', function(e) {
+                e.stopPropagation();
+                // Close any existing popup
+                var existing = document.querySelector('.st2-color-popup');
+                if (existing) existing.remove();
+
+                var currentColor = this.dataset.value || '#ffffff';
+                var popup = document.createElement('div');
+                popup.className = 'st2-color-popup';
+                var grid = '<div class="st2-color-popup-grid">';
+                COLOR_PALETTE.forEach(function(c) {
+                    grid += '<div class="st2-color-popup-cell' + (c === currentColor ? ' selected' : '') + '" data-color="' + c + '" style="background:' + c + '"></div>';
+                });
+                grid += '</div>';
+                popup.innerHTML = grid + '<div class="st2-color-hex-row"><input class="st2-color-hex-input" value="' + currentColor + '" maxlength="7" placeholder="#RRGGBB"><button class="btn btn-xs btn-success" style="font-size:9px;padding:2px 6px">OK</button></div>';
+                this.parentNode.appendChild(popup);
+
+                var swatchEl = this;
+                // Click on palette cell
+                popup.querySelectorAll('.st2-color-popup-cell').forEach(function(cell) {
+                    cell.addEventListener('click', function(ev) {
+                        ev.stopPropagation();
+                        var c = this.dataset.color;
+                        swatchEl.style.background = c;
+                        swatchEl.dataset.value = c;
+                        swatchEl.dataset.changed = 'true';
+                        swatchEl.title = c;
+                        popup.querySelector('.st2-color-hex-input').value = c;
+                        popup.querySelectorAll('.st2-color-popup-cell').forEach(function(cc) { cc.classList.remove('selected'); });
+                        this.classList.add('selected');
+                    });
+                });
+                // OK button
+                popup.querySelector('.btn-success').addEventListener('click', function(ev) {
+                    ev.stopPropagation();
+                    var hex = popup.querySelector('.st2-color-hex-input').value.trim();
+                    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+                        swatchEl.style.background = hex;
+                        swatchEl.dataset.value = hex;
+                        swatchEl.dataset.changed = 'true';
+                        swatchEl.title = hex;
+                    }
+                    popup.remove();
+                });
+                // Hex input enter
+                popup.querySelector('.st2-color-hex-input').addEventListener('keydown', function(ev) {
+                    if (ev.key === 'Enter') {
+                        ev.preventDefault();
+                        popup.querySelector('.btn-success').click();
+                    }
+                });
+                // Close on outside click
+                setTimeout(function() {
+                    document.addEventListener('click', function closePopup() {
+                        popup.remove();
+                        document.removeEventListener('click', closePopup);
+                    }, { once: true });
+                }, 10);
+            });
         });
 
         // Number inputs — track changes
@@ -2849,9 +2916,9 @@
             if (!propName) return;
             var propType = ctrl.closest('.st2-prop-row').dataset.propType;
 
-            if (ctrl.type === 'color') {
-                // Color: convert hex to [r,g,b,a]
-                var hex = ctrl.value;
+            if (ctrl.classList.contains('st2-color-swatch')) {
+                // Color swatch: convert hex to [r,g,b,a]
+                var hex = ctrl.dataset.value;
                 var r = parseInt(hex.substr(1,2), 16) / 255;
                 var g = parseInt(hex.substr(3,2), 16) / 255;
                 var b = parseInt(hex.substr(5,2), 16) / 255;

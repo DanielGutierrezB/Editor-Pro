@@ -826,22 +826,66 @@
     background: var(--accent-bright);
     cursor: pointer;
 }
-.st2-prop-control input[type="color"] {
+/* Color swatch button */
+.st2-color-swatch {
     width: 36px;
     height: 24px;
-    border: 1px solid rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.25);
     border-radius: 4px;
-    background: none;
     cursor: pointer;
-    padding: 1px;
-    -webkit-appearance: none;
+    flex-shrink: 0;
+    transition: border-color 0.15s;
 }
-.st2-prop-control input[type="color"]::-webkit-color-swatch-wrapper {
-    padding: 0;
+.st2-color-swatch:hover {
+    border-color: rgba(255,255,255,0.5);
 }
-.st2-prop-control input[type="color"]::-webkit-color-swatch {
-    border: none;
+/* Inline color picker popup */
+.st2-color-popup {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 100;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.st2-color-popup-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 28px);
+    gap: 4px;
+    margin-bottom: 6px;
+}
+.st2-color-popup-cell {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.1s, transform 0.1s;
+}
+.st2-color-popup-cell:hover {
+    border-color: white;
+    transform: scale(1.1);
+}
+.st2-color-popup-cell.selected {
+    border-color: var(--accent-bright);
+}
+.st2-color-hex-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+.st2-color-hex-input {
+    flex: 1;
+    font-size: 10px;
+    padding: 3px 6px;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    border: 1px solid rgba(255,255,255,0.15);
     border-radius: 3px;
+    font-family: var(--font-mono);
 }
 .st2-props-apply {
     margin-top: 8px;
