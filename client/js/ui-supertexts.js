@@ -2389,6 +2389,7 @@
                 // Close all steps
                 document.querySelectorAll('[id^="st2-step-body-"]').forEach(function(b) {
                     b.classList.add('hidden');
+                    b.style.maxHeight = '';
                 });
                 document.querySelectorAll('.st2-step-header .rec-step-arrow').forEach(function(a) {
                     a.textContent = '\u25b8';
@@ -2398,9 +2399,13 @@
                 if (!isOpen && body) {
                     body.classList.remove('hidden');
                     if (arrow) arrow.textContent = '\u25be';
+                    _st2ResizeOpenStep();
                 }
             });
         });
+
+        // Resize on window resize
+        window.addEventListener('resize', _st2ResizeOpenStep);
 
         // Control panel: scan button
         var scanBtn = document.getElementById('btn-st2-ctrl-scan');
@@ -2408,6 +2413,49 @@
         // Control panel: apply button
         var applyBtn = document.getElementById('btn-st2-ctrl-apply');
         if (applyBtn) applyBtn.addEventListener('click', _st2CtrlApply);
+
+    }
+
+    /**
+     * Calculate and set the max-height of the open step body
+     * so it fills all available vertical space.
+     */
+    function _st2ResizeOpenStep() {
+        var toolCard = document.querySelector('.st2-tool-card');
+        if (!toolCard) return;
+        var cardBody = toolCard.querySelector('.tool-card-body:not(.hidden)');
+        if (!cardBody) return;
+
+        // Find the open step body
+        var openBody = null;
+        var bodies = cardBody.querySelectorAll('[id^="st2-step-body-"]');
+        for (var i = 0; i < bodies.length; i++) {
+            if (!bodies[i].classList.contains('hidden')) { openBody = bodies[i]; break; }
+        }
+        if (!openBody) return;
+
+        // Calculate: total card height - (all step headers + card header + padding)
+        var cardRect = toolCard.getBoundingClientRect();
+        var totalHeight = cardRect.height;
+
+        // Subtract card header
+        var cardHeader = toolCard.querySelector('.tool-card-header');
+        var headerHeight = cardHeader ? cardHeader.offsetHeight : 40;
+
+        // Subtract all step headers (they're always visible)
+        var stepHeaders = cardBody.querySelectorAll('.st2-step-header');
+        var headersHeight = 0;
+        for (var h = 0; h < stepHeaders.length; h++) {
+            headersHeight += stepHeaders[h].closest('.rec-step').offsetHeight - (stepHeaders[h].closest('.rec-step').querySelector('.rec-step-body:not(.hidden)') ? stepHeaders[h].closest('.rec-step').querySelector('.rec-step-body:not(.hidden)').offsetHeight : 0);
+        }
+
+        // Available height = total - header - step headers - padding
+        var padding = 24; // top + bottom padding of card body
+        var available = totalHeight - headerHeight - headersHeight - padding;
+        if (available < 200) available = 200;
+
+        openBody.style.maxHeight = available + 'px';
+        openBody.style.overflowY = 'auto';
 
         // Toggle buttons in static HTML (if any)
         document.querySelectorAll('.st2-toggle').forEach(function(btn) {

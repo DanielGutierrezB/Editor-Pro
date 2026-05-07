@@ -715,22 +715,11 @@
     overflow: hidden;
     padding: 8px 12px 12px;
 }
-/* Steps: closed ones don't flex, open one fills remaining space */
+/* Steps layout */
 .st2-tool-card .rec-step {
     flex-shrink: 0;
 }
-.st2-tool-card .rec-step:has(.rec-step-body:not(.hidden)) {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-}
-.st2-tool-card .rec-step-body:not(.hidden) {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+.st2-tool-card .rec-step-body {
     overflow-y: auto;
 }
 /* Property panel card */
