@@ -811,6 +811,23 @@
 .st2-prop-control .st2-toggle.on::after {
     transform: translateX(16px);
 }
+.st2-prop-control input[type="color"] {
+    width: 36px;
+    height: 24px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    padding: 1px;
+    -webkit-appearance: none;
+}
+.st2-prop-control input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+.st2-prop-control input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 3px;
+}
 .st2-props-apply {
     margin-top: 8px;
     text-align: center;

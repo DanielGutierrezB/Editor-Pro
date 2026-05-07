@@ -2409,6 +2409,14 @@
         var applyBtn = document.getElementById('btn-st2-ctrl-apply');
         if (applyBtn) applyBtn.addEventListener('click', _st2CtrlApply);
 
+        // Text Color input — track when user changes it
+        var textColorInput = document.querySelector('.st2-ctrl-textcolor');
+        if (textColorInput) {
+            textColorInput.addEventListener('input', function() {
+                this.dataset.changed = 'true';
+            });
+        }
+
         // Toggle buttons (visual on/off switches)
         document.querySelectorAll('.st2-toggle').forEach(function(btn) {
             btn.addEventListener('click', function() {
@@ -2659,6 +2667,15 @@
         var panel = toolbar.querySelector('.st2-props-panel');
         if (!panel) panel = toolbar;
         var props = {};
+        // Text Color (only if user changed it)
+        var colorInput = panel.querySelector('.st2-ctrl-textcolor');
+        if (colorInput && colorInput.dataset.changed === 'true') {
+            var hex = colorInput.value;
+            var r = parseInt(hex.substr(1,2), 16) / 255;
+            var g = parseInt(hex.substr(3,2), 16) / 255;
+            var b = parseInt(hex.substr(5,2), 16) / 255;
+            props['Text Color'] = [r, g, b, 1];
+        }
         var fontSel = panel.querySelector('.st2-ctrl-font');
         if (fontSel && fontSel.value) {
             props['Text'] = { fontStyle: fontSel.value };
@@ -2699,9 +2716,10 @@
                 var data = JSON.parse(res);
                 if (data.error) { showToast(data.error, 'error'); return; }
                 showToast(data.modified + ' clips modificados', 'success');
-                // Reset dropdowns
+                // Reset controls
                 if (fontSel) fontSel.value = '';
                 if (colorSel) colorSel.value = '';
+                if (colorInput) { colorInput.value = '#ffffff'; colorInput.dataset.changed = ''; }
             } catch(e) {
                 showToast('Error: ' + e.message, 'error');
             }
