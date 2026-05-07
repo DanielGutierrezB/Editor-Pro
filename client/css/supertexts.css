@@ -771,8 +771,8 @@
 .st2-ctrl-toolbar select {
     font-size: 9px;
     padding: 2px 4px;
-    background: var(--bg-card);
-    color: var(--text-primary);
+    background: #2a2a2a;
+    color: #e0e0e0;
     border: 1px solid rgba(255,255,255,0.15);
     border-radius: 3px;
     cursor: pointer;
@@ -794,15 +794,23 @@
 .st-props-row select {
     font-size: 9px;
     padding: 2px 4px;
-    background: var(--bg-card);
-    color: var(--text-primary);
+    background: #2a2a2a;
+    color: #e0e0e0;
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 3px;
     cursor: pointer;
     max-width: 90px;
+    -webkit-appearance: none;
+    appearance: none;
 }
 .st-props-row select:hover {
     border-color: rgba(255,255,255,0.25);
+}
+.st-props-row select option,
+.st2-bulk-toolbar select option,
+.st2-ctrl-toolbar select option {
+    background: #2a2a2a;
+    color: #e0e0e0;
 }
 .st2-prop-toggle {
     display: flex;
@@ -841,8 +849,8 @@
 .st2-bulk-toolbar select {
     font-size: 9px;
     padding: 2px 4px;
-    background: var(--bg-card);
-    color: var(--text-primary);
+    background: #2a2a2a;
+    color: #e0e0e0;
     border: 1px solid rgba(255,255,255,0.15);
     border-radius: 3px;
     cursor: pointer;
