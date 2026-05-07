@@ -2519,6 +2519,7 @@
         var statusEl = document.getElementById('st2-ctrl-status');
         if (statusEl) statusEl.textContent = 'Escaneando...';
         _st2CtrlTypeFilter = null;
+        _st2CtrlLastSelectedKey = '';
 
         csInterface.evalScript('scanMOGRTClips()', function(res) {
             try {
@@ -2679,9 +2680,18 @@
         }
     }
 
+    var _st2CtrlLastSelectedKey = '';
     function _st2CtrlUpdateCount() {
-        var count = _st2CtrlClips.filter(function(c) { return c.selected; }).length;
-        _st2CtrlBuildPropsPanel();
+        var selected = _st2CtrlClips.filter(function(c) { return c.selected; });
+        // Only rebuild panel if the set of selected clips changed
+        var key = selected.map(function(c) { return c.trackIndex + ':' + c.clipIndex; }).join(',');
+        if (key !== _st2CtrlLastSelectedKey) {
+            _st2CtrlLastSelectedKey = key;
+            _st2CtrlBuildPropsPanel();
+        }
+        // Update count label if it exists
+        var titleEl = document.querySelector('.st2-props-panel-title');
+        if (titleEl) titleEl.textContent = selected.length + ' seleccionados';
     }
 
     /**
