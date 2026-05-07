@@ -2409,15 +2409,7 @@
         var applyBtn = document.getElementById('btn-st2-ctrl-apply');
         if (applyBtn) applyBtn.addEventListener('click', _st2CtrlApply);
 
-        // Text Color input — track when user changes it
-        var textColorInput = document.querySelector('.st2-ctrl-textcolor');
-        if (textColorInput) {
-            textColorInput.addEventListener('input', function() {
-                this.dataset.changed = 'true';
-            });
-        }
-
-        // Toggle buttons (visual on/off switches)
+        // Toggle buttons in static HTML (if any)
         document.querySelectorAll('.st2-toggle').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 var isOn = this.classList.toggle('on');
@@ -2462,14 +2454,13 @@
     function _st2CtrlRender() {
         var list = document.getElementById('st2-ctrl-list');
         var empty = document.getElementById('st2-ctrl-empty');
-        var toolbar = document.getElementById('st2-ctrl-toolbar');
+        var propsContainer = document.getElementById('st2-ctrl-props-container');
         if (!list) return;
 
         if (_st2CtrlClips.length === 0) {
             list.innerHTML = '';
             if (empty) empty.classList.remove('hidden');
-            if (toolbar) toolbar.classList.add('hidden');
-            // Remove filter bar if exists
+            if (propsContainer) propsContainer.innerHTML = '';
             var existingFilter = document.getElementById('st2-ctrl-filter-bar');
             if (existingFilter) existingFilter.remove();
             return;
@@ -2489,7 +2480,7 @@
             filterBar.id = 'st2-ctrl-filter-bar';
             filterBar.className = 'st2-ctrl-filter-bar';
             // Insert before toolbar
-            if (toolbar && toolbar.parentNode) toolbar.parentNode.insertBefore(filterBar, toolbar);
+            if (propsContainer && propsContainer.parentNode) propsContainer.parentNode.insertBefore(filterBar, propsContainer);
         }
         filterBar.innerHTML = '';
         var typeKeys = Object.keys(typeCounts).sort();
@@ -2517,8 +2508,6 @@
 
         // Render clip list
         _st2CtrlRenderList();
-
-        if (toolbar) toolbar.classList.remove('hidden');
     }
 
     function _st2CtrlApplyFilter() {
@@ -2604,98 +2593,164 @@
 
     function _st2CtrlUpdateCount() {
         var count = _st2CtrlClips.filter(function(c) { return c.selected; }).length;
-        var el = document.getElementById('st2-ctrl-sel-count');
-        if (el) el.textContent = count + ' seleccionados:';
-        _st2CtrlUpdateToolbarControls();
+        _st2CtrlBuildPropsPanel();
     }
 
-    /** Show/hide property rows based on selected types */
-    function _st2CtrlUpdateToolbarControls() {
-        var toolbar = document.getElementById('st2-ctrl-toolbar');
-        if (!toolbar) return;
+    /**
+     * Dynamically build the property panel from the intersection of
+     * all selected clips' editable properties.
+     */
+    function _st2CtrlBuildPropsPanel() {
+        var container = document.getElementById('st2-ctrl-props-container');
+        if (!container) return;
 
-        // Determine which types are currently selected
-        var selectedTypes = {};
-        _st2CtrlClips.forEach(function(c) {
-            if (c.selected) selectedTypes[_st2CtrlGetType(c)] = true;
-        });
-        var types = Object.keys(selectedTypes);
-
-        // Color row: only for definition/data/step/summary/highlight
-        var hasColor = types.some(function(t) { return !!ST2_COLOR_PRESETS[t]; });
-        var colorRow = toolbar.querySelector('.st2-ctrl-color-row');
-        if (colorRow) colorRow.style.display = hasColor ? '' : 'none';
-
-        // Update color options based on filtered types
-        if (hasColor) {
-            var colorEl = toolbar.querySelector('.st2-ctrl-color');
-            if (colorEl) {
-                var allPresets = {};
-                types.forEach(function(t) {
-                    var presets = ST2_COLOR_PRESETS[t];
-                    if (presets) presets.forEach(function(p) { allPresets[p] = true; });
-                });
-                var currentVal = colorEl.value;
-                colorEl.innerHTML = '<option value="">Sin cambio</option>';
-                Object.keys(allPresets).forEach(function(p) {
-                    var opt = document.createElement('option');
-                    opt.value = p; opt.textContent = p;
-                    colorEl.appendChild(opt);
-                });
-                colorEl.value = currentVal;
-            }
+        var selected = _st2CtrlClips.filter(function(c) { return c.selected; });
+        if (selected.length === 0) {
+            container.innerHTML = '';
+            return;
         }
 
-        // Bullets row: only for bullet type
-        var bulletsRow = toolbar.querySelector('.st2-ctrl-bullets-row');
-        if (bulletsRow) bulletsRow.style.display = selectedTypes.bullet ? '' : 'none';
+        // Find common properties across all selected clips
+        // A property is "common" if every selected clip has it (by name + type)
+        var propMap = {}; // name -> { type, count, values, propInfo }
+        selected.forEach(function(clip) {
+            if (!clip.properties) return;
+            clip.properties.forEach(function(p) {
+                var key = p.name;
+                if (!propMap[key]) {
+                    propMap[key] = { type: p.type, count: 0, values: [], propInfo: p };
+                }
+                propMap[key].count++;
+                propMap[key].values.push(p.value);
+            });
+        });
 
-        // Recuadro / Anim Salida rows: only for title type
-        var recuadroRow = toolbar.querySelector('.st2-ctrl-recuadro-row');
-        var animRow = toolbar.querySelector('.st2-ctrl-animsalida-row');
-        if (recuadroRow) recuadroRow.style.display = selectedTypes.title ? '' : 'none';
-        if (animRow) animRow.style.display = selectedTypes.title ? '' : 'none';
+        // Only show properties present in ALL selected clips (or at least 1 for flexibility)
+        var commonProps = [];
+        for (var key in propMap) {
+            if (!propMap.hasOwnProperty(key)) continue;
+            var pm = propMap[key];
+            // Skip unknown/json/object/group types
+            if (pm.type === 'unknown' || pm.type === 'json' || pm.type === 'object' || pm.type === 'group') continue;
+            commonProps.push({ name: key, type: pm.type, count: pm.count, values: pm.values, propInfo: pm.propInfo });
+        }
+
+        if (commonProps.length === 0) {
+            container.innerHTML = '<div style="font-size:10px;color:var(--text-muted);padding:8px">Sin propiedades editables</div>';
+            return;
+        }
+
+        var html = '<div class="st2-props-panel">';
+        html += '<div class="st2-props-panel-title">' + selected.length + ' seleccionados</div>';
+
+        commonProps.forEach(function(cp) {
+            html += '<div class="st2-prop-row" data-prop-name="' + esc(cp.name) + '" data-prop-type="' + cp.type + '">';
+            html += '<span class="st2-prop-label">' + esc(cp.name) + '</span>';
+            html += '<div class="st2-prop-control">';
+
+            if (cp.type === 'color') {
+                // Color picker
+                var colorVal = cp.values[0] || '#ffffff';
+                html += '<input type="color" class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + colorVal + '">';
+            } else if (cp.type === 'checkbox') {
+                // Toggle switch
+                var isOn = cp.values[0] === true;
+                html += '<button type="button" class="st2-toggle' + (isOn ? ' on' : '') + ' st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-value="' + isOn + '"></button>';
+            } else if (cp.type === 'number') {
+                // Number input (slider or dropdown index)
+                var numVal = cp.values[0] || 0;
+                html += '<input type="number" class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + numVal + '" style="width:60px;font-size:10px;padding:3px;background:#2a2a2a;color:#e0e0e0;border:1px solid rgba(255,255,255,0.15);border-radius:4px">';
+            } else if (cp.type === 'text') {
+                // Text with font info
+                var fontName = cp.propInfo.fontStyle || '';
+                var shortFont = fontName.replace('DMSans-', '');
+                html += '<span style="font-size:9px;color:var(--text-muted);margin-right:6px">' + esc(shortFont) + '</span>';
+                html += '<select class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-subtype="font">';
+                html += '<option value="">Font...</option>';
+                ST2_FONT_WEIGHTS.forEach(function(fw) {
+                    html += '<option value="' + fw.value + '"' + (fw.value === fontName ? ' selected' : '') + '>' + fw.label + '</option>';
+                });
+                html += '</select>';
+            } else if (cp.type === 'string') {
+                html += '<span style="font-size:9px;color:var(--text-muted)">' + esc(String(cp.values[0] || '').substring(0, 30)) + '</span>';
+            }
+
+            html += '</div></div>';
+        });
+
+        html += '<div class="st2-props-apply">';
+        html += '<button id="btn-st2-ctrl-apply" class="btn-analyze btn-analyze-alt" style="width:100%"><span>\u2705 Aplicar</span></button>';
+        html += '</div></div>';
+
+        container.innerHTML = html;
+
+        // Bind events on new elements
+        var applyBtn = document.getElementById('btn-st2-ctrl-apply');
+        if (applyBtn) applyBtn.addEventListener('click', _st2CtrlApply);
+
+        // Toggle buttons
+        container.querySelectorAll('.st2-toggle').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var isOn = this.classList.toggle('on');
+                this.dataset.value = isOn ? 'true' : 'false';
+                this.dataset.changed = 'true';
+            });
+        });
+
+        // Color inputs — track changes
+        container.querySelectorAll('input[type="color"]').forEach(function(inp) {
+            inp.addEventListener('input', function() { this.dataset.changed = 'true'; });
+        });
+
+        // Number inputs — track changes
+        container.querySelectorAll('input[type="number"]').forEach(function(inp) {
+            inp.addEventListener('change', function() { this.dataset.changed = 'true'; });
+        });
+
+        // Select changes
+        container.querySelectorAll('select.st2-ctrl-dynamic').forEach(function(sel) {
+            sel.addEventListener('change', function() { this.dataset.changed = 'true'; });
+        });
     }
 
     function _st2CtrlApply() {
         var selected = _st2CtrlClips.filter(function(c) { return c.selected; });
         if (selected.length === 0) { showToast('Selecciona al menos un clip', 'info'); return; }
 
-        var toolbar = document.getElementById('st2-ctrl-toolbar');
-        if (!toolbar) return;
+        var container = document.getElementById('st2-ctrl-props-container');
+        if (!container) return;
 
-        var panel = toolbar.querySelector('.st2-props-panel');
-        if (!panel) panel = toolbar;
+        // Read all changed dynamic controls
         var props = {};
-        // Text Color (only if user changed it)
-        var colorInput = panel.querySelector('.st2-ctrl-textcolor');
-        if (colorInput && colorInput.dataset.changed === 'true') {
-            var hex = colorInput.value;
-            var r = parseInt(hex.substr(1,2), 16) / 255;
-            var g = parseInt(hex.substr(3,2), 16) / 255;
-            var b = parseInt(hex.substr(5,2), 16) / 255;
-            props['Text Color'] = [r, g, b, 1];
-        }
-        var fontSel = panel.querySelector('.st2-ctrl-font');
-        if (fontSel && fontSel.value) {
-            props['Text'] = { fontStyle: fontSel.value };
-        }
-        var colorSel = panel.querySelector('.st2-ctrl-color');
-        if (colorSel && colorSel.value) {
-            props['Color'] = colorSel.value;
-        }
-        var bulletsToggle = panel.querySelector('.st2-ctrl-showbullets');
-        if (bulletsToggle && bulletsToggle.closest('.st2-prop-row').style.display !== 'none') {
-            props['Show Bullets'] = bulletsToggle.dataset.value === 'true';
-        }
-        var recuadroToggle = panel.querySelector('.st2-ctrl-recuadro');
-        if (recuadroToggle && recuadroToggle.closest('.st2-prop-row').style.display !== 'none') {
-            props['Recuadro off'] = recuadroToggle.dataset.value === 'true';
-        }
-        var animToggle = panel.querySelector('.st2-ctrl-animsalida');
-        if (animToggle && animToggle.closest('.st2-prop-row').style.display !== 'none') {
-            props['Animaci\u00f3n Salida'] = animToggle.dataset.value === 'true';
-        }
+        container.querySelectorAll('.st2-ctrl-dynamic').forEach(function(ctrl) {
+            if (ctrl.dataset.changed !== 'true') return;
+            var propName = ctrl.dataset.prop;
+            if (!propName) return;
+            var propType = ctrl.closest('.st2-prop-row').dataset.propType;
+
+            if (ctrl.type === 'color') {
+                // Color: convert hex to [r,g,b,a]
+                var hex = ctrl.value;
+                var r = parseInt(hex.substr(1,2), 16) / 255;
+                var g = parseInt(hex.substr(3,2), 16) / 255;
+                var b = parseInt(hex.substr(5,2), 16) / 255;
+                props[propName] = [r, g, b, 1];
+            } else if (ctrl.classList.contains('st2-toggle')) {
+                // Checkbox toggle
+                props[propName] = ctrl.dataset.value === 'true';
+            } else if (ctrl.type === 'number') {
+                // Number (slider or dropdown index)
+                props[propName] = parseFloat(ctrl.value);
+            } else if (ctrl.tagName === 'SELECT') {
+                if (ctrl.dataset.subtype === 'font' && ctrl.value) {
+                    // Font weight change on text property
+                    props[propName] = { fontStyle: ctrl.value };
+                } else if (ctrl.value) {
+                    props[propName] = parseFloat(ctrl.value);
+                    if (isNaN(props[propName])) props[propName] = ctrl.value;
+                }
+            }
+        });
 
         if (Object.keys(props).length === 0) { showToast('Selecciona un cambio (font, color, bullets)', 'info'); return; }
 
@@ -2716,10 +2771,8 @@
                 var data = JSON.parse(res);
                 if (data.error) { showToast(data.error, 'error'); return; }
                 showToast(data.modified + ' clips modificados', 'success');
-                // Reset controls
-                if (fontSel) fontSel.value = '';
-                if (colorSel) colorSel.value = '';
-                if (colorInput) { colorInput.value = '#ffffff'; colorInput.dataset.changed = ''; }
+                // Re-scan to refresh values
+                _st2CtrlScan();
             } catch(e) {
                 showToast('Error: ' + e.message, 'error');
             }

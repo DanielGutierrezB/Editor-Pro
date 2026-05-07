@@ -939,6 +939,7 @@ function replaceMOGRTClip(jsonPath) {
 
 // ─── Debug: inspect ALL 5 MOGRT files and dump their text properties ───
 // ─── Control Panel: scan existing MOGRT clips in timeline ───
+// Returns all editable properties for each MOGRT clip
 function scanMOGRTClips() {
     try {
         var seq = app.project.activeSequence;
@@ -949,10 +950,11 @@ function scanMOGRTClips() {
             var track = seq.videoTracks[t];
             for (var c = 0; c < track.clips.numItems; c++) {
                 var clip = track.clips[c];
-                // Check if clip is a MOGRT (has getMGTComponent)
-                var isMogrt = false;
-                try { isMogrt = (typeof clip.getMGTComponent === "function" && clip.getMGTComponent() !== null); } catch(e) {}
-                if (!isMogrt) continue;
+                var moComp = null;
+                try {
+                    if (typeof clip.getMGTComponent === "function") moComp = clip.getMGTComponent();
+                } catch(e) {}
+                if (!moComp || !moComp.properties) continue;
 
                 var clipName = "";
                 try { clipName = clip.name || ""; } catch(e) {}
@@ -961,12 +963,90 @@ function scanMOGRTClips() {
                 var endSecs = 0;
                 try { endSecs = parseFloat(clip.end.seconds); } catch(e) {}
 
+                // Read all editable properties
+                var props = [];
+                for (var p = 0; p < moComp.properties.numItems; p++) {
+                    var prop;
+                    try { prop = moComp.properties[p]; } catch(e) { continue; }
+                    if (!prop) continue;
+                    var dn = "";
+                    try { dn = prop.displayName || ""; } catch(e) {}
+                    if (!dn) continue;
+
+                    var info = { name: dn, index: p };
+                    try {
+                        var val = prop.getValue();
+                        var vt = typeof val;
+
+                        if (vt === "boolean") {
+                            info.type = "checkbox";
+                            info.value = val;
+                        } else if (vt === "number") {
+                            info.type = "number";
+                            info.value = val;
+                        } else if (vt === "string" && val.charAt(0) === "{") {
+                            // JSON text property
+                            try {
+                                var parsed = JSON.parse(val);
+                                if (parsed.textEditValue !== undefined) {
+                                    info.type = "text";
+                                    info.value = parsed.textEditValue;
+                                    info.fontStyle = (parsed.fontEditValue && parsed.fontEditValue[0]) || "";
+                                    info.fontSize = (parsed.fontSizeEditValue && parsed.fontSizeEditValue[0]) || 0;
+                                } else {
+                                    info.type = "json";
+                                    info.value = val.substring(0, 100);
+                                }
+                            } catch(ep) {
+                                info.type = "string";
+                                info.value = val.substring(0, 100);
+                            }
+                        } else if (vt === "object" && val !== null) {
+                            if (val.length !== undefined && val.length >= 3 && val.length <= 4 && typeof val[0] === "number") {
+                                // Color array [r,g,b,a]
+                                info.type = "color";
+                                var rr = Math.round(val[0] * 255);
+                                var gg = Math.round(val[1] * 255);
+                                var bb = Math.round(val[2] * 255);
+                                info.value = "#" + (rr < 16 ? "0" : "") + rr.toString(16) + (gg < 16 ? "0" : "") + gg.toString(16) + (bb < 16 ? "0" : "") + bb.toString(16);
+                            } else if (val.length !== undefined) {
+                                // Group — skip (it's a container, not editable directly)
+                                info.type = "group";
+                            } else if (val.textEditValue !== undefined) {
+                                info.type = "text";
+                                info.value = val.textEditValue;
+                                info.fontStyle = (val.fontEditValue && val.fontEditValue[0]) || "";
+                                info.fontSize = (val.fontSizeEditValue && val.fontSizeEditValue[0]) || 0;
+                            } else {
+                                info.type = "object";
+                                info.value = JSON.stringify(val).substring(0, 100);
+                            }
+                        } else if (vt === "string") {
+                            info.type = "string";
+                            info.value = val.substring(0, 100);
+                        }
+
+                        // Detect dropdown/menu type by checking menucontent
+                        // Premiere stores dropdown index as number but has menu options
+                        // We detect by looking for specific known patterns or check if it's an integer with known menu props
+                    } catch(ev) {
+                        info.type = "unknown";
+                        info.error = ev.message;
+                    }
+
+                    // Skip group containers
+                    if (info.type !== "group") {
+                        props.push(info);
+                    }
+                }
+
                 clips.push({
                     name: clipName,
                     trackIndex: t,
                     clipIndex: c,
                     startTime: startSecs,
-                    endTime: endSecs
+                    endTime: endSecs,
+                    properties: props
                 });
             }
         }

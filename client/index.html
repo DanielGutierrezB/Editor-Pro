@@ -585,66 +585,8 @@
                         <button id="btn-st2-ctrl-scan" class="btn btn-sm btn-success" title="Escanear clips MOGRT en la timeline">🔍 Escanear MOGRTs en Timeline</button>
                         <span id="st2-ctrl-status" style="font-size:10px;color:var(--text-muted)"></span>
                     </div>
-                    <div id="st2-ctrl-toolbar" class="hidden">
-                        <div class="st2-props-panel">
-                            <div class="st2-props-panel-title" id="st2-ctrl-sel-count">0 seleccionados</div>
-                            <div class="st2-prop-row">
-                                <span class="st2-prop-label">Text Color</span>
-                                <div class="st2-prop-control">
-                                    <input type="color" class="st2-ctrl-textcolor" value="#ffffff" title="Color del texto">
-                                </div>
-                            </div>
-                            <div class="st2-prop-row">
-                                <span class="st2-prop-label">Font Weight</span>
-                                <div class="st2-prop-control">
-                                    <select class="st2-ctrl-font">
-                                        <option value="">Sin cambio</option>
-                                        <option value="DMSans-Regular">Regular</option>
-                                        <option value="DMSans-Medium">Medium</option>
-                                        <option value="DMSans-SemiBold">SemiBold</option>
-                                        <option value="DMSans-Bold">Bold</option>
-                                        <option value="DMSans-ExtraBold">ExtraBold</option>
-                                        <option value="DMSans-Black">Black</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="st2-prop-row st2-ctrl-color-row">
-                                <span class="st2-prop-label">Color Preset</span>
-                                <div class="st2-prop-control">
-                                    <select class="st2-ctrl-color">
-                                        <option value="">Sin cambio</option>
-                                        <option value="White">White</option>
-                                        <option value="Vampire">Vampire</option>
-                                        <option value="Green">Green</option>
-                                        <option value="Yellow">Yellow</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="st2-prop-row st2-ctrl-bullets-row">
-                                <span class="st2-prop-label">Show Bullets</span>
-                                <div class="st2-prop-control">
-                                    <button type="button" class="st2-toggle on st2-ctrl-showbullets" data-value="true"></button>
-                                </div>
-                            </div>
-                            <div class="st2-prop-row st2-ctrl-recuadro-row" style="display:none">
-                                <span class="st2-prop-label">Recuadro</span>
-                                <div class="st2-prop-control">
-                                    <button type="button" class="st2-toggle on st2-ctrl-recuadro" data-value="true"></button>
-                                </div>
-                            </div>
-                            <div class="st2-prop-row st2-ctrl-animsalida-row" style="display:none">
-                                <span class="st2-prop-label">Anim. Salida</span>
-                                <div class="st2-prop-control">
-                                    <button type="button" class="st2-toggle on st2-ctrl-animsalida" data-value="true"></button>
-                                </div>
-                            </div>
-                            <div class="st2-props-apply">
-                                <button id="btn-st2-ctrl-apply" class="btn-analyze btn-analyze-alt" style="width:100%" title="Aplicar cambios a clips seleccionados">
-                                    <span>✅ Aplicar</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- Dynamic property panel — built by JS from scanned MOGRT properties -->
+                    <div id="st2-ctrl-props-container"></div>
                     <div id="st2-ctrl-list" class="supertext-list st2-ctrl-list"></div>
                     <div id="st2-ctrl-empty" class="empty-state-mini">
                         <p class="empty-text">Escanea la timeline para encontrar clips MOGRT y editar sus propiedades</p>
