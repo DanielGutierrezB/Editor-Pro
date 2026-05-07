@@ -692,11 +692,20 @@
 }
 
 /* ── Smart Supertexts Accordion Layout ── */
-.st2-tool-card {
+/* When expanded, Smart Supertexts auto-fills the entire panel like fullscreen */
+.st2-tool-card:has(.tool-card-body:not(.hidden)) {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 9998 !important;
+    border-radius: 0 !important;
+    border: none !important;
+    margin: 0 !important;
+    background: var(--bg-base) !important;
     display: flex;
     flex-direction: column;
-    flex: 1;
-    min-height: 0;
 }
 .st2-tool-card .tool-card-body:not(.hidden) {
     flex: 1;
@@ -704,6 +713,7 @@
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
+    padding: 8px 12px 12px;
 }
 /* Steps: closed ones don't flex, open one fills remaining space */
 .st2-tool-card .rec-step {
