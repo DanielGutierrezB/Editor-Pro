@@ -691,14 +691,7 @@
     border-left: 2px solid var(--accent);
 }
 
-/* ── Smart Supertexts Tab Layout ── */
-.st2-tool-card .tool-card-body.st2-body-flex {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-}
+/* ── Smart Supertexts Accordion Layout ── */
 .st2-tool-card {
     display: flex;
     flex-direction: column;
@@ -708,72 +701,11 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-}
-.st2-tab-bar {
-    display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 8px;
-    flex-shrink: 0;
-}
-.st2-tab {
-    flex: 1;
-    padding: 7px 4px;
-    font-size: 10px;
-    font-weight: 600;
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: color 0.15s, border-color 0.15s;
-    white-space: nowrap;
-}
-.st2-tab:hover {
-    color: var(--text-primary);
-}
-.st2-tab.active {
-    color: var(--accent-bright);
-    border-bottom-color: var(--accent-bright);
-}
-.st2-tab-content {
-    display: none;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-}
-.st2-tab-content.active {
-    display: flex;
-}
-/* Results container must also flex to fill */
-#st2-results {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-}
-#st2-results > .result-summary,
-#st2-results > .result-actions,
-#st2-results > .st2-batch-nav,
-#st2-results > .st2-bulk-toolbar {
-    flex-shrink: 0;
-}
-#st2-list {
-    flex: 1;
-    min-height: 0;
     overflow-y: auto;
 }
 
 /* ── Control Panel Tab ── */
-#st2-tab-control.active {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-}
+/* Control panel step body layout */
 .st2-ctrl-header {
     display: flex;
     align-items: center;

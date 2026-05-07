@@ -359,17 +359,17 @@
                 </div>
                 <span class="toggle-icon">▸</span>
             </div>
-            <div class="tool-card-body hidden st2-body-flex">
+            <div class="tool-card-body hidden">
 
-                <!-- ═══ TAB BAR ═══ -->
-                <div class="st2-tab-bar">
-                    <button class="st2-tab active" data-st2-tab="config">⚙️ Config</button>
-                    <button class="st2-tab" data-st2-tab="generate">🎬 Generar</button>
-                    <button class="st2-tab" data-st2-tab="control">🎛️ Control</button>
-                </div>
-
-                <!-- ═══ TAB: CONFIG ═══ -->
-                <div class="st2-tab-content active" id="st2-tab-config" data-st2-tab-content="config">
+                <!-- ═══ STEP 1: CONFIG ═══ -->
+                <div class="rec-step" data-st2-step="1">
+                    <div class="rec-step-header st2-step-header" data-st2-step="1">
+                        <span class="rec-step-num">1</span>
+                        <span class="rec-step-title">Configuración</span>
+                        <span id="st2-step-hint-1" class="rec-step-hint"></span>
+                        <span class="rec-step-arrow">▾</span>
+                    </div>
+                    <div class="rec-step-body" id="st2-step-body-1">
                 <p class="tool-description">Configura MOGRTs, prompt y filtros antes de generar.</p>
 
                 <!-- MOGRT Config per Type -->
@@ -474,10 +474,18 @@
                     <button id="btn-st2-scan-tracks" class="btn btn-xs btn-ghost" style="font-size:9px" title="Escanear tracks de secuencias abiertas">🔍 Escanear</button>
                     <span id="st2-scan-status" style="font-size:9px;color:var(--text-muted)"></span>
                 </div>
-                </div><!-- /st2-tab-config -->
+                    </div><!-- /st2-step-body-1 -->
+                </div><!-- /step 1 -->
 
-                <!-- ═══ TAB: GENERATE ═══ -->
-                <div class="st2-tab-content" id="st2-tab-generate" data-st2-tab-content="generate">
+                <!-- ═══ STEP 2: GENERATE ═══ -->
+                <div class="rec-step" data-st2-step="2">
+                    <div class="rec-step-header st2-step-header" data-st2-step="2">
+                        <span class="rec-step-num">2</span>
+                        <span class="rec-step-title">Selección y Generación</span>
+                        <span id="st2-step-hint-2" class="rec-step-hint"></span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="st2-step-body-2">
 
                 <div class="btn-row">
                     <button id="btn-supertexts2" class="btn-analyze btn-analyze-alt" title="Analiza la transcripción y genera supertextos como gráficos MOGRT">
@@ -561,10 +569,18 @@
                 <div id="st2-empty" class="empty-state-mini">
                     <p class="empty-text">Configura un MOGRT y genera supertextos como clips de gráfico en la línea de tiempo</p>
                 </div>
-                </div><!-- /st2-tab-generate -->
+                    </div><!-- /st2-step-body-2 -->
+                </div><!-- /step 2 -->
 
-                <!-- ═══ TAB: CONTROL PANEL ═══ -->
-                <div class="st2-tab-content" id="st2-tab-control" data-st2-tab-content="control">
+                <!-- ═══ STEP 3: CONTROL PANEL ═══ -->
+                <div class="rec-step" data-st2-step="3">
+                    <div class="rec-step-header st2-step-header" data-st2-step="3">
+                        <span class="rec-step-num">3</span>
+                        <span class="rec-step-title">Panel de Control</span>
+                        <span id="st2-step-hint-3" class="rec-step-hint"></span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="st2-step-body-3">
                     <div class="st2-ctrl-header">
                         <button id="btn-st2-ctrl-scan" class="btn btn-sm btn-success" title="Escanear clips MOGRT en la timeline">🔍 Escanear MOGRTs en Timeline</button>
                         <span id="st2-ctrl-status" style="font-size:10px;color:var(--text-muted)"></span>
@@ -594,7 +610,8 @@
                     <div id="st2-ctrl-empty" class="empty-state-mini">
                         <p class="empty-text">Escanea la timeline para encontrar clips MOGRT y editar sus propiedades</p>
                     </div>
-                </div><!-- /st2-tab-control -->
+                    </div><!-- /st2-step-body-3 -->
+                </div><!-- /step 3 -->
 
             </div>
         </div>

@@ -2378,16 +2378,27 @@
     // ═════════════════════════════════════════════════════════════
 
     function _st2InitTabs() {
-        document.querySelectorAll('.st2-tab').forEach(function(tab) {
-            tab.addEventListener('click', function() {
-                var target = this.dataset.st2Tab;
-                // Deactivate all
-                document.querySelectorAll('.st2-tab').forEach(function(t) { t.classList.remove('active'); });
-                document.querySelectorAll('.st2-tab-content').forEach(function(c) { c.classList.remove('active'); });
-                // Activate target
-                this.classList.add('active');
-                var content = document.querySelector('[data-st2-tab-content="' + target + '"]');
-                if (content) content.classList.add('active');
+        // Accordion step headers — click to toggle, only one open at a time
+        document.querySelectorAll('.st2-step-header').forEach(function(header) {
+            header.addEventListener('click', function() {
+                var step = this.dataset.st2Step;
+                var body = document.getElementById('st2-step-body-' + step);
+                var arrow = this.querySelector('.rec-step-arrow');
+                var isOpen = body && !body.classList.contains('hidden');
+
+                // Close all steps
+                document.querySelectorAll('[id^="st2-step-body-"]').forEach(function(b) {
+                    b.classList.add('hidden');
+                });
+                document.querySelectorAll('.st2-step-header .rec-step-arrow').forEach(function(a) {
+                    a.textContent = '\u25b8';
+                });
+
+                // Toggle current
+                if (!isOpen && body) {
+                    body.classList.remove('hidden');
+                    if (arrow) arrow.textContent = '\u25be';
+                }
             });
         });
 
