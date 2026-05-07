@@ -622,17 +622,19 @@ function _setMGTProperties(trackItem, properties, itemIdx, errors) {
                         }
                     }
                 }
-                // Color: array [r,g,b,a]
+                // Color: array [r,g,b,a] — MUST use setColorValue, not setValue!
                 else if (isArr && val.length >= 3) {
-                    // Build a clean array to avoid eval-created object issues
-                    var colorArr = [Number(val[0]), Number(val[1]), Number(val[2])];
-                    if (val.length >= 4) colorArr.push(Number(val[3]));
-                    else colorArr.push(1);
+                    // setColorValue expects (alpha, red, green, blue, updateUI)
+                    // Input is 0-1 floats, setColorValue needs 0-255 integers
+                    var cr = Math.round(Number(val[0]) * 255);
+                    var cg = Math.round(Number(val[1]) * 255);
+                    var cb = Math.round(Number(val[2]) * 255);
+                    var ca = val.length >= 4 ? Math.round(Number(val[3]) * 255) : 255;
                     try {
-                        targetProp.setValue(colorArr, 1);
-                        $.writeln("[_setMGTProperties] Item " + itemIdx + ": set color '" + key + "' = [" + colorArr.join(",") + "]");
+                        targetProp.setColorValue(ca, cr, cg, cb, 1);
+                        $.writeln("[_setMGTProperties] Item " + itemIdx + ": setColorValue '" + key + "' = a" + ca + " r" + cr + " g" + cg + " b" + cb);
                     } catch(eColor) {
-                        $.writeln("[_setMGTProperties] Item " + itemIdx + ": color setValue failed: " + eColor.message + " — trying individual components");
+                        $.writeln("[_setMGTProperties] Item " + itemIdx + ": setColorValue failed: " + eColor.message);
                         errors.push("Item " + itemIdx + ": color '" + key + "' failed: " + eColor.message);
                     }
                 }
