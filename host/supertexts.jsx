@@ -624,8 +624,17 @@ function _setMGTProperties(trackItem, properties, itemIdx, errors) {
                 }
                 // Color: array [r,g,b,a]
                 else if (isArr && val.length >= 3) {
-                    targetProp.setValue(val, 1);
-                    $.writeln("[_setMGTProperties] Item " + itemIdx + ": set color '" + key + "' = [" + val.join(",") + "]");
+                    // Build a clean array to avoid eval-created object issues
+                    var colorArr = [Number(val[0]), Number(val[1]), Number(val[2])];
+                    if (val.length >= 4) colorArr.push(Number(val[3]));
+                    else colorArr.push(1);
+                    try {
+                        targetProp.setValue(colorArr, 1);
+                        $.writeln("[_setMGTProperties] Item " + itemIdx + ": set color '" + key + "' = [" + colorArr.join(",") + "]");
+                    } catch(eColor) {
+                        $.writeln("[_setMGTProperties] Item " + itemIdx + ": color setValue failed: " + eColor.message + " — trying individual components");
+                        errors.push("Item " + itemIdx + ": color '" + key + "' failed: " + eColor.message);
+                    }
                 }
                 // Boolean (checkbox)
                 else if (typeof val === "boolean") {
