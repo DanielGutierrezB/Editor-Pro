@@ -85,6 +85,7 @@
         parseTranscriptJson      = global._epParseTranscriptJson;
         _buildTranscriptCache    = global._epBuildTranscriptCache;
         _st2InitTrackFilter();
+        _st2InitTabs();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -2370,6 +2371,180 @@
         if (str === undefined || str === null) return "";
         var s = normalizeSupertextNewlines(str);
         return s.split(/\r?\n/).map(function(line) { return esc(line); }).join("<br>");
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // TAB NAVIGATION
+    // ═════════════════════════════════════════════════════════════
+
+    function _st2InitTabs() {
+        document.querySelectorAll('.st2-tab').forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                var target = this.dataset.st2Tab;
+                // Deactivate all
+                document.querySelectorAll('.st2-tab').forEach(function(t) { t.classList.remove('active'); });
+                document.querySelectorAll('.st2-tab-content').forEach(function(c) { c.classList.remove('active'); });
+                // Activate target
+                this.classList.add('active');
+                var content = document.querySelector('[data-st2-tab-content="' + target + '"]');
+                if (content) content.classList.add('active');
+            });
+        });
+
+        // Control panel: scan button
+        var scanBtn = document.getElementById('btn-st2-ctrl-scan');
+        if (scanBtn) scanBtn.addEventListener('click', _st2CtrlScan);
+        // Control panel: apply button
+        var applyBtn = document.getElementById('btn-st2-ctrl-apply');
+        if (applyBtn) applyBtn.addEventListener('click', _st2CtrlApply);
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // CONTROL PANEL — Edit existing MOGRT clips in timeline
+    // ═════════════════════════════════════════════════════════════
+
+    var _st2CtrlClips = [];
+
+    function _st2CtrlScan() {
+        var statusEl = document.getElementById('st2-ctrl-status');
+        if (statusEl) statusEl.textContent = 'Escaneando...';
+
+        csInterface.evalScript('scanMOGRTClips()', function(res) {
+            try {
+                var data = JSON.parse(res);
+                if (data.error) { showToast(data.error, 'error'); if (statusEl) statusEl.textContent = ''; return; }
+                _st2CtrlClips = data.clips || [];
+                if (statusEl) statusEl.textContent = _st2CtrlClips.length + ' clips MOGRT';
+                _st2CtrlRender();
+            } catch(e) {
+                showToast('Error: ' + e.message, 'error');
+                if (statusEl) statusEl.textContent = '';
+            }
+        });
+    }
+
+    function _st2CtrlRender() {
+        var list = document.getElementById('st2-ctrl-list');
+        var empty = document.getElementById('st2-ctrl-empty');
+        var toolbar = document.getElementById('st2-ctrl-toolbar');
+        if (!list) return;
+
+        if (_st2CtrlClips.length === 0) {
+            list.innerHTML = '';
+            if (empty) empty.classList.remove('hidden');
+            if (toolbar) toolbar.classList.add('hidden');
+            return;
+        }
+        if (empty) empty.classList.add('hidden');
+
+        list.innerHTML = '';
+        _st2CtrlClips.forEach(function(clip, idx) {
+            var el = document.createElement('div');
+            el.className = 'supertext-item st-checked';
+            el.dataset.ctrlIdx = idx;
+
+            var clipName = clip.name || 'MOGRT';
+            var typeMatch = clipName.match(/^\[([A-Z]+)\]/);
+            var typeTag = typeMatch ? typeMatch[1].toLowerCase() : 'unknown';
+            var typeClass = 'type-' + typeTag;
+            var textPreview = clipName.replace(/^\[[A-Z]+\]\s*/, '');
+            var startTime = clip.startTime !== undefined ? formatTimeFull(clip.startTime) : '?';
+            var dur = (clip.endTime && clip.startTime) ? (clip.endTime - clip.startTime).toFixed(1) + 's' : '';
+
+            el.innerHTML =
+                '<label class="st-checkbox-wrap">' +
+                    '<input type="checkbox" class="st2-ctrl-check" data-idx="' + idx + '" checked>' +
+                '</label>' +
+                '<div class="st-time">' + startTime + '</div>' +
+                '<div class="st-content">' +
+                    '<div class="st-text">' + esc(textPreview) + '</div>' +
+                    '<div class="st-meta-row">' +
+                        '<span class="st-type-badge ' + typeClass + '">' + typeTag + '</span>' +
+                        '<span style="font-size:9px;color:var(--text-muted)">V' + ((clip.trackIndex || 0) + 1) + '</span>' +
+                        (dur ? '<span style="font-size:9px;color:var(--text-muted)">' + dur + '</span>' : '') +
+                    '</div>' +
+                '</div>';
+
+            list.appendChild(el);
+        });
+
+        if (toolbar) toolbar.classList.remove('hidden');
+        _st2CtrlUpdateCount();
+
+        // Bind checkbox changes
+        list.addEventListener('change', function(e) {
+            var chk = e.target.closest('.st2-ctrl-check');
+            if (chk) {
+                var idx = parseInt(chk.dataset.idx);
+                _st2CtrlClips[idx].selected = chk.checked;
+                var row = chk.closest('.supertext-item');
+                if (row) {
+                    row.classList.toggle('st-checked', chk.checked);
+                    row.classList.toggle('st-unchecked', !chk.checked);
+                }
+                _st2CtrlUpdateCount();
+            }
+        });
+    }
+
+    function _st2CtrlUpdateCount() {
+        var count = _st2CtrlClips.filter(function(c) { return c.selected !== false; }).length;
+        var el = document.getElementById('st2-ctrl-sel-count');
+        if (el) el.textContent = count + ' seleccionados:';
+    }
+
+    function _st2CtrlApply() {
+        var selected = _st2CtrlClips.filter(function(c) { return c.selected !== false; });
+        if (selected.length === 0) { showToast('Selecciona al menos un clip', 'info'); return; }
+
+        var toolbar = document.getElementById('st2-ctrl-toolbar');
+        if (!toolbar) return;
+
+        var props = {};
+        var fontSel = toolbar.querySelector('.st2-ctrl-font');
+        if (fontSel && fontSel.value) {
+            props['Text'] = { fontStyle: fontSel.value };
+        }
+        var colorSel = toolbar.querySelector('.st2-ctrl-color');
+        if (colorSel && colorSel.value) {
+            // Map color name to index per type—use name string, ExtendScript resolves
+            var colorPresets = { 'Vampire': true, 'Green': true, 'White': true, 'Yellow': true };
+            if (colorPresets[colorSel.value]) {
+                // Will need to resolve per-clip in ExtendScript by dropdown option name
+                props['Color'] = colorSel.value;
+            }
+        }
+        var bulletsCb = toolbar.querySelector('.st2-ctrl-showbullets');
+        if (bulletsCb) {
+            props['Show Bullets'] = bulletsCb.checked;
+        }
+
+        if (Object.keys(props).length === 0) { showToast('Selecciona un cambio (font, color, bullets)', 'info'); return; }
+
+        // Build payload for ExtendScript
+        var payload = {
+            clips: selected.map(function(c) {
+                return { trackIndex: c.trackIndex, startTime: c.startTime, properties: props };
+            })
+        };
+
+        var tmpFile = path.join(os.tmpdir(), 'EditorPro_ST2_CtrlApply.json');
+        fs.writeFileSync(tmpFile, JSON.stringify(payload), 'utf8');
+        var safePath = tmpFile.replace(/\\/g, '/');
+
+        showToast('Aplicando a ' + selected.length + ' clips...', 'info');
+        csInterface.evalScript('applyMOGRTProperties("' + escExtend(safePath) + '")', function(res) {
+            try {
+                var data = JSON.parse(res);
+                if (data.error) { showToast(data.error, 'error'); return; }
+                showToast(data.modified + ' clips modificados', 'success');
+                // Reset dropdowns
+                if (fontSel) fontSel.value = '';
+                if (colorSel) colorSel.value = '';
+            } catch(e) {
+                showToast('Error: ' + e.message, 'error');
+            }
+        });
     }
 
     // ─── Expose to EditorProUI namespace ───────────────────────

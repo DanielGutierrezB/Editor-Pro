@@ -350,7 +350,7 @@
         </div>
 
         <!-- 3. SMART SUPERTEXTS — MOGRT Graphics -->
-        <div class="tool-card">
+        <div class="tool-card st2-tool-card">
             <div class="tool-card-header" data-tool="supertexts2">
                 <span class="tool-card-title">💡 Smart Supertexts</span>
                 <div id="st2-progress-header" class="header-progress hidden">
@@ -359,10 +359,20 @@
                 </div>
                 <span class="toggle-icon">▸</span>
             </div>
-            <div class="tool-card-body hidden">
-                <p class="tool-description">Genera gráficos (Essential Graphics) directamente en la línea de tiempo usando un MOGRT como plantilla. Cada supertexto se inserta como un clip de gráfico con su duración exacta.</p>
+            <div class="tool-card-body hidden st2-body-flex">
 
-                <!-- MOGRT Config per Type (collapsible) -->
+                <!-- ═══ TAB BAR ═══ -->
+                <div class="st2-tab-bar">
+                    <button class="st2-tab active" data-st2-tab="config">⚙️ Config</button>
+                    <button class="st2-tab" data-st2-tab="generate">🎬 Generar</button>
+                    <button class="st2-tab" data-st2-tab="control">🎛️ Control</button>
+                </div>
+
+                <!-- ═══ TAB: CONFIG ═══ -->
+                <div class="st2-tab-content active" id="st2-tab-config" data-st2-tab-content="config">
+                <p class="tool-description">Configura MOGRTs, prompt y filtros antes de generar.</p>
+
+                <!-- MOGRT Config per Type -->
                 <div class="mogrt-config">
                     <div class="mogrt-config-header mogrt-config-toggle" id="mogrt-config-toggle">
                         <span class="tool-label" style="margin:0">MOGRT por Tipo</span>
@@ -464,6 +474,10 @@
                     <button id="btn-st2-scan-tracks" class="btn btn-xs btn-ghost" style="font-size:9px" title="Escanear tracks de secuencias abiertas">🔍 Escanear</button>
                     <span id="st2-scan-status" style="font-size:9px;color:var(--text-muted)"></span>
                 </div>
+                </div><!-- /st2-tab-config -->
+
+                <!-- ═══ TAB: GENERATE ═══ -->
+                <div class="st2-tab-content" id="st2-tab-generate" data-st2-tab-content="generate">
 
                 <div class="btn-row">
                     <button id="btn-supertexts2" class="btn-analyze btn-analyze-alt" title="Analiza la transcripción y genera supertextos como gráficos MOGRT">
@@ -545,6 +559,41 @@
                 <div id="st2-empty" class="empty-state-mini">
                     <p class="empty-text">Configura un MOGRT y genera supertextos como clips de gráfico en la línea de tiempo</p>
                 </div>
+                </div><!-- /st2-tab-generate -->
+
+                <!-- ═══ TAB: CONTROL PANEL ═══ -->
+                <div class="st2-tab-content" id="st2-tab-control" data-st2-tab-content="control">
+                    <div class="st2-ctrl-header">
+                        <button id="btn-st2-ctrl-scan" class="btn btn-sm btn-success" title="Escanear clips MOGRT en la timeline">🔍 Escanear MOGRTs en Timeline</button>
+                        <span id="st2-ctrl-status" style="font-size:10px;color:var(--text-muted)"></span>
+                    </div>
+                    <div id="st2-ctrl-toolbar" class="st2-ctrl-toolbar hidden">
+                        <span class="st2-bulk-label" id="st2-ctrl-sel-count">0 seleccionados:</span>
+                        <select class="st2-ctrl-font" title="Cambiar font weight">
+                            <option value="">Font...</option>
+                            <option value="DMSans-Regular">Regular</option>
+                            <option value="DMSans-Medium">Medium</option>
+                            <option value="DMSans-SemiBold">SemiBold</option>
+                            <option value="DMSans-Bold">Bold</option>
+                            <option value="DMSans-ExtraBold">ExtraBold</option>
+                            <option value="DMSans-Black">Black</option>
+                        </select>
+                        <select class="st2-ctrl-color" title="Cambiar color preset">
+                            <option value="">Color...</option>
+                            <option value="White">White</option>
+                            <option value="Vampire">Vampire</option>
+                            <option value="Green">Green</option>
+                            <option value="Yellow">Yellow</option>
+                        </select>
+                        <label class="st2-prop-toggle"><input type="checkbox" class="st2-ctrl-showbullets" checked><span>Bullets</span></label>
+                        <button id="btn-st2-ctrl-apply" class="btn btn-sm btn-success" title="Aplicar cambios a clips seleccionados">✅ Aplicar</button>
+                    </div>
+                    <div id="st2-ctrl-list" class="supertext-list st2-ctrl-list"></div>
+                    <div id="st2-ctrl-empty" class="empty-state-mini">
+                        <p class="empty-text">Escanea la timeline para encontrar clips MOGRT y editar sus propiedades</p>
+                    </div>
+                </div><!-- /st2-tab-control -->
+
             </div>
         </div>
 

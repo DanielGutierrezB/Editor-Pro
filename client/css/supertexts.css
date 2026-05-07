@@ -691,6 +691,98 @@
     border-left: 2px solid var(--accent);
 }
 
+/* ── Smart Supertexts Tab Layout ── */
+.st2-tool-card .tool-card-body.st2-body-flex {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+.st2-tool-card {
+    display: flex;
+    flex-direction: column;
+}
+.st2-tool-card .tool-card-body:not(.hidden) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.st2-tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+.st2-tab {
+    flex: 1;
+    padding: 7px 4px;
+    font-size: 10px;
+    font-weight: 600;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+.st2-tab:hover {
+    color: var(--text-primary);
+}
+.st2-tab.active {
+    color: var(--accent-bright);
+    border-bottom-color: var(--accent-bright);
+}
+.st2-tab-content {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+.st2-tab-content.active {
+    display: flex;
+}
+
+/* ── Control Panel Tab ── */
+.st2-ctrl-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+.st2-ctrl-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: rgba(99,102,241,0.1);
+    border: 1px solid rgba(99,102,241,0.25);
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+.st2-ctrl-toolbar.hidden { display: none; }
+.st2-ctrl-toolbar select {
+    font-size: 9px;
+    padding: 2px 4px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 3px;
+    cursor: pointer;
+}
+.st2-ctrl-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
 /* ── MOGRT Property Controls ── */
 .st-props-row {
     display: flex;

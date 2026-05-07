@@ -938,6 +938,130 @@ function replaceMOGRTClip(jsonPath) {
 
 
 // ─── Debug: inspect ALL 5 MOGRT files and dump their text properties ───
+// ─── Control Panel: scan existing MOGRT clips in timeline ───
+function scanMOGRTClips() {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: "No hay secuencia activa" });
+
+        var clips = [];
+        for (var t = 0; t < seq.videoTracks.numTracks; t++) {
+            var track = seq.videoTracks[t];
+            for (var c = 0; c < track.clips.numItems; c++) {
+                var clip = track.clips[c];
+                // Check if clip is a MOGRT (has getMGTComponent)
+                var isMogrt = false;
+                try { isMogrt = (typeof clip.getMGTComponent === "function" && clip.getMGTComponent() !== null); } catch(e) {}
+                if (!isMogrt) continue;
+
+                var clipName = "";
+                try { clipName = clip.name || ""; } catch(e) {}
+                var startSecs = 0;
+                try { startSecs = parseFloat(clip.start.seconds); } catch(e) {}
+                var endSecs = 0;
+                try { endSecs = parseFloat(clip.end.seconds); } catch(e) {}
+
+                clips.push({
+                    name: clipName,
+                    trackIndex: t,
+                    clipIndex: c,
+                    startTime: startSecs,
+                    endTime: endSecs
+                });
+            }
+        }
+
+        clips.sort(function(a, b) { return a.startTime - b.startTime; });
+        return JSON.stringify({ success: true, clips: clips });
+    } catch(e) {
+        return JSON.stringify({ error: "Error escaneando: " + e.message });
+    }
+}
+
+// ─── Control Panel: apply property changes to existing MOGRT clips ───
+function applyMOGRTProperties(jsonPath) {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: "No hay secuencia activa" });
+
+        var f = new File(jsonPath);
+        if (!f.exists) return JSON.stringify({ error: "JSON no encontrado" });
+        f.encoding = "UTF-8";
+        f.open("r");
+        var content = f.read();
+        f.close();
+
+        var data = JSON.parse(content);
+        var clipSpecs = data.clips || [];
+        var modified = 0;
+        var errors = [];
+
+        for (var i = 0; i < clipSpecs.length; i++) {
+            var spec = clipSpecs[i];
+            var trackIdx = spec.trackIndex;
+            var startTime = spec.startTime;
+            var properties = spec.properties;
+            if (!properties) continue;
+
+            // Find the clip in the timeline
+            var track = seq.videoTracks[trackIdx];
+            if (!track) { errors.push("Track " + trackIdx + " no existe"); continue; }
+
+            var found = null;
+            for (var ci = 0; ci < track.clips.numItems; ci++) {
+                var tc = track.clips[ci];
+                try {
+                    var tcStart = parseFloat(tc.start.seconds);
+                    if (Math.abs(tcStart - startTime) < 0.15) {
+                        found = tc;
+                        break;
+                    }
+                } catch(e) {}
+            }
+
+            if (!found) { errors.push("Clip no encontrado en V" + (trackIdx + 1) + " @ " + startTime.toFixed(1) + "s"); continue; }
+
+            // Resolve Color dropdown by name if string value
+            var resolvedProps = {};
+            for (var key in properties) {
+                if (!properties.hasOwnProperty(key)) continue;
+                var val = properties[key];
+                if (key === "Color" && typeof val === "string") {
+                    // Resolve dropdown option name to index
+                    try {
+                        var moComp = found.getMGTComponent();
+                        if (moComp && moComp.properties) {
+                            for (var p = 0; p < moComp.properties.numItems; p++) {
+                                var prop = moComp.properties[p];
+                                var dn = "";
+                                try { dn = prop.displayName || ""; } catch(e) {}
+                                if (dn.toLowerCase() === "color") {
+                                    // dropdown: check if string matches via trying setValue
+                                    // The index is 1-based in some MOGRTs, 0-based in others.
+                                    // We'll try the string directly first
+                                    resolvedProps[key] = val;
+                                    break;
+                                }
+                            }
+                        }
+                    } catch(eResolve) {}
+                    if (!resolvedProps[key]) resolvedProps[key] = val;
+                } else {
+                    resolvedProps[key] = val;
+                }
+            }
+
+            _setMGTProperties(found, resolvedProps, i, errors);
+            modified++;
+            $.sleep(200);
+        }
+
+        return JSON.stringify({ success: true, modified: modified, errors: errors });
+    } catch(e) {
+        return JSON.stringify({ error: "Error aplicando: " + e.message });
+    }
+}
+
 function debugAllMOGRTs(mogrtPathsJson) {
     try {
         var seq = app.project.activeSequence;
