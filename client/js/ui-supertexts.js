@@ -2417,7 +2417,7 @@
         // Resize on window resize
         window.addEventListener('resize', _st2ResizeOpenStep);
 
-        // Auto-expand to fullscreen when tool card body is shown
+        // Recalculate layout when tool card body is shown (no auto-fullscreen)
         var st2Card = document.querySelector('.st2-tool-card');
         var st2Body = st2Card ? st2Card.querySelector('.tool-card-body') : null;
         if (st2Body) {
@@ -2425,15 +2425,11 @@
                 mutations.forEach(function(m) {
                     if (m.attributeName === 'class') {
                         var isVisible = !st2Body.classList.contains('hidden');
-                        st2Card.classList.toggle('st2-expanded', isVisible);
                         if (isVisible) {
-                            document.body.style.overflow = 'hidden';
-                            // Multiple recalculations to catch layout settling
+                            // Recalc layout when section opens (normal or fullscreen)
                             setTimeout(_st2ResizeOpenStep, 50);
                             setTimeout(_st2ResizeOpenStep, 200);
                             setTimeout(_st2ResizeOpenStep, 500);
-                        } else {
-                            document.body.style.overflow = '';
                         }
                     }
                 });
