@@ -13,15 +13,13 @@
 .supertext-item, .suggestion-item {
     display: flex;
     gap: 6px;
-    padding: 6px 8px;
+    padding: 5px 8px;
     border-radius: var(--radius-sm);
     background: var(--bg-surface);
     border: 1px solid var(--border);
     cursor: pointer;
     transition: all var(--transition);
     align-items: center;
-    flex-wrap: wrap;
-    min-height: 0; /* responsive height */
 }
 .supertext-item:hover, .suggestion-item:hover {
     background: var(--bg-hover);
@@ -126,7 +124,6 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    flex-wrap: wrap;
 }
 
 .st-text {
@@ -135,7 +132,10 @@
     color: var(--text-primary);
     line-height: 1.3;
     flex: 1;
-    min-width: 100px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .st-type-badge, .sg-type-badge {
@@ -636,6 +636,7 @@
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .st2-type-select {
@@ -947,10 +948,10 @@
 /* ── MOGRT Property Controls ── */
 .st-props-row {
     display: flex;
-    flex-wrap: wrap;
     gap: 4px;
     align-items: center;
     flex-shrink: 0;
+    white-space: nowrap;
 }
 .st-props-row select {
     font-size: 9px;
