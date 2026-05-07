@@ -889,6 +889,7 @@
         showElement("st2-results");
         _st2BatchUpdateNav();
         showElement("st2-batch-nav");
+        setTimeout(function() { if (typeof _st2ResizeOpenStep === 'function') _st2ResizeOpenStep(); }, 100);
     }
 
     function _st2BatchSaveCurrentEdits() {
@@ -1316,6 +1317,7 @@
                         state.supertexts2 = _st2CapEndTimes(mapped, 0);
                         renderSupertext2Results(result);
                         showElement("st2-results");
+                        setTimeout(function() { if (typeof _st2ResizeOpenStep === 'function') _st2ResizeOpenStep(); }, 100);
                         showToast(state.supertexts2.length + " supertextos detectados", "success");
                     } finally {
                         state.analyzing = false;
@@ -1614,6 +1616,11 @@
         });
 
         updateSelectAll2Label();
+
+        // Resize step body to fill available space after rendering results
+        setTimeout(function() {
+            if (typeof _st2ResizeOpenStep === 'function') _st2ResizeOpenStep();
+        }, 100);
     }
 
     function toggleSelectAllSupertexts2() {
