@@ -741,10 +741,29 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
+    overflow: hidden;
 }
 .st2-tab-content.active {
     display: flex;
+}
+/* Results container must also flex to fill */
+#st2-results {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+#st2-results > .result-summary,
+#st2-results > .result-actions,
+#st2-results > .st2-batch-nav,
+#st2-results > .st2-bulk-toolbar {
+    flex-shrink: 0;
+}
+#st2-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 /* ── Control Panel Tab ── */
