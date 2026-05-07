@@ -767,7 +767,7 @@
 }
 
 /* ── Control Panel Tab ── */
-#st2-tab-control {
+#st2-tab-control.active {
     display: flex;
     flex-direction: column;
     flex: 1;
