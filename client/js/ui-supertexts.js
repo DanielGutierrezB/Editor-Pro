@@ -2805,13 +2805,21 @@
         });
 
         // Color swatches — open popup picker on click
-        var COLOR_PALETTE = [
-            '#ffffff', '#e0e0e0', '#9e9e9e', '#616161', '#212121', '#000000',
-            '#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3',
-            '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39',
-            '#ffeb3b', '#ffc107', '#ff9800', '#ff5722', '#795548', '#607d8b',
-            '#72339f', '#33ff57', '#ff3333', '#3333ff', '#ffff33', '#33ffff'
+        // Platzi brand palette
+        var COLOR_PALETTE_PRIMARY = [
+            { hex: '#141515', name: 'Negro' },
+            { hex: '#F7FBF8', name: 'Blanco' },
+            { hex: '#0AE98A', name: 'Verde' }
         ];
+        var COLOR_PALETTE_SECONDARY = [
+            { hex: '#0AB5E9', name: 'Azul' },
+            { hex: '#A561FF', name: 'Morado' },
+            { hex: '#E53256', name: 'Rojo' },
+            { hex: '#F5D400', name: 'Amarillo' },
+            { hex: '#F55A00', name: 'Naranja' },
+            { hex: '#FF61E2', name: 'Rosa' }
+        ];
+        var COLOR_PALETTE_ALL = COLOR_PALETTE_PRIMARY.concat(COLOR_PALETTE_SECONDARY);
         container.querySelectorAll('.st2-color-swatch').forEach(function(swatch) {
             swatch.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -2819,15 +2827,22 @@
                 var existing = document.querySelector('.st2-color-popup');
                 if (existing) existing.remove();
 
-                var currentColor = this.dataset.value || '#ffffff';
+                var currentColor = (this.dataset.value || '#ffffff').toLowerCase();
                 var popup = document.createElement('div');
                 popup.className = 'st2-color-popup';
-                var grid = '<div class="st2-color-popup-grid">';
-                COLOR_PALETTE.forEach(function(c) {
-                    grid += '<div class="st2-color-popup-cell' + (c === currentColor ? ' selected' : '') + '" data-color="' + c + '" style="background:' + c + '"></div>';
+                var html = '<div class="st2-color-section-label">Primaria</div><div class="st2-color-popup-grid">';
+                COLOR_PALETTE_PRIMARY.forEach(function(c) {
+                    var sel = (c.hex.toLowerCase() === currentColor) ? ' selected' : '';
+                    html += '<div class="st2-color-popup-cell' + sel + '" data-color="' + c.hex + '" style="background:' + c.hex + '" title="' + c.name + '"></div>';
                 });
-                grid += '</div>';
-                popup.innerHTML = grid + '<div class="st2-color-hex-row"><input class="st2-color-hex-input" value="' + currentColor + '" maxlength="7" placeholder="#RRGGBB"><button class="btn btn-xs btn-success" style="font-size:9px;padding:2px 6px">OK</button></div>';
+                html += '</div><div class="st2-color-section-label">Secundaria</div><div class="st2-color-popup-grid">';
+                COLOR_PALETTE_SECONDARY.forEach(function(c) {
+                    var sel = (c.hex.toLowerCase() === currentColor) ? ' selected' : '';
+                    html += '<div class="st2-color-popup-cell' + sel + '" data-color="' + c.hex + '" style="background:' + c.hex + '" title="' + c.name + '"></div>';
+                });
+                html += '</div>';
+                html += '<div class="st2-color-hex-row"><input class="st2-color-hex-input" value="' + (this.dataset.value || '#ffffff') + '" maxlength="7" placeholder="#RRGGBB"><button class="btn btn-xs btn-success" style="font-size:9px;padding:2px 6px">OK</button></div>';
+                popup.innerHTML = html;
                 this.parentNode.appendChild(popup);
 
                 var swatchEl = this;
