@@ -695,13 +695,115 @@
 .st2-tool-card {
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 .st2-tool-card .tool-card-body:not(.hidden) {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
+}
+/* Steps: closed ones don't flex, open one fills remaining space */
+.st2-tool-card .rec-step {
+    flex-shrink: 0;
+}
+.st2-tool-card .rec-step:has(.rec-step-body:not(.hidden)) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+.st2-tool-card .rec-step-body:not(.hidden) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
     overflow-y: auto;
+}
+/* Property panel card */
+.st2-props-panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: rgba(99,102,241,0.05);
+    flex-shrink: 0;
+}
+.st2-props-panel-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-bright);
+    margin-bottom: 8px;
+}
+.st2-prop-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.st2-prop-row:last-of-type {
+    border-bottom: none;
+}
+.st2-prop-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    min-width: 90px;
+}
+.st2-prop-control {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+}
+.st2-prop-control select {
+    font-size: 10px;
+    padding: 3px 6px;
+    background: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 100px;
+}
+.st2-prop-control select option {
+    background: #2a2a2a;
+    color: #e0e0e0;
+}
+.st2-prop-control .st2-toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: none;
+    padding: 0;
+}
+.st2-prop-control .st2-toggle.on {
+    background: var(--success);
+}
+.st2-prop-control .st2-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+.st2-prop-control .st2-toggle.on::after {
+    transform: translateX(16px);
+}
+.st2-props-apply {
+    margin-top: 8px;
+    text-align: center;
 }
 
 /* ── Control Panel Tab ── */

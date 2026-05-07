@@ -2408,6 +2408,14 @@
         // Control panel: apply button
         var applyBtn = document.getElementById('btn-st2-ctrl-apply');
         if (applyBtn) applyBtn.addEventListener('click', _st2CtrlApply);
+
+        // Toggle buttons (visual on/off switches)
+        document.querySelectorAll('.st2-toggle').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var isOn = this.classList.toggle('on');
+                this.dataset.value = isOn ? 'true' : 'false';
+            });
+        });
     }
 
     // ═════════════════════════════════════════════════════════════
@@ -2593,14 +2601,10 @@
         _st2CtrlUpdateToolbarControls();
     }
 
-    /** Show/hide toolbar controls based on filtered type */
+    /** Show/hide property rows based on selected types */
     function _st2CtrlUpdateToolbarControls() {
         var toolbar = document.getElementById('st2-ctrl-toolbar');
         if (!toolbar) return;
-        var fontEl = toolbar.querySelector('.st2-ctrl-font');
-        var colorEl = toolbar.querySelector('.st2-ctrl-color');
-        var bulletsEl = toolbar.querySelector('.st2-ctrl-showbullets');
-        var bulletsLabel = bulletsEl ? bulletsEl.closest('.st2-prop-toggle') : null;
 
         // Determine which types are currently selected
         var selectedTypes = {};
@@ -2609,32 +2613,40 @@
         });
         var types = Object.keys(selectedTypes);
 
-        // Font: always visible
-        if (fontEl) fontEl.style.display = '';
-
-        // Color: only for definition/data/step/summary/highlight
+        // Color row: only for definition/data/step/summary/highlight
         var hasColor = types.some(function(t) { return !!ST2_COLOR_PRESETS[t]; });
-        if (colorEl) colorEl.style.display = hasColor ? '' : 'none';
+        var colorRow = toolbar.querySelector('.st2-ctrl-color-row');
+        if (colorRow) colorRow.style.display = hasColor ? '' : 'none';
 
         // Update color options based on filtered types
-        if (colorEl && hasColor) {
-            var allPresets = {};
-            types.forEach(function(t) {
-                var presets = ST2_COLOR_PRESETS[t];
-                if (presets) presets.forEach(function(p) { allPresets[p] = true; });
-            });
-            var currentVal = colorEl.value;
-            colorEl.innerHTML = '<option value="">Color...</option>';
-            Object.keys(allPresets).forEach(function(p) {
-                var opt = document.createElement('option');
-                opt.value = p; opt.textContent = p;
-                colorEl.appendChild(opt);
-            });
-            colorEl.value = currentVal;
+        if (hasColor) {
+            var colorEl = toolbar.querySelector('.st2-ctrl-color');
+            if (colorEl) {
+                var allPresets = {};
+                types.forEach(function(t) {
+                    var presets = ST2_COLOR_PRESETS[t];
+                    if (presets) presets.forEach(function(p) { allPresets[p] = true; });
+                });
+                var currentVal = colorEl.value;
+                colorEl.innerHTML = '<option value="">Sin cambio</option>';
+                Object.keys(allPresets).forEach(function(p) {
+                    var opt = document.createElement('option');
+                    opt.value = p; opt.textContent = p;
+                    colorEl.appendChild(opt);
+                });
+                colorEl.value = currentVal;
+            }
         }
 
-        // Bullets: only for bullet type
-        if (bulletsLabel) bulletsLabel.style.display = selectedTypes.bullet ? '' : 'none';
+        // Bullets row: only for bullet type
+        var bulletsRow = toolbar.querySelector('.st2-ctrl-bullets-row');
+        if (bulletsRow) bulletsRow.style.display = selectedTypes.bullet ? '' : 'none';
+
+        // Recuadro / Anim Salida rows: only for title type
+        var recuadroRow = toolbar.querySelector('.st2-ctrl-recuadro-row');
+        var animRow = toolbar.querySelector('.st2-ctrl-animsalida-row');
+        if (recuadroRow) recuadroRow.style.display = selectedTypes.title ? '' : 'none';
+        if (animRow) animRow.style.display = selectedTypes.title ? '' : 'none';
     }
 
     function _st2CtrlApply() {
@@ -2644,23 +2656,28 @@
         var toolbar = document.getElementById('st2-ctrl-toolbar');
         if (!toolbar) return;
 
+        var panel = toolbar.querySelector('.st2-props-panel');
+        if (!panel) panel = toolbar;
         var props = {};
-        var fontSel = toolbar.querySelector('.st2-ctrl-font');
+        var fontSel = panel.querySelector('.st2-ctrl-font');
         if (fontSel && fontSel.value) {
             props['Text'] = { fontStyle: fontSel.value };
         }
-        var colorSel = toolbar.querySelector('.st2-ctrl-color');
+        var colorSel = panel.querySelector('.st2-ctrl-color');
         if (colorSel && colorSel.value) {
-            // Map color name to index per type—use name string, ExtendScript resolves
-            var colorPresets = { 'Vampire': true, 'Green': true, 'White': true, 'Yellow': true };
-            if (colorPresets[colorSel.value]) {
-                // Will need to resolve per-clip in ExtendScript by dropdown option name
-                props['Color'] = colorSel.value;
-            }
+            props['Color'] = colorSel.value;
         }
-        var bulletsCb = toolbar.querySelector('.st2-ctrl-showbullets');
-        if (bulletsCb) {
-            props['Show Bullets'] = bulletsCb.checked;
+        var bulletsToggle = panel.querySelector('.st2-ctrl-showbullets');
+        if (bulletsToggle && bulletsToggle.closest('.st2-prop-row').style.display !== 'none') {
+            props['Show Bullets'] = bulletsToggle.dataset.value === 'true';
+        }
+        var recuadroToggle = panel.querySelector('.st2-ctrl-recuadro');
+        if (recuadroToggle && recuadroToggle.closest('.st2-prop-row').style.display !== 'none') {
+            props['Recuadro off'] = recuadroToggle.dataset.value === 'true';
+        }
+        var animToggle = panel.querySelector('.st2-ctrl-animsalida');
+        if (animToggle && animToggle.closest('.st2-prop-row').style.display !== 'none') {
+            props['Animaci\u00f3n Salida'] = animToggle.dataset.value === 'true';
         }
 
         if (Object.keys(props).length === 0) { showToast('Selecciona un cambio (font, color, bullets)', 'info'); return; }
