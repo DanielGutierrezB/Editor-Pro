@@ -85,15 +85,16 @@
         parseTranscriptJson      = global._epParseTranscriptJson;
         _buildTranscriptCache    = global._epBuildTranscriptCache;
         _st2InitTrackFilter();
+        _st2InitTabs();
     }
 
     // ═══════════════════════════════════════════════════════════════
     // SMART SUPERTEXTS — MOGRT graphic clips on timeline
     // ═══════════════════════════════════════════════════════════════
 
-    var ST2_TYPES = ["title", "bullet", "definition", "highlight", "question"];
-    var ST2_BULLET_SPACING = 70;
-    var ST2_EXTRA_LINE_SPACING = 45;
+    var ST2_TYPES = ["title", "bullet", "step", "definition", "data", "highlight", "summary", "question"];
+    var ST2_BULLET_SPACING = 100;
+    var ST2_EXTRA_LINE_SPACING = 50;
 
     /**
      * Formatea el texto para el MOGRT:
@@ -110,13 +111,18 @@
         var t = normalizeSupertextNewlines(text || "");
         if (isGrouped && (type === "bullet" || type === "step")) {
             var lines = t.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+            // Strip any existing bullet markers — the MOGRT already provides them visually
             if (lines.length > 0) {
-                var first = lines[0].trim();
-                if (!/^\d+[\.\)\-]/.test(first) && !/^[•·►▸▹‣⁃\-–—]/.test(first)) {
-                    lines[0] = "• " + first;
-                }
+                lines[0] = lines[0].trim().replace(/^[•·►▸▹‣⁃\-–—]\s*/, "");
             }
+            // Max 1 line break (2 lines)
+            if (lines.length > 2) lines = lines.slice(0, 2);
             t = lines.join("\n");
+        } else {
+            // Non-bullet types (definition, data, step, summary, etc.): also max 1 line break
+            var nLines = t.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+            if (nLines.length > 2) nLines = nLines.slice(0, 2);
+            t = nLines.join("\n");
         }
         if (t === t.toUpperCase() && t.length > 3) {
             t = t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
@@ -124,12 +130,12 @@
         return t;
     }
 
-    /** Cuenta líneas visibles en un texto (cada \n agrega una línea). */
+    /** Cuenta líneas visibles en un texto (cada \n agrega una línea). Cap at 2 (max 1 line break). */
     function _st2LineCount(text) {
         if (!text) return 1;
         var s = normalizeSupertextNewlines(text);
         var lines = s.split(/\r?\n/).length;
-        return Math.max(1, lines);
+        return Math.min(Math.max(1, lines), 2); // max 2 lines (1 line break)
     }
 
     // ── Pedagogical timing constants ──
@@ -145,7 +151,7 @@
     // Estimated reading speed: seconds per word for buffer calculation.
     var ST2_SECS_PER_WORD = 0.25;
     // Minimum on-screen duration for any element (avoids flash appearances).
-    var ST2_MIN_DURATION_SECS = 3.0;
+    var ST2_MIN_DURATION_SECS = 6.0;  // Hard rule: ningún supertext dura menos de 6s (duración natural del MOGRT)
 
     // Motion Pro: ligero adelanto respecto al audio (demasiado = el gráfico “va por delante” del profesor).
     var MP_ANTICIPATION_SECS = 0.35;
@@ -168,8 +174,11 @@
                     var bundledAliases = {
                         title: ["title", "titulo", "título"],
                         bullet: ["bullet", "bullet_point", "bullets"],
+                        step: ["step", "steps", "paso", "pasos"],
                         definition: ["definition", "definicion", "definición"],
+                        data: ["data", "datos", "dato"],
                         highlight: ["highlight", "highlights", "destacado"],
+                        summary: ["summary", "resumen"],
                         question: ["question", "pregunta", "preguntas"]
                     };
                     ST2_TYPES.forEach(function(t) {
@@ -282,8 +291,11 @@
             var defaultAliases = {
                 title: ["title", "titulo", "título"],
                 bullet: ["bullet", "bullet_point", "bullets"],
+                step: ["step", "steps", "paso", "pasos"],
                 definition: ["definition", "definicion", "definición"],
+                data: ["data", "datos", "dato"],
                 highlight: ["highlight", "highlights", "destacado"],
+                summary: ["summary", "resumen"],
                 question: ["question", "pregunta", "preguntas"]
             };
 
@@ -338,8 +350,11 @@
                 var TYPE_ALIASES = {
                     title: ["title", "titulo", "título"],
                     bullet: ["bullet", "bullet_point", "bullets"],
+                    step: ["step", "steps", "paso", "pasos"],
                     definition: ["definition", "definicion", "definición"],
+                    data: ["data", "datos", "dato"],
                     highlight: ["highlight", "highlights", "destacado"],
+                    summary: ["summary", "resumen"],
                     question: ["question", "pregunta", "preguntas"]
                 };
 
@@ -874,6 +889,7 @@
         showElement("st2-results");
         _st2BatchUpdateNav();
         showElement("st2-batch-nav");
+        setTimeout(function() { if (typeof _st2ResizeOpenStep === 'function') _st2ResizeOpenStep(); }, 100);
     }
 
     function _st2BatchSaveCurrentEdits() {
@@ -1301,6 +1317,7 @@
                         state.supertexts2 = _st2CapEndTimes(mapped, 0);
                         renderSupertext2Results(result);
                         showElement("st2-results");
+                        setTimeout(function() { if (typeof _st2ResizeOpenStep === 'function') _st2ResizeOpenStep(); }, 100);
                         showToast(state.supertexts2.length + " supertextos detectados", "success");
                     } finally {
                         state.analyzing = false;
@@ -1312,6 +1329,28 @@
 
     var _st2TypeFilter = null;
     var ST2_TYPE_COLORS = { title: "var(--accent-bright)", bullet: "var(--success)", step: "var(--info)", definition: "var(--warning)", data: "var(--highlight)", summary: "var(--brand-start)", highlight: "#facc15", question: "#f472b6" };
+
+    // ── MOGRT property control definitions ──
+    var ST2_FONT_WEIGHTS = [
+        { label: "Regular", value: "DMSans-Regular" },
+        { label: "Medium", value: "DMSans-Medium" },
+        { label: "SemiBold", value: "DMSans-SemiBold" },
+        { label: "Bold", value: "DMSans-Bold" },
+        { label: "ExtraBold", value: "DMSans-ExtraBold" },
+        { label: "Black", value: "DMSans-Black" }
+    ];
+    var ST2_COLOR_PRESETS = {
+        definition: ["Vampire", "Green", "White"],
+        data:       ["Vampire", "Green", "White"],
+        step:       ["Vampire", "Green", "White"],
+        summary:    ["Vampire", "Green", "White"],
+        highlight:  ["White", "Vampire", "Green", "Yellow"]
+    };
+    var ST2_DEFAULT_FONT = {
+        title: "DMSans-Bold", bullet: "DMSans-Bold", highlight: "DMSans-Bold",
+        question: "DMSans-Bold", definition: "DMSans-Regular", data: "DMSans-Regular",
+        step: "DMSans-Regular", summary: "DMSans-Regular"
+    };
 
     function renderSupertext2Results(result) {
         var summary = document.getElementById("st2-summary");
@@ -1415,20 +1454,57 @@
             var curType = st.type || "bullet";
             var typeClass = "type-" + curType;
 
+            // Build MOGRT property controls HTML
+            var propsHtml = '';
+            // Font weight (all types)
+            var curFont = (st.mogrtProps && st.mogrtProps.fontStyle) || ST2_DEFAULT_FONT[curType] || 'DMSans-Bold';
+            var fontOpts = ST2_FONT_WEIGHTS.map(function(fw) {
+                return '<option value="' + fw.value + '"' + (fw.value === curFont ? ' selected' : '') + '>' + fw.label + '</option>';
+            }).join('');
+            propsHtml += '<select class="st2-prop-font" data-idx="' + idx + '" title="Font weight">' + fontOpts + '</select>';
+
+            // Color preset (definition/data/step/summary/highlight)
+            var colorPresets = ST2_COLOR_PRESETS[curType];
+            if (colorPresets) {
+                var curColor = (st.mogrtProps && st.mogrtProps.colorPreset !== undefined) ? st.mogrtProps.colorPreset : 1;
+                var colorOpts = colorPresets.map(function(cp, ci) {
+                    return '<option value="' + ci + '"' + (ci === curColor ? ' selected' : '') + '>' + cp + '</option>';
+                }).join('');
+                propsHtml += '<select class="st2-prop-color" data-idx="' + idx + '" title="Color preset">' + colorOpts + '</select>';
+            }
+
+            // Show Bullets (bullet only)
+            if (curType === 'bullet') {
+                var showBul = (st.mogrtProps && st.mogrtProps.showBullets !== undefined) ? st.mogrtProps.showBullets : true;
+                propsHtml += '<label class="st2-prop-toggle" title="Show bullets"><input type="checkbox" class="st2-prop-showbullets" data-idx="' + idx + '"' + (showBul ? ' checked' : '') + '><span>Bullets</span></label>';
+            }
+
+            // Titulo: Recuadro off + Animación Salida
+            if (curType === 'title') {
+                var recOff = (st.mogrtProps && st.mogrtProps.recuadroOff !== undefined) ? st.mogrtProps.recuadroOff : true;
+                var animSal = (st.mogrtProps && st.mogrtProps.animacionSalida !== undefined) ? st.mogrtProps.animacionSalida : true;
+                propsHtml += '<label class="st2-prop-toggle" title="Recuadro"><input type="checkbox" class="st2-prop-recuadro" data-idx="' + idx + '"' + (recOff ? ' checked' : '') + '><span>Recuadro</span></label>';
+                propsHtml += '<label class="st2-prop-toggle" title="Animación salida"><input type="checkbox" class="st2-prop-animsalida" data-idx="' + idx + '"' + (animSal ? ' checked' : '') + '><span>Anim. Salida</span></label>';
+            }
+
+            // Compact single-line text
+            var displayText = (st.text || '').replace(/[\r\n]+/g, ' ').substring(0, 60);
+            if ((st.text || '').length > 60) displayText += '…';
+
             el.innerHTML =
                 '<label class="st-checkbox-wrap">' +
                     '<input type="checkbox" class="st2-check" data-idx="' + idx + '"' + (st.checked ? " checked" : "") + '>' +
                 '</label>' +
                 '<div class="st-time">' + formatTimeFull(st.time) + '</div>' +
                 '<div class="st-content">' +
-                    '<div class="st-text">' + escSupertextHtml(st.text) + '</div>' +
+                    '<span class="st-text">' + esc(displayText) + '</span>' +
                     '<div class="st-meta-row">' +
                         '<span class="st-type-badge ' + typeClass + '" data-idx="' + idx + '">' + esc(curType) + '</span>' +
                         '<select class="st2-type-select" data-idx="' + idx + '">' + typeOptions + '</select>' +
                         '<span style="font-size:9px;color:var(--text-muted)">' + dur.toFixed(1) + 's</span>' +
                         '<button class="btn btn-xs btn-ghost st2-replace-btn hidden" data-idx="' + idx + '" title="Reemplazar clip en timeline">↻</button>' +
                     '</div>' +
-                    (st.reason ? '<div style="font-size:9px;color:var(--text-muted);margin-top:2px">' + escSupertextHtml(st.reason) + '</div>' : '') +
+                    '<div class="st-props-row">' + propsHtml + '</div>' +
                 '</div>';
 
             var sel = el.querySelector(".st2-type-select");
@@ -1484,17 +1560,56 @@
                 return;
             }
             var item = e.target.closest(".supertext-item");
-            if (item && !e.target.closest(".st-checkbox-wrap") && !e.target.closest(".st2-type-select")) {
+            if (item && !e.target.closest(".st-checkbox-wrap") && !e.target.closest(".st2-type-select") && !e.target.closest(".st-props-row")) {
                 var stIdx = parseInt(item.dataset.st2Idx);
                 if (!isNaN(stIdx) && state.supertexts2[stIdx]) navigateToTime(state.supertexts2[stIdx].time);
             }
         });
 
         list.addEventListener("change", function(e) {
+            // ── MOGRT property controls ──
+            var fontSel = e.target.closest(".st2-prop-font");
+            if (fontSel) {
+                var fi = parseInt(fontSel.dataset.idx);
+                if (!state.supertexts2[fi].mogrtProps) state.supertexts2[fi].mogrtProps = {};
+                state.supertexts2[fi].mogrtProps.fontStyle = fontSel.value;
+                return;
+            }
+            var colorSel = e.target.closest(".st2-prop-color");
+            if (colorSel) {
+                var ci2 = parseInt(colorSel.dataset.idx);
+                if (!state.supertexts2[ci2].mogrtProps) state.supertexts2[ci2].mogrtProps = {};
+                state.supertexts2[ci2].mogrtProps.colorPreset = parseInt(colorSel.value);
+                return;
+            }
+            var showBul = e.target.closest(".st2-prop-showbullets");
+            if (showBul) {
+                var bi = parseInt(showBul.dataset.idx);
+                if (!state.supertexts2[bi].mogrtProps) state.supertexts2[bi].mogrtProps = {};
+                state.supertexts2[bi].mogrtProps.showBullets = showBul.checked;
+                return;
+            }
+            var recuadro = e.target.closest(".st2-prop-recuadro");
+            if (recuadro) {
+                var ri = parseInt(recuadro.dataset.idx);
+                if (!state.supertexts2[ri].mogrtProps) state.supertexts2[ri].mogrtProps = {};
+                state.supertexts2[ri].mogrtProps.recuadroOff = recuadro.checked;
+                return;
+            }
+            var animSal = e.target.closest(".st2-prop-animsalida");
+            if (animSal) {
+                var ai = parseInt(animSal.dataset.idx);
+                if (!state.supertexts2[ai].mogrtProps) state.supertexts2[ai].mogrtProps = {};
+                state.supertexts2[ai].mogrtProps.animacionSalida = animSal.checked;
+                return;
+            }
+
             var sel = e.target.closest(".st2-type-select");
             if (sel) {
                 var idx = parseInt(sel.dataset.idx);
                 state.supertexts2[idx].type = sel.value;
+                // Re-render to update property controls for new type
+                renderSupertext2Results(result);
                 var badge = list.querySelector('.st-type-badge[data-idx="' + idx + '"]');
                 if (badge) {
                     badge.className = "st-type-badge type-" + sel.value;
@@ -1504,6 +1619,11 @@
         });
 
         updateSelectAll2Label();
+
+        // Resize step body to fill available space after rendering results
+        setTimeout(function() {
+            if (typeof _st2ResizeOpenStep === 'function') _st2ResizeOpenStep();
+        }, 100);
     }
 
     function toggleSelectAllSupertexts2() {
@@ -1524,6 +1644,127 @@
         var allChecked = state.supertexts2.every(function(st) { return st.checked; });
         var checkedCount = state.supertexts2.filter(function(st) { return st.checked; }).length;
         btn.textContent = allChecked ? "Deseleccionar todos" : "Seleccionar todos (" + checkedCount + "/" + state.supertexts2.length + ")";
+        _st2UpdateBulkToolbar();
+    }
+
+    /**
+     * Multi-select toolbar: apply a property change to all checked items.
+     */
+    function _st2UpdateBulkToolbar() {
+        var toolbar = document.getElementById("st2-bulk-toolbar");
+        if (!toolbar) {
+            // Create toolbar if it doesn't exist
+            var container = document.getElementById("st2-results");
+            if (!container) return;
+            toolbar = document.createElement("div");
+            toolbar.id = "st2-bulk-toolbar";
+            toolbar.className = "st2-bulk-toolbar hidden";
+            var refNode = document.getElementById("st2-list");
+            if (refNode) container.insertBefore(toolbar, refNode);
+            else container.appendChild(toolbar);
+        }
+
+        var checked = state.supertexts2.filter(function(st) { return st.checked; });
+        if (checked.length < 2) {
+            toolbar.classList.add("hidden");
+            return;
+        }
+        toolbar.classList.remove("hidden");
+
+        // Determine common types
+        var types = {};
+        checked.forEach(function(st) { types[st.type || "bullet"] = true; });
+        var hasColorPreset = checked.some(function(st) { return !!ST2_COLOR_PRESETS[st.type]; });
+        var hasBullets = !!types.bullet;
+        var hasTitle = !!types.title;
+
+        var html = '<span class="st2-bulk-label">' + checked.length + ' seleccionados:</span>';
+
+        // Font weight
+        var fontOpts = ST2_FONT_WEIGHTS.map(function(fw) {
+            return '<option value="' + fw.value + '">' + fw.label + '</option>';
+        }).join('');
+        html += '<select class="st2-bulk-font" title="Font weight para seleccionados"><option value="">Font...</option>' + fontOpts + '</select>';
+
+        // Color preset (if any selected type supports it)
+        if (hasColorPreset) {
+            // Use union of all presets
+            var allPresets = {};
+            checked.forEach(function(st) {
+                var presets = ST2_COLOR_PRESETS[st.type];
+                if (presets) presets.forEach(function(p) { allPresets[p] = true; });
+            });
+            var presetOpts = Object.keys(allPresets).map(function(p, i) {
+                return '<option value="' + p + '">' + p + '</option>';
+            }).join('');
+            html += '<select class="st2-bulk-color" title="Color para seleccionados"><option value="">Color...</option>' + presetOpts + '</select>';
+        }
+
+        // Show Bullets toggle
+        if (hasBullets) {
+            html += '<label class="st2-prop-toggle"><input type="checkbox" class="st2-bulk-showbullets" checked><span>Bullets</span></label>';
+        }
+
+        toolbar.innerHTML = html;
+
+        // Bind events
+        var bulkFont = toolbar.querySelector(".st2-bulk-font");
+        if (bulkFont) bulkFont.addEventListener("change", function() {
+            var val = this.value;
+            if (!val) return;
+            state.supertexts2.forEach(function(st) {
+                if (!st.checked) return;
+                if (!st.mogrtProps) st.mogrtProps = {};
+                st.mogrtProps.fontStyle = val;
+            });
+            // Update visible selects
+            document.querySelectorAll(".st2-prop-font").forEach(function(sel) {
+                var idx = parseInt(sel.dataset.idx);
+                if (state.supertexts2[idx] && state.supertexts2[idx].checked) sel.value = val;
+            });
+            showToast(checked.length + " items → " + val.replace("DMSans-", ""), "success");
+            this.value = "";
+        });
+
+        var bulkColor = toolbar.querySelector(".st2-bulk-color");
+        if (bulkColor) bulkColor.addEventListener("change", function() {
+            var val = this.value;
+            if (!val) return;
+            state.supertexts2.forEach(function(st) {
+                if (!st.checked) return;
+                var presets = ST2_COLOR_PRESETS[st.type];
+                if (!presets) return;
+                var idx = presets.indexOf(val);
+                if (idx === -1) return;
+                if (!st.mogrtProps) st.mogrtProps = {};
+                st.mogrtProps.colorPreset = idx;
+            });
+            // Update visible selects
+            document.querySelectorAll(".st2-prop-color").forEach(function(sel) {
+                var idx = parseInt(sel.dataset.idx);
+                var st = state.supertexts2[idx];
+                if (st && st.checked && st.mogrtProps && st.mogrtProps.colorPreset !== undefined) {
+                    sel.value = st.mogrtProps.colorPreset;
+                }
+            });
+            showToast(checked.length + " items → " + val, "success");
+            this.value = "";
+        });
+
+        var bulkBullets = toolbar.querySelector(".st2-bulk-showbullets");
+        if (bulkBullets) bulkBullets.addEventListener("change", function() {
+            var val = this.checked;
+            state.supertexts2.forEach(function(st) {
+                if (!st.checked || st.type !== "bullet") return;
+                if (!st.mogrtProps) st.mogrtProps = {};
+                st.mogrtProps.showBullets = val;
+            });
+            document.querySelectorAll(".st2-prop-showbullets").forEach(function(cb) {
+                var idx = parseInt(cb.dataset.idx);
+                if (state.supertexts2[idx] && state.supertexts2[idx].checked) cb.checked = val;
+            });
+            showToast("Bullets " + (val ? "on" : "off") + " para seleccionados", "success");
+        });
     }
 
     function st2ExcludeByTrack() {
@@ -1648,6 +1889,48 @@
         }
     }
 
+    /**
+     * Converts UI mogrtProps into the format ExtendScript expects:
+     * key = displayName in MOGRT, value = appropriate type.
+     */
+    function _st2BuildMogrtProps(st) {
+        if (!st.mogrtProps) return null;
+        var props = {};
+        var type = st.type || "bullet";
+        var mp = st.mogrtProps;
+
+        // Font style: apply to "Text" property (and "Title" for definition types)
+        if (mp.fontStyle) {
+            props["Text"] = { fontStyle: mp.fontStyle };
+            // For definition/data/step/summary, also set Title font
+            if (type === "definition" || type === "data" || type === "step" || type === "summary") {
+                props["Title"] = { fontStyle: mp.fontStyle };
+            }
+        }
+
+        // Color preset dropdown
+        if (mp.colorPreset !== undefined) {
+            props["Color"] = parseInt(mp.colorPreset);
+        }
+
+        // Show Bullets checkbox
+        if (mp.showBullets !== undefined) {
+            props["Show Bullets"] = !!mp.showBullets;
+        }
+
+        // Titulo: Recuadro off
+        if (mp.recuadroOff !== undefined) {
+            props["Recuadro off"] = !!mp.recuadroOff;
+        }
+
+        // Titulo: Animación Salida
+        if (mp.animacionSalida !== undefined) {
+            props["Animaci\u00f3n Salida"] = !!mp.animacionSalida;
+        }
+
+        return Object.keys(props).length > 0 ? props : null;
+    }
+
     function buildST2Payload(selected) {
         var sorted = selected.slice().sort(function(a, b) { return a.time - b.time; });
 
@@ -1680,15 +1963,27 @@
                 var titleSpacing = ST2_BULLET_SPACING * 0.4;
                 var cascId = "c" + (cascadeCounter++);
 
-                // Calcular posiciones Y acumuladas teniendo en cuenta líneas por ítem
+                // Calcular posiciones Y acumuladas.
+                // Título (cascade[0]) y primer bullet (cascade[1]) ambos sin desplazar — cada MOGRT
+                // tiene su posición nativa y van en tracks distintos.
+                // Solo desde el segundo bullet en adelante se acumulan offsets.
                 var cascYOffsets = [];
-                var accumY = 0;
-                for (var cy = cascadeLen - 1; cy >= 0; cy--) {
-                    cascYOffsets[cy] = -accumY;
-                    var lines = _st2LineCount(cascade[cy].text);
-                    accumY += ST2_BULLET_SPACING + (lines - 1) * ST2_EXTRA_LINE_SPACING;
+                // Find first bullet index (skip title)
+                var firstBulletIdx = 0;
+                for (var fi = 0; fi < cascadeLen; fi++) {
+                    if (cascade[fi].type !== "title") { firstBulletIdx = fi; break; }
                 }
-                if (cascYOffsets[0] !== undefined) cascYOffsets[0] -= titleSpacing;
+                // Title and first bullet: no displacement
+                for (var zi = 0; zi <= firstBulletIdx; zi++) {
+                    cascYOffsets[zi] = 0;
+                }
+                // Subsequent bullets: accumulate from first bullet
+                var accumY = 0;
+                for (var cy = firstBulletIdx; cy < cascadeLen - 1; cy++) {
+                    var lines = _st2LineCount(cascade[cy].text);
+                    accumY += ST2_BULLET_SPACING + (lines > 1 ? ST2_EXTRA_LINE_SPACING : 0);
+                    cascYOffsets[cy + 1] = accumY;
+                }
 
                 for (var c = 0; c < cascadeLen; c++) {
                     var cst = cascade[c];
@@ -1696,7 +1991,7 @@
 
                     var entryTime = _st2Anticipate(cst.time);
 
-                    items.push({
+                    var itemObj = {
                         time: entryTime,
                         endTime: _st2EnsureMinDuration(entryTime, cascadeEnd),
                         text: _st2FormatText(cst.text, cType, true),
@@ -1705,7 +2000,27 @@
                         bulletTrackOffset: c,
                         bulletPositionY: cascYOffsets[c],
                         _cascadeId: cascId
-                    });
+                    };
+                    var cstProps = _st2BuildMogrtProps(cst);
+                    if (cstProps) itemObj.mogrtProps = cstProps;
+
+                    // When a title accompanies bullets, reposition & scale it
+                    if (cType === "title" && cascadeLen > 1) {
+                        var titleLines = _st2LineCount(cst.text);
+                        if (titleLines > 1) {
+                            // 2+ lines: Daniel's values
+                            itemObj.titlePositionX = 491.1;
+                            itemObj.titlePositionY = 196.0;
+                            itemObj.titleScale = 64.5;
+                        } else {
+                            // 1 line: same X, slightly lower Y
+                            itemObj.titlePositionX = 491.1;
+                            itemObj.titlePositionY = 220.0;
+                            itemObj.titleScale = 64.5;
+                        }
+                    }
+
+                    items.push(itemObj);
                 }
                 i++;
                 continue;
@@ -1731,18 +2046,20 @@
                 var bGroupLen = bGroup.length;
                 var bCascId = "c" + (cascadeCounter++);
 
+                // Primer bullet sin mover, los siguientes se desplazan hacia abajo
                 var bYOffsets = [];
+                bYOffsets[0] = 0; // primer bullet: posición nativa del MOGRT
                 var bAccumY = 0;
-                for (var by = bGroupLen - 1; by >= 0; by--) {
-                    bYOffsets[by] = -bAccumY;
+                for (var by = 0; by < bGroupLen - 1; by++) {
                     var bLines = _st2LineCount(bGroup[by].text);
-                    bAccumY += ST2_BULLET_SPACING + (bLines - 1) * ST2_EXTRA_LINE_SPACING;
+                    bAccumY += ST2_BULLET_SPACING + (bLines > 1 ? ST2_EXTRA_LINE_SPACING : 0);
+                    bYOffsets[by + 1] = bAccumY;
                 }
 
                 for (var g = 0; g < bGroupLen; g++) {
                     var bEntryTime = _st2Anticipate(bGroup[g].time);
 
-                    items.push({
+                    var bItemObj = {
                         time: bEntryTime,
                         endTime: _st2EnsureMinDuration(bEntryTime, bGroupEnd),
                         text: _st2FormatText(bGroup[g].text, "bullet", true),
@@ -1751,7 +2068,10 @@
                         bulletTrackOffset: g,
                         bulletPositionY: bYOffsets[g],
                         _cascadeId: bCascId
-                    });
+                    };
+                    var bGroupProps = _st2BuildMogrtProps(bGroup[g]);
+                    if (bGroupProps) bItemObj.mogrtProps = bGroupProps;
+                    items.push(bItemObj);
                 }
                 i = j;
                 continue;
@@ -1764,7 +2084,7 @@
             var entryIndep = _st2Anticipate(st.time);
             var endIndep = _st2EnsureMinDuration(entryIndep, rawEnd + readBuf);
 
-            items.push({
+            var indepObj = {
                 time: entryIndep,
                 endTime: endIndep,
                 text: _st2FormatText(st.text, type, false),
@@ -1773,7 +2093,10 @@
                 bulletTrackOffset: 0,
                 bulletPositionY: 0,
                 _cascadeId: "s" + (cascadeCounter++)
-            });
+            };
+            var indepProps = _st2BuildMogrtProps(st);
+            if (indepProps) indepObj.mogrtProps = indepProps;
+            items.push(indepObj);
             i++;
         }
 
@@ -2058,6 +2381,703 @@
         if (str === undefined || str === null) return "";
         var s = normalizeSupertextNewlines(str);
         return s.split(/\r?\n/).map(function(line) { return esc(line); }).join("<br>");
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // TAB NAVIGATION
+    // ═════════════════════════════════════════════════════════════
+
+    function _st2InitTabs() {
+        // Accordion step headers — click to toggle, only one open at a time
+        document.querySelectorAll('.st2-step-header').forEach(function(header) {
+            header.addEventListener('click', function() {
+                var step = this.dataset.st2Step;
+                var body = document.getElementById('st2-step-body-' + step);
+                var arrow = this.querySelector('.rec-step-arrow');
+                var isOpen = body && !body.classList.contains('hidden');
+
+                // Close all steps
+                document.querySelectorAll('[id^="st2-step-body-"]').forEach(function(b) {
+                    b.classList.add('hidden');
+                    b.style.maxHeight = '';
+                });
+                document.querySelectorAll('.st2-step-header .rec-step-arrow').forEach(function(a) {
+                    a.textContent = '\u25b8';
+                });
+
+                // Toggle current
+                if (!isOpen && body) {
+                    body.classList.remove('hidden');
+                    if (arrow) arrow.textContent = '\u25be';
+                    _st2ResizeOpenStep();
+                }
+            });
+        });
+
+        // Resize on window resize
+        window.addEventListener('resize', _st2ResizeOpenStep);
+
+        // Recalculate layout when tool card body is shown (no auto-fullscreen)
+        var st2Card = document.querySelector('.st2-tool-card');
+        var st2Body = st2Card ? st2Card.querySelector('.tool-card-body') : null;
+        if (st2Body) {
+            var observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(m) {
+                    if (m.attributeName === 'class') {
+                        var isVisible = !st2Body.classList.contains('hidden');
+                        if (isVisible) {
+                            // Recalc layout when section opens (normal or fullscreen)
+                            setTimeout(_st2ResizeOpenStep, 50);
+                            setTimeout(_st2ResizeOpenStep, 200);
+                            setTimeout(_st2ResizeOpenStep, 500);
+                        }
+                    }
+                });
+            });
+            observer.observe(st2Body, { attributes: true, attributeFilter: ['class'] });
+        }
+
+        // Control panel: scan button
+        var scanBtn = document.getElementById('btn-st2-ctrl-scan');
+        if (scanBtn) scanBtn.addEventListener('click', _st2CtrlScan);
+        // Control panel: apply button
+        var applyBtn = document.getElementById('btn-st2-ctrl-apply');
+        if (applyBtn) applyBtn.addEventListener('click', _st2CtrlApply);
+
+    }
+
+    /**
+     * Calculate and set the max-height of the open step body
+     * so it fills all available vertical space.
+     */
+    function _st2ResizeOpenStep() {
+        var toolCard = document.querySelector('.st2-tool-card');
+        if (!toolCard) return;
+        var cardBody = toolCard.querySelector('.tool-card-body:not(.hidden)');
+        if (!cardBody) return;
+
+        // Find the open step body
+        var openBody = null;
+        var bodies = cardBody.querySelectorAll('[id^="st2-step-body-"]');
+        for (var i = 0; i < bodies.length; i++) {
+            if (!bodies[i].classList.contains('hidden')) { openBody = bodies[i]; break; }
+        }
+        if (!openBody) return;
+
+        // Reset to measure correctly
+        openBody.style.maxHeight = 'none';
+        openBody.style.overflowY = 'auto';
+
+        // Total card height
+        var totalHeight = toolCard.getBoundingClientRect().height;
+
+        // Measure everything EXCEPT the open body
+        var cardHeader = toolCard.querySelector('.tool-card-header');
+        var usedHeight = cardHeader ? cardHeader.offsetHeight : 0;
+
+        // Each step header height (just the clickable header, not the body)
+        cardBody.querySelectorAll('.st2-step-header').forEach(function(sh) {
+            usedHeight += sh.offsetHeight;
+            // Add the step's border/margin
+            var step = sh.closest('.rec-step');
+            if (step) {
+                var style = window.getComputedStyle(step);
+                usedHeight += parseInt(style.marginTop || 0) + parseInt(style.marginBottom || 0);
+                usedHeight += parseInt(style.borderTopWidth || 0) + parseInt(style.borderBottomWidth || 0);
+            }
+        });
+
+        // Add card body padding
+        var bodyStyle = window.getComputedStyle(cardBody);
+        usedHeight += parseInt(bodyStyle.paddingTop || 0) + parseInt(bodyStyle.paddingBottom || 0);
+        // Add open step's border-top (the body has a border-top from rec-step-body)
+        usedHeight += 1;
+
+        var available = totalHeight - usedHeight;
+        if (available < 200) available = 200;
+
+        openBody.style.maxHeight = available + 'px';
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // CONTROL PANEL — Edit existing MOGRT clips in timeline
+    // ═════════════════════════════════════════════════════════════
+
+    var _st2CtrlClips = [];
+    var _st2CtrlTypeFilter = null;
+    var _st2MogrtSchemas = null; // Loaded from mogrts/schemas.json
+
+    function _st2LoadMogrtSchemas(forceReload) {
+        if (_st2MogrtSchemas && Object.keys(_st2MogrtSchemas).length > 0 && !forceReload) return; // already loaded
+        _st2MogrtSchemas = null;
+        try {
+            var extPath = csInterface.getSystemPath(SystemPath.EXTENSION) || csInterface.getSystemPath('extension');
+            var schemaPath = path.join(extPath, 'mogrts', 'schemas.json');
+            console.log('[MOGRT] Looking for schemas at: ' + schemaPath);
+            if (fs.existsSync(schemaPath)) {
+                var raw = fs.readFileSync(schemaPath, 'utf8');
+                _st2MogrtSchemas = JSON.parse(raw);
+                var keys = Object.keys(_st2MogrtSchemas);
+                console.log('[MOGRT] Loaded ' + keys.length + ' schemas: ' + keys.join(', '));
+                if (keys.length === 0) {
+                    console.warn('[MOGRT] schemas.json is empty! Regenerate with: python3 scripts/gen-mogrt-schemas.py');
+                }
+            } else {
+                console.warn('[MOGRT] schemas.json not found at: ' + schemaPath);
+                _st2MogrtSchemas = {};
+            }
+        } catch(e) {
+            console.error('[MOGRT] Error loading schemas: ' + e.message + '\n' + e.stack);
+            _st2MogrtSchemas = {};
+        }
+    }
+
+    function _st2GetSchemaForType(typeTag) {
+        if (!_st2MogrtSchemas) _st2LoadMogrtSchemas();
+        return _st2MogrtSchemas[typeTag.toUpperCase()] || null;
+    }
+
+    function _st2CtrlGetType(clip) {
+        var m = (clip.name || '').match(/^\[([A-Z]+)\]/);
+        return m ? m[1].toLowerCase() : 'unknown';
+    }
+
+    function _st2CtrlScan() {
+        var statusEl = document.getElementById('st2-ctrl-status');
+        if (statusEl) statusEl.textContent = 'Escaneando...';
+        _st2CtrlTypeFilter = null;
+        _st2CtrlLastSelectedKey = '';
+
+        // Load MOGRT schemas if not already loaded
+        _st2LoadMogrtSchemas();
+
+        // Write schemas to temp file for ExtendScript to read
+        var schemasForES = {};
+        if (_st2MogrtSchemas) {
+            for (var key in _st2MogrtSchemas) {
+                if (!_st2MogrtSchemas.hasOwnProperty(key)) continue;
+                var s = _st2MogrtSchemas[key];
+                // Build a simple prop map: { propName: { type, min, max, options } }
+                var propMap = {};
+                (s.properties || []).forEach(function(p) {
+                    var entry = { type: p.type };
+                    if (p.type === 'slider') { entry.min = p.min; entry.max = p.max; }
+                    if (p.type === 'dropdown') { entry.options = p.options; }
+                    propMap[p.name] = entry;
+                });
+                schemasForES[key] = propMap;
+            }
+        }
+        var tmpSchema = path.join(os.tmpdir(), 'EditorPro_MogrtSchemas.json');
+        var schemasJSON = JSON.stringify(schemasForES);
+        console.log('[MOGRT] Writing schema for ES (' + Object.keys(schemasForES).length + ' types, ' + schemasJSON.length + ' bytes) to: ' + tmpSchema);
+        fs.writeFileSync(tmpSchema, schemasJSON, 'utf8');
+        var safeSchemaPath = tmpSchema.replace(/\\/g, '/');
+
+        csInterface.evalScript('scanMOGRTClips("' + escExtend(safeSchemaPath) + '")', function(res) {
+            try {
+                var data = JSON.parse(res);
+                if (data.error) { showToast(data.error, 'error'); if (statusEl) statusEl.textContent = ''; return; }
+                _st2CtrlClips = data.clips || [];
+                // Enrich clips with schema info
+                _st2CtrlClips.forEach(function(c) {
+                    c.selected = true;
+                    var typeTag = _st2CtrlGetType(c);
+                    var schema = _st2GetSchemaForType(typeTag);
+                    if (schema) {
+                        // Merge schema info into clip properties
+                        (c.properties || []).forEach(function(p) {
+                            var schemaProp = schema.properties.find(function(sp) { return sp.name === p.name; });
+                            if (schemaProp) {
+                                if (schemaProp.type === 'slider') {
+                                    p.min = schemaProp.min;
+                                    p.max = schemaProp.max;
+                                }
+                                if (schemaProp.type === 'dropdown') {
+                                    p.options = schemaProp.options;
+                                }
+                                if (schemaProp.type === 'text') {
+                                    p.defaultFont = schemaProp.font;
+                                    p.defaultFontSize = schemaProp.fontSize;
+                                }
+                            }
+                        });
+                    }
+                });
+                if (statusEl) statusEl.textContent = _st2CtrlClips.length + ' clips MOGRT';
+                _st2CtrlRender();
+            } catch(e) {
+                showToast('Error: ' + e.message, 'error');
+                if (statusEl) statusEl.textContent = '';
+            }
+        });
+    }
+
+    function _st2CtrlRender() {
+        var list = document.getElementById('st2-ctrl-list');
+        var empty = document.getElementById('st2-ctrl-empty');
+        var propsContainer = document.getElementById('st2-ctrl-props-container');
+        if (!list) return;
+
+        if (_st2CtrlClips.length === 0) {
+            list.innerHTML = '';
+            if (empty) empty.classList.remove('hidden');
+            if (propsContainer) propsContainer.innerHTML = '';
+            var existingFilter = document.getElementById('st2-ctrl-filter-bar');
+            if (existingFilter) existingFilter.remove();
+            return;
+        }
+        if (empty) empty.classList.add('hidden');
+
+        // Build type filter bar
+        var typeCounts = {};
+        _st2CtrlClips.forEach(function(c) {
+            var t = _st2CtrlGetType(c);
+            typeCounts[t] = (typeCounts[t] || 0) + 1;
+        });
+
+        var filterBar = document.getElementById('st2-ctrl-filter-bar');
+        if (!filterBar) {
+            filterBar = document.createElement('div');
+            filterBar.id = 'st2-ctrl-filter-bar';
+            filterBar.className = 'st2-ctrl-filter-bar';
+            // Insert before toolbar
+            if (propsContainer && propsContainer.parentNode) propsContainer.parentNode.insertBefore(filterBar, propsContainer);
+        }
+        filterBar.innerHTML = '';
+        var typeKeys = Object.keys(typeCounts).sort();
+        // "All" pill
+        var allPill = document.createElement('span');
+        allPill.className = 'st2-ctrl-filter-tag' + (!_st2CtrlTypeFilter ? ' active' : '');
+        allPill.textContent = 'Todos (' + _st2CtrlClips.length + ')';
+        allPill.addEventListener('click', function() {
+            _st2CtrlTypeFilter = null;
+            _st2CtrlApplyFilter();
+        });
+        filterBar.appendChild(allPill);
+        typeKeys.forEach(function(t) {
+            var pill = document.createElement('span');
+            pill.className = 'st2-ctrl-filter-tag' + (_st2CtrlTypeFilter === t ? ' active' : '');
+            var col = ST2_TYPE_COLORS[t] || 'var(--text-secondary)';
+            pill.style.color = (_st2CtrlTypeFilter === t) ? '' : col;
+            pill.textContent = typeCounts[t] + ' ' + t;
+            pill.addEventListener('click', function() {
+                _st2CtrlTypeFilter = (_st2CtrlTypeFilter === t) ? null : t;
+                _st2CtrlApplyFilter();
+            });
+            filterBar.appendChild(pill);
+        });
+
+        // Render clip list
+        _st2CtrlRenderList();
+    }
+
+    function _st2CtrlApplyFilter() {
+        // Update filter pills
+        var filterBar = document.getElementById('st2-ctrl-filter-bar');
+        if (filterBar) {
+            filterBar.querySelectorAll('.st2-ctrl-filter-tag').forEach(function(pill, i) {
+                if (i === 0) {
+                    pill.classList.toggle('active', !_st2CtrlTypeFilter);
+                } else {
+                    var pillType = pill.textContent.replace(/^\d+\s+/, '');
+                    pill.classList.toggle('active', _st2CtrlTypeFilter === pillType);
+                }
+            });
+        }
+        // Update selection: select only filtered type, deselect others
+        if (_st2CtrlTypeFilter) {
+            _st2CtrlClips.forEach(function(c) {
+                c.selected = (_st2CtrlGetType(c) === _st2CtrlTypeFilter);
+            });
+        } else {
+            _st2CtrlClips.forEach(function(c) { c.selected = true; });
+        }
+        _st2CtrlRenderList();
+    }
+
+    function _st2CtrlRenderList() {
+        var list = document.getElementById('st2-ctrl-list');
+        if (!list) return;
+        list.innerHTML = '';
+
+        var visible = _st2CtrlTypeFilter
+            ? _st2CtrlClips.filter(function(c) { return _st2CtrlGetType(c) === _st2CtrlTypeFilter; })
+            : _st2CtrlClips;
+
+        visible.forEach(function(clip) {
+            var idx = _st2CtrlClips.indexOf(clip);
+            var el = document.createElement('div');
+            el.className = 'supertext-item' + (clip.selected ? ' st-checked' : ' st-unchecked');
+            el.dataset.ctrlIdx = idx;
+
+            var clipName = clip.name || 'MOGRT';
+            var typeTag = _st2CtrlGetType(clip);
+            var typeClass = 'type-' + typeTag;
+            var textPreview = clipName.replace(/^\[[A-Z]+\]\s*/, '');
+            var startTime = clip.startTime !== undefined ? formatTimeFull(clip.startTime) : '?';
+            var dur = (clip.endTime && clip.startTime) ? (clip.endTime - clip.startTime).toFixed(1) + 's' : '';
+
+            el.innerHTML =
+                '<label class="st-checkbox-wrap">' +
+                    '<input type="checkbox" class="st2-ctrl-check" data-idx="' + idx + '"' + (clip.selected ? ' checked' : '') + '>' +
+                '</label>' +
+                '<div class="st-time">' + startTime + '</div>' +
+                '<div class="st-content">' +
+                    '<div class="st-text">' + esc(textPreview) + '</div>' +
+                    '<div class="st-meta-row">' +
+                        '<span class="st-type-badge ' + typeClass + '">' + typeTag + '</span>' +
+                        '<span style="font-size:9px;color:var(--text-muted)">V' + ((clip.trackIndex || 0) + 1) + '</span>' +
+                        (dur ? '<span style="font-size:9px;color:var(--text-muted)">' + dur + '</span>' : '') +
+                    '</div>' +
+                '</div>';
+
+            list.appendChild(el);
+        });
+
+        _st2CtrlUpdateCount();
+
+        // Bind checkbox changes via delegation (only once)
+        if (!list._st2Bound) {
+            list._st2Bound = true;
+            list.addEventListener('change', function(e) {
+                var chk = e.target.closest('.st2-ctrl-check');
+                if (chk) {
+                    var idx = parseInt(chk.dataset.idx);
+                    _st2CtrlClips[idx].selected = chk.checked;
+                    var row = chk.closest('.supertext-item');
+                    if (row) {
+                        row.classList.toggle('st-checked', chk.checked);
+                        row.classList.toggle('st-unchecked', !chk.checked);
+                    }
+                    _st2CtrlUpdateCount();
+                }
+            });
+        }
+    }
+
+    var _st2CtrlLastSelectedKey = '';
+    function _st2CtrlUpdateCount() {
+        var selected = _st2CtrlClips.filter(function(c) { return c.selected; });
+        // Only rebuild panel if the set of selected clips changed
+        var key = selected.map(function(c) { return c.trackIndex + ':' + c.clipIndex; }).join(',');
+        if (key !== _st2CtrlLastSelectedKey) {
+            _st2CtrlLastSelectedKey = key;
+            _st2CtrlBuildPropsPanel();
+        }
+        // Update count label if it exists
+        var titleEl = document.querySelector('.st2-props-panel-title');
+        if (titleEl) titleEl.textContent = selected.length + ' seleccionados';
+    }
+
+    /**
+     * Dynamically build the property panel from the intersection of
+     * all selected clips' editable properties.
+     */
+    function _st2CtrlBuildPropsPanel() {
+        var container = document.getElementById('st2-ctrl-props-container');
+        if (!container) return;
+
+        var selected = _st2CtrlClips.filter(function(c) { return c.selected; });
+        if (selected.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+
+        // Find common properties across all selected clips
+        // A property is "common" if every selected clip has it (by name + type)
+        var propMap = {}; // name -> { type, count, values, propInfo }
+        selected.forEach(function(clip) {
+            if (!clip.properties) return;
+            clip.properties.forEach(function(p) {
+                var key = p.name;
+                if (!propMap[key]) {
+                    propMap[key] = { type: p.type, count: 0, values: [], propInfo: p };
+                }
+                propMap[key].count++;
+                propMap[key].values.push(p.value);
+            });
+        });
+
+        // Only show properties present in ALL selected clips (or at least 1 for flexibility)
+        var commonProps = [];
+        for (var key in propMap) {
+            if (!propMap.hasOwnProperty(key)) continue;
+            var pm = propMap[key];
+            // Skip unknown/json/object/group types
+            if (pm.type === 'unknown' || pm.type === 'json' || pm.type === 'object' || pm.type === 'group') continue;
+            commonProps.push({ name: key, type: pm.type, count: pm.count, values: pm.values, propInfo: pm.propInfo });
+        }
+
+        if (commonProps.length === 0) {
+            container.innerHTML = '<div style="font-size:10px;color:var(--text-muted);padding:8px">Sin propiedades editables</div>';
+            return;
+        }
+
+        var html = '<div class="st2-props-panel">';
+        html += '<div class="st2-props-panel-title">' + selected.length + ' seleccionados</div>';
+
+        commonProps.forEach(function(cp) {
+            html += '<div class="st2-prop-row" data-prop-name="' + esc(cp.name) + '" data-prop-type="' + cp.type + '">';
+            html += '<span class="st2-prop-label">' + esc(cp.name) + '</span>';
+            html += '<div class="st2-prop-control">';
+
+            if (cp.type === 'color') {
+                // Color swatch with popup picker
+                var colorVal = cp.values[0] || '#ffffff';
+                if (!colorVal || colorVal.length !== 7 || colorVal[0] !== '#') colorVal = '#ffffff';
+                html += '<div style="position:relative">';
+                html += '<div class="st2-color-swatch st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-value="' + colorVal + '" style="background:' + colorVal + '" title="' + colorVal + '"></div>';
+                html += '</div>';
+
+            } else if (cp.type === 'checkbox') {
+                // Toggle switch
+                var isOn = cp.values[0] === true;
+                html += '<button type="button" class="st2-toggle' + (isOn ? ' on' : '') + ' st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-value="' + isOn + '"></button>';
+
+            } else if (cp.type === 'dropdown') {
+                // Dropdown with named options
+                var dropVal = cp.values[0] || 0;
+                var opts = cp.propInfo.options || [];
+                html += '<select class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-subtype="dropdown">';
+                html += '<option value="">Sin cambio</option>';
+                for (var oi = 0; oi < opts.length; oi++) {
+                    html += '<option value="' + oi + '"' + (oi === dropVal ? ' selected' : '') + '>' + esc(String(opts[oi])) + '</option>';
+                }
+                html += '</select>';
+
+            } else if (cp.type === 'slider') {
+                // Slider with number input
+                var sliderVal = cp.values[0] || 0;
+                var sMin = cp.propInfo.min !== undefined ? cp.propInfo.min : 0;
+                var sMax = cp.propInfo.max !== undefined ? cp.propInfo.max : 100;
+                html += '<input type="range" class="st2-ctrl-slider st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" value="' + sliderVal + '" min="' + sMin + '" max="' + sMax + '" step="0.5">';
+                html += '<input type="number" class="st2-ctrl-slider-num" data-prop="' + esc(cp.name) + '" value="' + sliderVal + '" step="0.5" style="width:50px;font-size:10px;padding:3px;background:#2a2a2a;color:#e0e0e0;border:1px solid rgba(255,255,255,0.15);border-radius:4px;margin-left:4px">';
+
+            } else if (cp.type === 'text') {
+                // Text: show preview + font weight dropdown
+                var fontName = cp.propInfo.fontStyle || '';
+                var shortFont = fontName.replace(/^[A-Za-z]+-/, '');
+                var textPreview = String(cp.values[0] || '').substring(0, 25);
+                html += '<span style="font-size:9px;color:var(--text-muted);margin-right:4px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(textPreview) + '</span>';
+                html += '<select class="st2-ctrl-dynamic" data-prop="' + esc(cp.name) + '" data-subtype="font">';
+                html += '<option value="">' + esc(shortFont || 'Font...') + '</option>';
+                ST2_FONT_WEIGHTS.forEach(function(fw) {
+                    html += '<option value="' + fw.value + '"' + (fw.value === fontName ? ' selected' : '') + '>' + fw.label + '</option>';
+                });
+                html += '</select>';
+            }
+
+            html += '</div></div>';
+        });
+
+        html += '<div class="st2-props-apply">';
+        html += '<button id="btn-st2-ctrl-apply" class="btn-analyze btn-analyze-alt" style="width:100%"><span>\u2705 Aplicar</span></button>';
+        html += '</div></div>';
+
+        container.innerHTML = html;
+
+        // Bind events on new elements
+        var applyBtn = document.getElementById('btn-st2-ctrl-apply');
+        if (applyBtn) applyBtn.addEventListener('click', _st2CtrlApply);
+
+        // Toggle buttons
+        container.querySelectorAll('.st2-toggle').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var isOn = this.classList.toggle('on');
+                this.dataset.value = isOn ? 'true' : 'false';
+                this.dataset.changed = 'true';
+            });
+        });
+
+        // Color swatches — open popup picker on click
+        // Platzi brand palette
+        var COLOR_PALETTE_PRIMARY = [
+            { hex: '#141515', name: 'Negro' },
+            { hex: '#F7FBF8', name: 'Blanco' },
+            { hex: '#0AE98A', name: 'Verde' }
+        ];
+        var COLOR_PALETTE_SECONDARY = [
+            { hex: '#0AB5E9', name: 'Azul' },
+            { hex: '#A561FF', name: 'Morado' },
+            { hex: '#E53256', name: 'Rojo' },
+            { hex: '#F5D400', name: 'Amarillo' },
+            { hex: '#F55A00', name: 'Naranja' },
+            { hex: '#FF61E2', name: 'Rosa' }
+        ];
+        var COLOR_PALETTE_ALL = COLOR_PALETTE_PRIMARY.concat(COLOR_PALETTE_SECONDARY);
+        container.querySelectorAll('.st2-color-swatch').forEach(function(swatch) {
+            swatch.addEventListener('click', function(e) {
+                e.stopPropagation();
+                // Close any existing popup
+                var existing = document.querySelector('.st2-color-popup');
+                if (existing) existing.remove();
+
+                var currentColor = (this.dataset.value || '#ffffff').toLowerCase();
+                var popup = document.createElement('div');
+                popup.className = 'st2-color-popup';
+                var html = '<div class="st2-color-section-label">Primaria</div><div class="st2-color-popup-grid">';
+                COLOR_PALETTE_PRIMARY.forEach(function(c) {
+                    var sel = (c.hex.toLowerCase() === currentColor) ? ' selected' : '';
+                    html += '<div class="st2-color-popup-cell' + sel + '" data-color="' + c.hex + '" style="background:' + c.hex + '" title="' + c.name + '"></div>';
+                });
+                html += '</div><div class="st2-color-section-label">Secundaria</div><div class="st2-color-popup-grid">';
+                COLOR_PALETTE_SECONDARY.forEach(function(c) {
+                    var sel = (c.hex.toLowerCase() === currentColor) ? ' selected' : '';
+                    html += '<div class="st2-color-popup-cell' + sel + '" data-color="' + c.hex + '" style="background:' + c.hex + '" title="' + c.name + '"></div>';
+                });
+                html += '</div>';
+                html += '<div class="st2-color-hex-row"><input class="st2-color-hex-input" value="' + (this.dataset.value || '#ffffff') + '" maxlength="7" placeholder="#RRGGBB"><button class="btn btn-xs btn-success" style="font-size:9px;padding:2px 6px">OK</button></div>';
+                popup.innerHTML = html;
+                this.parentNode.appendChild(popup);
+
+                var swatchEl = this;
+                // Click on palette cell
+                popup.querySelectorAll('.st2-color-popup-cell').forEach(function(cell) {
+                    cell.addEventListener('click', function(ev) {
+                        ev.stopPropagation();
+                        var c = this.dataset.color;
+                        swatchEl.style.background = c;
+                        swatchEl.dataset.value = c;
+                        swatchEl.dataset.changed = 'true';
+                        swatchEl.title = c;
+                        popup.querySelector('.st2-color-hex-input').value = c;
+                        popup.querySelectorAll('.st2-color-popup-cell').forEach(function(cc) { cc.classList.remove('selected'); });
+                        this.classList.add('selected');
+                    });
+                });
+                // OK button
+                popup.querySelector('.btn-success').addEventListener('click', function(ev) {
+                    ev.stopPropagation();
+                    var hex = popup.querySelector('.st2-color-hex-input').value.trim();
+                    if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+                        swatchEl.style.background = hex;
+                        swatchEl.dataset.value = hex;
+                        swatchEl.dataset.changed = 'true';
+                        swatchEl.title = hex;
+                    }
+                    popup.remove();
+                });
+                // Hex input enter
+                popup.querySelector('.st2-color-hex-input').addEventListener('keydown', function(ev) {
+                    if (ev.key === 'Enter') {
+                        ev.preventDefault();
+                        popup.querySelector('.btn-success').click();
+                    }
+                });
+                // Close on outside click
+                setTimeout(function() {
+                    document.addEventListener('click', function closePopup() {
+                        popup.remove();
+                        document.removeEventListener('click', closePopup);
+                    }, { once: true });
+                }, 10);
+            });
+        });
+
+        // Number inputs — track changes
+        container.querySelectorAll('input[type="number"]').forEach(function(inp) {
+            inp.addEventListener('change', function() { this.dataset.changed = 'true'; });
+        });
+
+        // Slider + number sync
+        container.querySelectorAll('.st2-ctrl-slider').forEach(function(slider) {
+            var propName = slider.dataset.prop;
+            var numInput = container.querySelector('.st2-ctrl-slider-num[data-prop="' + propName + '"]');
+            slider.addEventListener('input', function() {
+                this.dataset.changed = 'true';
+                if (numInput) numInput.value = this.value;
+            });
+            if (numInput) {
+                numInput.addEventListener('change', function() {
+                    slider.value = this.value;
+                    slider.dataset.changed = 'true';
+                });
+            }
+        });
+
+        // Select changes
+        container.querySelectorAll('select.st2-ctrl-dynamic').forEach(function(sel) {
+            sel.addEventListener('change', function() { this.dataset.changed = 'true'; });
+        });
+    }
+
+    function _st2CtrlApply() {
+        var selected = _st2CtrlClips.filter(function(c) { return c.selected; });
+        if (selected.length === 0) { showToast('Selecciona al menos un clip', 'info'); return; }
+
+        var container = document.getElementById('st2-ctrl-props-container');
+        if (!container) return;
+
+        // Read all changed dynamic controls
+        var props = {};
+        container.querySelectorAll('.st2-ctrl-dynamic').forEach(function(ctrl) {
+            if (ctrl.dataset.changed !== 'true') return;
+            var propName = ctrl.dataset.prop;
+            if (!propName) return;
+            var propType = ctrl.closest('.st2-prop-row').dataset.propType;
+
+            if (ctrl.classList.contains('st2-color-swatch')) {
+                // Color swatch: convert hex to [r,g,b,a]
+                var hex = ctrl.dataset.value;
+                var r = parseInt(hex.substr(1,2), 16) / 255;
+                var g = parseInt(hex.substr(3,2), 16) / 255;
+                var b = parseInt(hex.substr(5,2), 16) / 255;
+                props[propName] = [r, g, b, 1];
+            } else if (ctrl.classList.contains('st2-toggle')) {
+                // Checkbox toggle
+                props[propName] = ctrl.dataset.value === 'true';
+            } else if (ctrl.type === 'number') {
+                // Number (slider or dropdown index)
+                props[propName] = parseFloat(ctrl.value);
+            } else if (ctrl.tagName === 'SELECT') {
+                if (!ctrl.value) return; // "Sin cambio" selected
+                if (ctrl.dataset.subtype === 'font') {
+                    // Font weight change on text property
+                    props[propName] = { fontStyle: ctrl.value };
+                } else if (ctrl.dataset.subtype === 'dropdown') {
+                    // Dropdown: send as integer index
+                    props[propName] = parseInt(ctrl.value);
+                } else {
+                    props[propName] = parseFloat(ctrl.value);
+                    if (isNaN(props[propName])) props[propName] = ctrl.value;
+                }
+            }
+        });
+
+        if (Object.keys(props).length === 0) { showToast('Selecciona un cambio (font, color, bullets)', 'info'); return; }
+
+        // Build payload for ExtendScript
+        var payload = {
+            clips: selected.map(function(c) {
+                return { trackIndex: c.trackIndex, startTime: c.startTime, properties: props };
+            })
+        };
+
+        var tmpFile = path.join(os.tmpdir(), 'EditorPro_ST2_CtrlApply.json');
+        fs.writeFileSync(tmpFile, JSON.stringify(payload), 'utf8');
+        var safePath = tmpFile.replace(/\\/g, '/');
+
+        showToast('Aplicando a ' + selected.length + ' clips...', 'info');
+        csInterface.evalScript('applyMOGRTProperties("' + escExtend(safePath) + '")', function(res) {
+            try {
+                var data = JSON.parse(res);
+                if (data.error) { showToast(data.error, 'error'); return; }
+                showToast(data.modified + ' clips modificados', 'success');
+                // Re-scan to refresh values, preserving current filter
+                var savedFilter = _st2CtrlTypeFilter;
+                _st2CtrlScan();
+                // Restore filter after scan completes
+                setTimeout(function() {
+                    if (savedFilter) {
+                        _st2CtrlTypeFilter = savedFilter;
+                        _st2CtrlApplyFilter();
+                    }
+                }, 500);
+            } catch(e) {
+                showToast('Error: ' + e.message, 'error');
+            }
+        });
     }
 
     // ─── Expose to EditorProUI namespace ───────────────────────

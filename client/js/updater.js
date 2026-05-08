@@ -144,39 +144,71 @@
     }
 
     // Download binary data to a file path, following up to 5 redirects.
+    // Includes a 120s timeout to prevent hanging.
     function _downloadToFile(url, destPath, redirectsLeft, callback) {
         if (redirectsLeft === undefined) redirectsLeft = 5;
+        var _called = false;
+        function _cb(err, result) {
+            if (_called) return;
+            _called = true;
+            callback(err, result);
+        }
         try {
             var https = require("https");
+            var http  = require("http");
             var fs    = require("fs");
             var urlMod = require("url");
             var parsed = urlMod.parse(url);
+            var httpMod = (parsed.protocol === "http:") ? http : https;
             var opts = {
                 hostname: parsed.hostname,
-                port: parsed.port || 443,
+                port: parsed.port || (parsed.protocol === "http:" ? 80 : 443),
                 path: parsed.path,
                 method: "GET",
-                headers: { "User-Agent": "Editor-Pro-Updater/1.0" }
+                headers: { "User-Agent": "Editor-Pro-Updater/1.0" },
+                timeout: 120000
             };
-            var req = https.request(opts, function(res) {
+            _log("Download: " + parsed.hostname + parsed.path);
+            var req = httpMod.request(opts, function(res) {
+                _log("Download response: HTTP " + res.statusCode);
                 if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location && redirectsLeft > 0) {
-                    return _downloadToFile(res.headers.location, destPath, redirectsLeft - 1, callback);
+                    return _downloadToFile(res.headers.location, destPath, redirectsLeft - 1, _cb);
                 }
+                if (res.statusCode !== 200) {
+                    return _cb(new Error("HTTP " + res.statusCode));
+                }
+                var totalSize = parseInt(res.headers["content-length"]) || 0;
+                var downloaded = 0;
                 var out = fs.createWriteStream(destPath);
+                res.on("data", function(chunk) {
+                    downloaded += chunk.length;
+                    if (totalSize > 0) {
+                        var pct = Math.round(downloaded / totalSize * 100);
+                        _setBtn("⬇ " + pct + "%", "Descargando: " + pct + "%");
+                    }
+                });
                 res.pipe(out);
                 out.on("finish", function() {
-                    out.close(function() { callback(null); });
+                    out.close(function() {
+                        _log("Download complete: " + downloaded + " bytes");
+                        _cb(null);
+                    });
                 });
                 out.on("error", function(e) {
                     fs.unlink(destPath, function() {});
-                    callback(e);
+                    _cb(e);
                 });
                 res.on("error", function(e) {
                     fs.unlink(destPath, function() {});
-                    callback(e);
+                    _cb(e);
                 });
             });
-            req.on("error", callback);
+            req.on("timeout", function() {
+                req.destroy();
+                fs.unlink(destPath, function() {});
+                _cb(new Error("Download timeout (120s)"));
+            });
+            req.on("error", _cb);
             req.end();
         } catch(e) {
             callback(e);
@@ -327,50 +359,115 @@
         btn.disabled = false;
     }
 
+    // ─── Git repo detection ───────────────────────────────────────────────────
+
+    var _isGitRepo = false;
+
+    function _detectGitRepo() {
+        try {
+            var fs   = require("fs");
+            var path = require("path");
+            var ext  = _getExtensionPath();
+            if (!ext) return false;
+            // Check if .git exists (direct repo) or if the symlink target has .git
+            var gitDir = path.join(ext, ".git");
+            return fs.existsSync(gitDir);
+        } catch(e) {
+            return false;
+        }
+    }
+
+    function _getLocalGitSha(callback) {
+        try {
+            var cp  = require("child_process");
+            var ext = _getExtensionPath();
+            cp.execFile("git", ["rev-parse", "HEAD"], { cwd: ext, timeout: 10000 }, function(err, stdout) {
+                if (err) return callback(err, null);
+                callback(null, stdout.trim());
+            });
+        } catch(e) {
+            callback(e, null);
+        }
+    }
+
+    function _gitPull(callback) {
+        try {
+            var cp  = require("child_process");
+            var ext = _getExtensionPath();
+            _setBtn("⬇️", "Git pull...", "", true);
+            _log("Running git pull in " + ext);
+            cp.execFile("git", ["pull", "--ff-only", "origin", GITHUB_BRANCH], 
+                { cwd: ext, timeout: 120000 },
+                function(err, stdout, stderr) {
+                    if (err) {
+                        _log("git pull failed: " + (stderr || err.message));
+                        return callback(err);
+                    }
+                    _log("git pull: " + stdout.trim());
+                    callback(null);
+                }
+            );
+        } catch(e) {
+            callback(e);
+        }
+    }
+
     // ─── Public: checkForUpdates ────────────────────────────────────────────────
 
     function checkForUpdates(callback) {
+        _isGitRepo = _detectGitRepo();
+
         try {
-            var localSha = _readLocalSha();
             var apiUrl = "https://api.github.com/repos/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/commits/" + GITHUB_BRANCH;
 
-            _httpsGetText(apiUrl, 5, function(err, body) {
-                if (err) {
-                    _log("Check failed: " + err.message);
-                    if (callback) callback(false);
-                    return;
-                }
-                try {
-                    var data = JSON.parse(body);
-                    var remoteSha = data.sha;
-                    if (!remoteSha) {
-                        _log("No SHA in response");
+            // For git repos, get local SHA from git instead of .update-sha file
+            var _afterLocalSha = function(localSha) {
+                _httpsGetText(apiUrl, 5, function(err, body) {
+                    if (err) {
+                        _log("Check failed: " + err.message);
                         if (callback) callback(false);
                         return;
                     }
-
-                    _latestSha = remoteSha;
-
-                    if (!localSha || localSha !== remoteSha) {
-                        _log("Update available: " + remoteSha.substr(0, 7) + (localSha ? " (local: " + localSha.substr(0, 7) + ")" : " (no local SHA)"));
-                        _updateAvailable = true;
-                        var btn = document.getElementById("btn-reload");
-                        if (btn) {
-                            _originalBtnHTML = btn.innerHTML;
-                            btn.style.cssText = "background:#0ae98d;color:#1a1d23;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;animation:pulse-update 1.5s infinite;white-space:nowrap;";
-                            btn.innerHTML = "⬇";
-                            btn.title = "Hay una actualización disponible — click para actualizar";
+                    try {
+                        var data = JSON.parse(body);
+                        var remoteSha = data.sha;
+                        if (!remoteSha) {
+                            _log("No SHA in response");
+                            if (callback) callback(false);
+                            return;
                         }
-                        if (callback) callback(true);
-                    } else {
-                        _log("Up to date: " + remoteSha.substr(0, 7));
+
+                        _latestSha = remoteSha;
+
+                        if (!localSha || localSha !== remoteSha) {
+                            _log("Update available: " + remoteSha.substr(0, 7) + (localSha ? " (local: " + localSha.substr(0, 7) + ")" : " (no local SHA)") + (_isGitRepo ? " [git]" : " [zip]"));
+                            _updateAvailable = true;
+                            var btn = document.getElementById("btn-reload");
+                            if (btn) {
+                                _originalBtnHTML = btn.innerHTML;
+                                btn.style.cssText = "background:#0ae98d;color:#1a1d23;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;animation:pulse-update 1.5s infinite;white-space:nowrap;";
+                                btn.innerHTML = "⬇";
+                                btn.title = "Hay una actualización disponible — click para actualizar" + (_isGitRepo ? " (git pull)" : "");
+                            }
+                            if (callback) callback(true);
+                        } else {
+                            _log("Up to date: " + remoteSha.substr(0, 7) + (_isGitRepo ? " [git]" : " [zip]"));
+                            if (callback) callback(false);
+                        }
+                    } catch(e) {
+                        _log("Parse error: " + e.message);
                         if (callback) callback(false);
                     }
-                } catch(e) {
-                    _log("Parse error: " + e.message);
-                    if (callback) callback(false);
-                }
-            });
+                });
+            };
+
+            if (_isGitRepo) {
+                _getLocalGitSha(function(err, sha) {
+                    _afterLocalSha(err ? null : sha);
+                });
+            } else {
+                _afterLocalSha(_readLocalSha());
+            }
         } catch(e) {
             _log("Unexpected error: " + e.message);
             if (callback) callback(false);
@@ -383,6 +480,29 @@
     function doUpdate() {
         if (!_latestSha || !_updateAvailable) return false;
 
+        // ─── Git mode: just git pull ────────────────────────────────────────
+        if (_isGitRepo) {
+            _gitPull(function(err) {
+                if (err) {
+                    _setBtn("❌", "git pull falló: " + err.message, "", false);
+                    setTimeout(_restoreBtn, 3500);
+                    return;
+                }
+                _setBtn("✅", "¡Actualizado! Recargando...", "", true);
+                // Stop motion-server before reload if running
+                try {
+                    if (global._epMotionPro && typeof global._epMotionPro.stopServer === "function") {
+                        global._epMotionPro.stopServer(function() { location.reload(); });
+                        setTimeout(function() { location.reload(); }, 2000);
+                        return;
+                    }
+                } catch(_) {}
+                setTimeout(function() { location.reload(); }, 800);
+            });
+            return true;
+        }
+
+        // ─── ZIP mode (non-git installs) ────────────────────────────────────
         var sha = _latestSha;
         var os   = require("os");
         var path = require("path");

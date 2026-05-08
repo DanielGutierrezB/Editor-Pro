@@ -12,14 +12,17 @@ COMPOSICIÓN Y LECTURA (MUY IMPORTANTE — encaja con MOGRT de 2 líneas y leadi
 - Palabras clave del profesor (CTR, CPA, Meta, funnel…) pueden ir solas en una línea si ganan claridad.
 - Máximo aproximado **~90 caracteres totales** por supertexto (en 1 o 2 líneas).
 
-TIPOS DE SUPERTEXTO (usa SOLO estos 5 tipos):
+TIPOS DE SUPERTEXTO (usa SOLO estos 8 tipos):
 - **title**: TÍTULOS DE TEMAS — nuevo bloque o sección. Tipografía más grande, otro color — marcan cambio de tema.
-- **bullet**: IDEAS CLAVE — conceptos, reglas, datos, pasos, resúmenes. Aparecen uno a uno conforme el transcript va señalándolo. Este es el tipo más versátil: úsalo para todo lo que no encaje en los otros 4.
+- **bullet**: IDEAS CLAVE — conceptos, reglas. Aparecen uno a uno conforme el transcript va señalándolo.
+- **step**: PASO A PASO — procedimientos numerados, instrucciones secuenciales.
 - **definition**: DEFINICIONES — términos nuevos o técnicos que el profesor explica por primera vez.
+- **data**: DATOS CLAVE — estadísticas, URLs, nombres técnicos, números importantes que vale la pena leer.
 - **highlight**: FRASES MEMORABLES — reglas de oro, conclusiones impactantes, frases que el alumno debería recordar.
+- **summary**: RESUMEN — frase de cierre o conclusión de un bloque temático.
 - **question**: PREGUNTAS DEL PROFESOR — cuando hace una pregunta retórica o directa a la audiencia (ej: "¿Qué pasaría si nos caemos?", "¿Cuál crees que es el error más común?"). Captura la pregunta tal como la formula. Incluye los signos ¿…? Ayuda a delimitar momentos de reflexión y recalcarlos visualmente.
 
-NO uses otros tipos como "step", "data", "summary" — mapea todo a estos 5.
+NO uses otros tipos fuera de estos 8.
 
 AGRUPACIÓN (campo 'group') — DETECCIÓN EXHAUSTIVA DE LISTAS:
 - Usa 'group' cuando el profesor enumera una lista, ya sea:
@@ -52,4 +55,4 @@ REGLAS DE TIEMPO:
 Responde ÚNICAMENTE con JSON válido, SIN markdown.
 
 FORMATO:
-{"supertexts":[{"time":10.0,"endTime":20.0,"text":"Configuración del agente","type":"title","importance":"high","reason":"Nuevo tema"},{"time":43.5,"endTime":55.0,"text":"3 escenarios en Meta","type":"title","importance":"high","reason":"Título de la lista","group":"escenarios-meta"},{"time":44.0,"endTime":55.0,"text":"No gasta","type":"bullet","importance":"high","reason":"Primer escenario","group":"escenarios-meta"},{"time":47.0,"endTime":55.0,"text":"Gasta sin convertir","type":"bullet","importance":"high","reason":"Segundo escenario","group":"escenarios-meta"},{"time":50.0,"endTime":55.0,"text":"Convierte caro","type":"bullet","importance":"high","reason":"Tercer escenario","group":"escenarios-meta"},{"time":62.0,"endTime":75.0,"text":"Creativo → CTR → CPC → CPA\nTodo empieza desde el creativo","type":"highlight","importance":"high","reason":"Cadena de métricas clave"},{"time":80.0,"endTime":90.0,"text":"¿Qué pasaría si la campaña\nno genera conversiones?","type":"question","importance":"high","reason":"Pregunta retórica del profesor"}],"summary":"","totalFound":0}
+{"supertexts":[{"time":10.0,"endTime":20.0,"text":"Configuración del agente","type":"title","importance":"high","reason":"Nuevo tema"},{"time":25.0,"endTime":35.0,"text":"API: Application\nProgramming Interface","type":"definition","importance":"high","reason":"Término técnico nuevo"},{"time":43.5,"endTime":55.0,"text":"3 escenarios en Meta","type":"title","importance":"high","reason":"Título de la lista","group":"escenarios-meta"},{"time":44.0,"endTime":55.0,"text":"No gasta","type":"bullet","importance":"high","reason":"Primer escenario","group":"escenarios-meta"},{"time":47.0,"endTime":55.0,"text":"Gasta sin convertir","type":"bullet","importance":"high","reason":"Segundo escenario","group":"escenarios-meta"},{"time":50.0,"endTime":55.0,"text":"Convierte caro","type":"bullet","importance":"high","reason":"Tercer escenario","group":"escenarios-meta"},{"time":62.0,"endTime":75.0,"text":"Creativo → CTR → CPC → CPA\nTodo empieza desde el creativo","type":"highlight","importance":"high","reason":"Cadena de métricas clave"},{"time":80.0,"endTime":90.0,"text":"¿Qué pasaría si la campaña\nno genera conversiones?","type":"question","importance":"high","reason":"Pregunta retórica del profesor"},{"time":95.0,"endTime":105.0,"text":"1. Abrir el dashboard","type":"step","importance":"medium","reason":"Primer paso del procedimiento"},{"time":110.0,"endTime":118.0,"text":"openclose.ai","type":"data","importance":"high","reason":"URL oficial"},{"time":120.0,"endTime":130.0,"text":"Tu agente trabaja por ti\nmientras duermes","type":"summary","importance":"high","reason":"Cierre del bloque"}],"summary":"","totalFound":0}

@@ -24,6 +24,8 @@
                 <span class="seq-dropdown-arrow">▾</span>
             </button>
             <span id="version-label" style="font-size:10px; color:#666; margin-right:6px; cursor:default;" title="Versión actual">v—</span>
+            <button id="btn-debug-mogrt" class="icon-btn" title="Debug MOGRT seleccionado" style="font-size:12px;padding:2px 4px;" onclick="debugSelectedMOGRT()">🔍</button>
+            <button id="btn-debug-all-mogrts" class="icon-btn" title="Inspeccionar TODOS los MOGRTs configurados" style="font-size:12px;padding:2px 4px;" onclick="debugAllMOGRTs()">🔬</button>
             <button id="btn-save-log" class="icon-btn" title="Guardar log en Descargas" style="font-size:12px;padding:2px 4px;">💾</button>
             <button id="btn-reload" class="icon-btn" title="Recargar panel (verifica updates)" onclick="checkAndReload()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -348,7 +350,7 @@
         </div>
 
         <!-- 3. SMART SUPERTEXTS — MOGRT Graphics -->
-        <div class="tool-card">
+        <div class="tool-card st2-tool-card">
             <div class="tool-card-header" data-tool="supertexts2">
                 <span class="tool-card-title">💡 Smart Supertexts</span>
                 <div id="st2-progress-header" class="header-progress hidden">
@@ -358,9 +360,19 @@
                 <span class="toggle-icon">▸</span>
             </div>
             <div class="tool-card-body hidden">
-                <p class="tool-description">Genera gráficos (Essential Graphics) directamente en la línea de tiempo usando un MOGRT como plantilla. Cada supertexto se inserta como un clip de gráfico con su duración exacta.</p>
 
-                <!-- MOGRT Config per Type (collapsible) -->
+                <!-- ═══ STEP 1: CONFIG ═══ -->
+                <div class="rec-step" data-st2-step="1">
+                    <div class="rec-step-header st2-step-header" data-st2-step="1">
+                        <span class="rec-step-num">1</span>
+                        <span class="rec-step-title">Configuración</span>
+                        <span id="st2-step-hint-1" class="rec-step-hint"></span>
+                        <span class="rec-step-arrow">▾</span>
+                    </div>
+                    <div class="rec-step-body" id="st2-step-body-1">
+                <p class="tool-description">Configura MOGRTs, prompt y filtros antes de generar.</p>
+
+                <!-- MOGRT Config per Type -->
                 <div class="mogrt-config">
                     <div class="mogrt-config-header mogrt-config-toggle" id="mogrt-config-toggle">
                         <span class="tool-label" style="margin:0">MOGRT por Tipo</span>
@@ -384,15 +396,30 @@
                                 <span class="mogrt-type-file" id="st2-mogrt-file-bullet">Sin configurar</span>
                                 <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="bullet">Elegir</button>
                             </div>
+                            <div class="mogrt-type-row" data-mogrt-type="step">
+                                <span class="mogrt-type-label type-step">step</span>
+                                <span class="mogrt-type-file" id="st2-mogrt-file-step">Sin configurar</span>
+                                <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="step">Elegir</button>
+                            </div>
                             <div class="mogrt-type-row" data-mogrt-type="definition">
                                 <span class="mogrt-type-label type-definition">definition</span>
                                 <span class="mogrt-type-file" id="st2-mogrt-file-definition">Sin configurar</span>
                                 <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="definition">Elegir</button>
                             </div>
+                            <div class="mogrt-type-row" data-mogrt-type="data">
+                                <span class="mogrt-type-label type-data">data</span>
+                                <span class="mogrt-type-file" id="st2-mogrt-file-data">Sin configurar</span>
+                                <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="data">Elegir</button>
+                            </div>
                             <div class="mogrt-type-row" data-mogrt-type="highlight">
                                 <span class="mogrt-type-label type-highlight">highlight</span>
                                 <span class="mogrt-type-file" id="st2-mogrt-file-highlight">Sin configurar</span>
                                 <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="highlight">Elegir</button>
+                            </div>
+                            <div class="mogrt-type-row" data-mogrt-type="summary">
+                                <span class="mogrt-type-label type-summary">summary</span>
+                                <span class="mogrt-type-file" id="st2-mogrt-file-summary">Sin configurar</span>
+                                <button class="btn btn-sm btn-ghost btn-mogrt-pick" data-mogrt-type="summary">Elegir</button>
                             </div>
                             <div class="mogrt-type-row" data-mogrt-type="question">
                                 <span class="mogrt-type-label type-question">question</span>
@@ -447,6 +474,18 @@
                     <button id="btn-st2-scan-tracks" class="btn btn-xs btn-ghost" style="font-size:9px" title="Escanear tracks de secuencias abiertas">🔍 Escanear</button>
                     <span id="st2-scan-status" style="font-size:9px;color:var(--text-muted)"></span>
                 </div>
+                    </div><!-- /st2-step-body-1 -->
+                </div><!-- /step 1 -->
+
+                <!-- ═══ STEP 2: GENERATE ═══ -->
+                <div class="rec-step" data-st2-step="2">
+                    <div class="rec-step-header st2-step-header" data-st2-step="2">
+                        <span class="rec-step-num">2</span>
+                        <span class="rec-step-title">Selección y Generación</span>
+                        <span id="st2-step-hint-2" class="rec-step-hint"></span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="st2-step-body-2">
 
                 <div class="btn-row">
                     <button id="btn-supertexts2" class="btn-analyze btn-analyze-alt" title="Analiza la transcripción y genera supertextos como gráficos MOGRT">
@@ -504,9 +543,11 @@
                         <button id="btn-st2-bnav-next" class="btn-batch-nav" title="Siguiente secuencia">&#8594;</button>
                     </div>
                     <div id="st2-summary" class="result-summary"></div>
-                    <div class="result-actions">
+                    <div class="btn-row" style="margin-bottom:6px">
+                        <button id="btn-st2-create-graphics" class="btn-analyze btn-analyze-alt" style="flex:2" title="Inserta gráficos MOGRT en la línea de tiempo">
+                            <span>🎬 Crear Gráficos</span>
+                        </button>
                         <button id="btn-st2-select-all" class="btn btn-sm btn-ghost" title="Seleccionar / deseleccionar todos">Seleccionar todos</button>
-                        <button id="btn-st2-create-graphics" class="btn btn-sm btn-success" title="Inserta gráficos MOGRT en la línea de tiempo">🎬 Crear Gráficos</button>
                         <button id="btn-st2-export" class="btn btn-sm btn-ghost" title="Copiar al portapapeles">📋 Copiar</button>
                     </div>
                     <div class="result-actions" style="margin-top:4px;align-items:center">
@@ -528,6 +569,31 @@
                 <div id="st2-empty" class="empty-state-mini">
                     <p class="empty-text">Configura un MOGRT y genera supertextos como clips de gráfico en la línea de tiempo</p>
                 </div>
+                    </div><!-- /st2-step-body-2 -->
+                </div><!-- /step 2 -->
+
+                <!-- ═══ STEP 3: CONTROL PANEL ═══ -->
+                <div class="rec-step" data-st2-step="3">
+                    <div class="rec-step-header st2-step-header" data-st2-step="3">
+                        <span class="rec-step-num">3</span>
+                        <span class="rec-step-title">Panel de Control</span>
+                        <span id="st2-step-hint-3" class="rec-step-hint"></span>
+                        <span class="rec-step-arrow">▸</span>
+                    </div>
+                    <div class="rec-step-body hidden" id="st2-step-body-3">
+                    <div class="st2-ctrl-header">
+                        <button id="btn-st2-ctrl-scan" class="btn btn-sm btn-success" title="Escanear clips MOGRT en la timeline">🔍 Escanear MOGRTs en Timeline</button>
+                        <span id="st2-ctrl-status" style="font-size:10px;color:var(--text-muted)"></span>
+                    </div>
+                    <!-- Dynamic property panel — built by JS from scanned MOGRT properties -->
+                    <div id="st2-ctrl-props-container"></div>
+                    <div id="st2-ctrl-list" class="supertext-list st2-ctrl-list"></div>
+                    <div id="st2-ctrl-empty" class="empty-state-mini">
+                        <p class="empty-text">Escanea la timeline para encontrar clips MOGRT y editar sus propiedades</p>
+                    </div>
+                    </div><!-- /st2-step-body-3 -->
+                </div><!-- /step 3 -->
+
             </div>
         </div>
 

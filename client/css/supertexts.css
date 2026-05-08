@@ -12,14 +12,14 @@
 
 .supertext-item, .suggestion-item {
     display: flex;
-    gap: 8px;
-    padding: 10px;
+    gap: 6px;
+    padding: 5px 8px;
     border-radius: var(--radius-sm);
     background: var(--bg-surface);
     border: 1px solid var(--border);
     cursor: pointer;
     transition: all var(--transition);
-    align-items: flex-start;
+    align-items: center;
 }
 .supertext-item:hover, .suggestion-item:hover {
     background: var(--bg-hover);
@@ -121,13 +121,21 @@
 .st-content, .sg-content {
     flex: 1;
     min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .st-text {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--text-primary);
-    line-height: 1.4;
+    line-height: 1.3;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .st-type-badge, .sg-type-badge {
@@ -626,8 +634,9 @@
 .st-meta-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 4px;
+    gap: 4px;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .st2-type-select {
@@ -689,5 +698,325 @@
     background: var(--bg-card);
     border-radius: var(--radius-sm);
     border-left: 2px solid var(--accent);
+}
+
+/* ── Smart Supertexts Accordion Layout ── */
+/* When expanded, Smart Supertexts auto-fills the entire panel like fullscreen */
+.st2-tool-card.st2-expanded {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 9998 !important;
+    border-radius: 0 !important;
+    border: none !important;
+    margin: 0 !important;
+    background: var(--bg-base) !important;
+    display: flex;
+    flex-direction: column;
+}
+.st2-tool-card .tool-card-body:not(.hidden) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    padding: 8px 12px 12px;
+}
+/* Steps layout */
+.st2-tool-card .rec-step {
+    flex-shrink: 0;
+}
+.st2-tool-card .rec-step-body {
+    overflow-y: auto;
+}
+/* Property panel card */
+.st2-props-panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: rgba(99,102,241,0.05);
+    flex-shrink: 0;
+}
+.st2-props-panel-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-bright);
+    margin-bottom: 8px;
+}
+.st2-prop-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.st2-prop-row:last-of-type {
+    border-bottom: none;
+}
+.st2-prop-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    min-width: 90px;
+}
+.st2-prop-control {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+}
+.st2-prop-control select {
+    font-size: 10px;
+    padding: 3px 6px;
+    background: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 100px;
+}
+.st2-prop-control select option {
+    background: #2a2a2a;
+    color: #e0e0e0;
+}
+.st2-prop-control .st2-toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: none;
+    padding: 0;
+}
+.st2-prop-control .st2-toggle.on {
+    background: var(--success);
+}
+.st2-prop-control .st2-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+.st2-prop-control .st2-toggle.on::after {
+    transform: translateX(16px);
+}
+.st2-prop-control input[type="range"] {
+    flex: 1;
+    min-width: 60px;
+    height: 4px;
+    -webkit-appearance: none;
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+.st2-prop-control input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent-bright);
+    cursor: pointer;
+}
+/* Color swatch button */
+.st2-color-swatch {
+    width: 36px;
+    height: 24px;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color 0.15s;
+}
+.st2-color-swatch:hover {
+    border-color: rgba(255,255,255,0.5);
+}
+/* Inline color picker popup */
+.st2-color-popup {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 100;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.st2-color-popup-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 28px);
+    gap: 4px;
+    margin-bottom: 6px;
+}
+.st2-color-popup-cell {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.1s, transform 0.1s;
+}
+.st2-color-popup-cell:hover {
+    border-color: white;
+    transform: scale(1.1);
+}
+.st2-color-popup-cell.selected {
+    border-color: var(--accent-bright);
+}
+.st2-color-section-label {
+    font-size: 9px;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 4px;
+    margin-top: 4px;
+}
+.st2-color-section-label:first-child {
+    margin-top: 0;
+}
+.st2-color-hex-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+.st2-color-hex-input {
+    flex: 1;
+    font-size: 10px;
+    padding: 3px 6px;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+}
+.st2-props-apply {
+    margin-top: 8px;
+    text-align: center;
+}
+
+/* ── Control Panel Tab ── */
+/* Control panel step body layout */
+.st2-ctrl-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+.st2-ctrl-filter-bar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+    flex-shrink: 0;
+}
+.st2-ctrl-filter-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.05);
+    color: var(--text-secondary);
+    user-select: none;
+    transition: background 0.15s, border-color 0.15s;
+}
+.st2-ctrl-filter-tag:hover {
+    background: rgba(255,255,255,0.1);
+}
+.st2-ctrl-filter-tag.active {
+    background: rgba(99,102,241,0.2);
+    border-color: rgba(99,102,241,0.5);
+    color: var(--accent-bright);
+}
+/* (st2-ctrl-toolbar removed — replaced by dynamic st2-props-panel) */
+.st2-ctrl-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* ── MOGRT Property Controls ── */
+.st-props-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.st-props-row select {
+    font-size: 9px;
+    padding: 2px 4px;
+    background: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 3px;
+    cursor: pointer;
+    max-width: 90px;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.st-props-row select:hover {
+    border-color: rgba(255,255,255,0.25);
+}
+.st-props-row select option,
+.st2-bulk-toolbar select option {
+    background: #2a2a2a;
+    color: #e0e0e0;
+}
+.st2-prop-toggle {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 9px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+.st2-prop-toggle input[type="checkbox"] {
+    width: 12px;
+    height: 12px;
+    margin: 0;
+    cursor: pointer;
+}
+
+/* ── Bulk Toolbar ── */
+.st2-bulk-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: rgba(99,102,241,0.1);
+    border: 1px solid rgba(99,102,241,0.25);
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+}
+.st2-bulk-toolbar.hidden { display: none; }
+.st2-bulk-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent-bright);
+}
+.st2-bulk-toolbar select {
+    font-size: 9px;
+    padding: 2px 4px;
+    background: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 3px;
+    cursor: pointer;
+}
+.st2-bulk-toolbar .st2-prop-toggle {
+    font-size: 10px;
 }
 
