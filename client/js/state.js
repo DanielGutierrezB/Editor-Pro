@@ -16,7 +16,7 @@
         clipResults: {},
         supertexts2: [],
         supertexts2Inserted: false,
-        mogrtPaths: { title: "", bullet: "", step: "", definition: "", data: "", summary: "", highlight: "" },
+        mogrtPaths: { title: "", bullet: "", step: "", definition: "", data: "", summary: "", highlight: "", question: "" },
         mogrtTrackIndex: "auto",
         es2Highlights: [],
         es2Suggestions: [],

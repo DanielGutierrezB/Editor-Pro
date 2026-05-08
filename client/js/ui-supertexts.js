@@ -156,6 +156,14 @@
     // Motion Pro: ligero adelanto respecto al audio (demasiado = el gráfico “va por delante” del profesor).
     var MP_ANTICIPATION_SECS = 0.35;
 
+    // Sanitize CSInterface paths (Windows returns file:///C:/... which breaks fs/path)
+    function _sanitizeExtPath(raw) {
+        if (!raw) return raw;
+        raw = raw.replace(/^file:\/{0,3}/, "");
+        try { raw = decodeURIComponent(raw); } catch(_) {}
+        return raw;
+    }
+
     function loadMOGRTConfig() {
         try {
             var saved = localStorage.getItem("edupro_mogrt_paths");
@@ -165,7 +173,7 @@
 
         // Auto-detect bundled MOGRTs if not already configured
         try {
-            var extPath = csInterface.getSystemPath("extension");
+            var extPath = _sanitizeExtPath(csInterface.getSystemPath("extension"));
             if (extPath && path && fs) {
                 var mogrtDir = path.join(extPath, "mogrts");
                 if (fs.existsSync(mogrtDir)) {
@@ -276,7 +284,7 @@
 
     function loadDefaultMOGRTs() {
         try {
-            var extPath = csInterface.getSystemPath("extension");
+            var extPath = _sanitizeExtPath(csInterface.getSystemPath("extension"));
             if (!extPath || !fs || !path) {
                 showToast("No se pudo detectar la ruta de la extensión", "error");
                 return;
@@ -2511,7 +2519,7 @@
         if (_st2MogrtSchemas && Object.keys(_st2MogrtSchemas).length > 0 && !forceReload) return; // already loaded
         _st2MogrtSchemas = null;
         try {
-            var extPath = csInterface.getSystemPath(SystemPath.EXTENSION) || csInterface.getSystemPath('extension');
+            var extPath = _sanitizeExtPath(csInterface.getSystemPath(SystemPath.EXTENSION) || csInterface.getSystemPath('extension'));
             var schemaPath = path.join(extPath, 'mogrts', 'schemas.json');
             console.log('[MOGRT] Looking for schemas at: ' + schemaPath);
             if (fs.existsSync(schemaPath)) {

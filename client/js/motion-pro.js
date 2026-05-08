@@ -244,6 +244,10 @@
                 var csi = _getCSInterface();
                 if (csi) {
                     extensionPath = csi.getSystemPath("extension");
+                    if (extensionPath) {
+                        extensionPath = extensionPath.replace(/^file:\/{0,3}/, "");
+                        try { extensionPath = decodeURIComponent(extensionPath); } catch(_) {}
+                    }
                 } else if (pathMod) {
                     extensionPath = pathMod.resolve(__dirname, "..");
                 }

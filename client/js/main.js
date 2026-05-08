@@ -23,6 +23,15 @@
     // State is defined in state.js and exposed as window._epState before this script loads.
     var state = window._epState;
 
+    // ─── Sanitize CSInterface paths (Windows returns file:///C:/...) ────
+    function _sanitizeExtPath(raw) {
+        if (!raw) return raw;
+        raw = raw.replace(/^file:\/{0,3}/, "");
+        try { raw = decodeURIComponent(raw); } catch(_) {}
+        return raw;
+    }
+    window._epSanitizeExtPath = _sanitizeExtPath;
+
     // ─── Expose static globals for UI modules ────────────────────
     window._epFs = fs;
     window._epPath = path;
@@ -53,7 +62,7 @@
     // ─── Init ────────────────────────────────────────────────────
     function init() {
         if (window.EPLogger) EPLogger.log("main", "init-start", "Editor-Pro initializing");
-        var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+        var extensionPath = _sanitizeExtPath(csInterface.getSystemPath(SystemPath.EXTENSION));
 
         // Re-evaluar host/index.jsx para cargar funciones nuevas sin cerrar el panel
         var hostPath = extensionPath + "/host/index.jsx";
@@ -672,14 +681,8 @@
 
     function _showVersion() {
         try {
-            var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
-            if (!extensionPath) extensionPath = csInterface.getSystemPath("extension");
-            if (extensionPath) {
-                // Strip file:/// prefix if present (Windows CSInterface quirk)
-                extensionPath = extensionPath.replace(/^file:\/{0,3}/, "");
-                // Decode URI components (%20 → space)
-                try { extensionPath = decodeURIComponent(extensionPath); } catch(_) {}
-            }
+            var extensionPath = _sanitizeExtPath(csInterface.getSystemPath(SystemPath.EXTENSION));
+            if (!extensionPath) extensionPath = _sanitizeExtPath(csInterface.getSystemPath("extension"));
             var versionFile = path.join(extensionPath, "VERSION");
             if (fs.existsSync(versionFile)) {
                 var ver = fs.readFileSync(versionFile, "utf8").trim();

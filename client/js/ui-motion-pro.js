@@ -521,7 +521,7 @@
 
         // On init, restart server to ensure clean state
         if (motionPro) {
-            var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+            var extensionPath = (window._epSanitizeExtPath || function(x){return x;})(csInterface.getSystemPath(SystemPath.EXTENSION));
             motionPro.stopServer(function() {
                 mpUpdateServerUI();
                 _mpStartServerWithRetry(extensionPath, 0);
@@ -940,7 +940,7 @@
             if (window.EPLogger) EPLogger.log("motion-pro", "server-start", "");
             // Kill any stale server process first
             motionPro.stopServer();
-            var extensionPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+            var extensionPath = (window._epSanitizeExtPath || function(x){return x;})(csInterface.getSystemPath(SystemPath.EXTENSION));
             var btn = document.getElementById("btn-mp-server-toggle");
             if (btn) { btn.textContent = "Iniciando..."; btn.disabled = true; }
 
@@ -1168,7 +1168,7 @@
     }
 
     function mpResetGenPrompts() {
-        var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
+        var extRoot = (window._epSanitizeExtPath || function(x){return x;})(csInterface.getSystemPath(SystemPath.EXTENSION));
         var originals = [
             { central: "system.md", local: "SYSTEM_PROMPT.md" },
             { central: "style-guide.md", local: "STYLE_GUIDE.md" },
@@ -1958,7 +1958,7 @@
                     // Still down — restart and auto-continue
                     showToast("Servidor no disponible — reiniciando...", "error");
                     if (window.EPLogger) EPLogger.error("motion-pro", "generate-server-down", "server not responding after retry, restarting");
-                    var ext = csInterface.getSystemPath(SystemPath.EXTENSION);
+                    var ext = (window._epSanitizeExtPath || function(x){return x;})(csInterface.getSystemPath(SystemPath.EXTENSION));
                     motionPro.stopServer();
                     motionPro.startServer(ext, function(err) {
                         mpUpdateServerUI();
