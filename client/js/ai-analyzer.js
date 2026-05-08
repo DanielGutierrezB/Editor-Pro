@@ -147,6 +147,7 @@
         try {
             // Resolve from extension root: Prompts/{path}
             var extRoot = (typeof CSInterface !== "undefined") ? new CSInterface().getSystemPath(SystemPath.EXTENSION) : "";
+            if (extRoot) { extRoot = extRoot.replace(/^file:\/{0,3}/, ""); try { extRoot = decodeURIComponent(extRoot); } catch(_) {} }
             if (!extRoot) return fallback;
             var filePath = _promptsPath.join(extRoot, "Prompts", relativePath);
             if (_promptsFs.existsSync(filePath)) {

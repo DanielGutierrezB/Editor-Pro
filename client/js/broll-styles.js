@@ -147,7 +147,7 @@
         try {
             var csInterface = window._epCSInterface;
             if (!csInterface) return;
-            var extPath = csInterface.getSystemPath("extension");
+            var extPath = (window._epSanitizeExtPath || function(x){return x;})(csInterface.getSystemPath("extension"));
             var promptPath = require("path").join(extPath, "Prompts", "BRoll", "analysis.md");
             if (require("fs").existsSync(promptPath)) {
                 BROLL_SYSTEM_PROMPT = require("fs").readFileSync(promptPath, "utf8");

@@ -95,14 +95,14 @@
     // ═══════════════════════════════════════════════════════════════
 
     function startEditSuggestions2() {
-        if (state.analyzing) return;
+        if (state.es2Analyzing) return;
         if (!state.transcript || state.transcript.trim().length === 0) {
             showToast("Carga una transcripción primero", "error");
             return;
         }
         if (!checkAIReady()) return;
 
-        state.analyzing = true;
+        state.es2Analyzing = true;
         expandSection("editsuggestions2");
 
         hideElement("es2-results");
@@ -141,7 +141,7 @@
                     var total = state.es2Highlights.length + state.es2Suggestions.length + state.es2Errors.length;
                     showToast(total + " observaciones encontradas", "success");
                 } finally {
-                    state.analyzing = false;
+                    state.es2Analyzing = false;
                 }
             }, 500);
         });
@@ -593,14 +593,14 @@
     // ═══════════════════════════════════════════════════════════════
 
     function startReelProposal() {
-        if (state.analyzing) return;
+        if (state.es2Analyzing) return;
         if (!state.transcript || state.transcript.trim().length === 0) {
             showToast("Carga una transcripción primero", "error");
             return;
         }
         if (!checkAIReady()) return;
 
-        state.analyzing = true;
+        state.es2Analyzing = true;
         expandSection("reelproposal");
 
         hideElement("rp-results");
@@ -633,7 +633,7 @@
                     var count = state.reelProposals.length;
                     showToast(count > 0 ? count + " propuesta(s) de reel" : "Sin reels viables", count > 0 ? "success" : "info");
                 } finally {
-                    state.analyzing = false;
+                    state.es2Analyzing = false;
                 }
             }, 500);
         });

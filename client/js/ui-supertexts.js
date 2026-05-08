@@ -156,6 +156,14 @@
     // Motion Pro: ligero adelanto respecto al audio (demasiado = el gráfico “va por delante” del profesor).
     var MP_ANTICIPATION_SECS = 0.35;
 
+    // Sanitize CSInterface paths (Windows returns file:///C:/... which breaks fs/path)
+    function _sanitizeExtPath(raw) {
+        if (!raw) return raw;
+        raw = raw.replace(/^file:\/{0,3}/, "");
+        try { raw = decodeURIComponent(raw); } catch(_) {}
+        return raw;
+    }
+
     function loadMOGRTConfig() {
         try {
             var saved = localStorage.getItem("edupro_mogrt_paths");
@@ -165,7 +173,7 @@
 
         // Auto-detect bundled MOGRTs if not already configured
         try {
-            var extPath = csInterface.getSystemPath("extension");
+            var extPath = _sanitizeExtPath(csInterface.getSystemPath("extension"));
             if (extPath && path && fs) {
                 var mogrtDir = path.join(extPath, "mogrts");
                 if (fs.existsSync(mogrtDir)) {
@@ -276,7 +284,7 @@
 
     function loadDefaultMOGRTs() {
         try {
-            var extPath = csInterface.getSystemPath("extension");
+            var extPath = _sanitizeExtPath(csInterface.getSystemPath("extension"));
             if (!extPath || !fs || !path) {
                 showToast("No se pudo detectar la ruta de la extensión", "error");
                 return;
@@ -1223,11 +1231,11 @@
     // ═══════════════════════════════════════════════════════════════
 
     function startSupertexts2() {
-        if (state.analyzing) return;
+        if (state.st2Analyzing) return;
         if (!checkAIReady()) return;
 
         if (window.EPLogger) EPLogger.log("supertexts", "analysis-start", "transcriptLen=" + (state.transcript ? state.transcript.length : 0));
-        state.analyzing = true;
+        state.st2Analyzing = true;
         expandSection("supertexts2");
         hideElement("st2-results");
         hideElement("st2-empty");
@@ -1265,13 +1273,13 @@
                     return;
                 }
 
-                state.analyzing = false;
+                state.st2Analyzing = false;
                 hideElement("st2-progress"); hideElement("st2-progress-header");
                 enableBtn("btn-supertexts2");
                 showElement("st2-empty");
                 showToast("No se encontraron subtítulos. Carga un SRT en la sección Transcripción", "info");
             } catch(e) {
-                state.analyzing = false;
+                state.st2Analyzing = false;
                 hideElement("st2-progress"); hideElement("st2-progress-header");
                 enableBtn("btn-supertexts2");
                 showToast("Error: " + e.message, "error");
@@ -1320,7 +1328,7 @@
                         setTimeout(function() { if (typeof _st2ResizeOpenStep === 'function') _st2ResizeOpenStep(); }, 100);
                         showToast(state.supertexts2.length + " supertextos detectados", "success");
                     } finally {
-                        state.analyzing = false;
+                        state.st2Analyzing = false;
                     }
                 }, 500);
             });
@@ -2228,7 +2236,6 @@
 
         csInterface.evalScript('insertSupertextMOGRTs("' + escExtend(safePath) + '")', function(res) {
             hideElement("st2-progress"); hideElement("st2-progress-header");
-            hideElement("st2-progress-header");
             enableBtn("btn-st2-create-graphics");
             try {
                 var data = JSON.parse(res);
@@ -2511,7 +2518,7 @@
         if (_st2MogrtSchemas && Object.keys(_st2MogrtSchemas).length > 0 && !forceReload) return; // already loaded
         _st2MogrtSchemas = null;
         try {
-            var extPath = csInterface.getSystemPath(SystemPath.EXTENSION) || csInterface.getSystemPath('extension');
+            var extPath = _sanitizeExtPath(csInterface.getSystemPath(SystemPath.EXTENSION) || csInterface.getSystemPath('extension'));
             var schemaPath = path.join(extPath, 'mogrts', 'schemas.json');
             console.log('[MOGRT] Looking for schemas at: ' + schemaPath);
             if (fs.existsSync(schemaPath)) {
@@ -3027,8 +3034,8 @@
             } else if (ctrl.classList.contains('st2-toggle')) {
                 // Checkbox toggle
                 props[propName] = ctrl.dataset.value === 'true';
-            } else if (ctrl.type === 'number') {
-                // Number (slider or dropdown index)
+            } else if (ctrl.type === 'number' || ctrl.type === 'range') {
+                // Number input or range slider
                 props[propName] = parseFloat(ctrl.value);
             } else if (ctrl.tagName === 'SELECT') {
                 if (!ctrl.value) return; // "Sin cambio" selected
