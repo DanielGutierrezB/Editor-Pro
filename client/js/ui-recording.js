@@ -2124,12 +2124,14 @@
             return;
         }
         exec("ffmpeg -version", function(err) {
-            if (err) {
+            if (!err) { callback("ffmpeg"); return; }
+            // macOS homebrew fallback
+            if (process && process.platform !== 'win32') {
                 exec("/opt/homebrew/bin/ffmpeg -version", function(err2) {
                     callback(err2 ? null : "/opt/homebrew/bin/ffmpeg");
                 });
             } else {
-                callback("ffmpeg");
+                callback(null);
             }
         });
     }

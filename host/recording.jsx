@@ -70,7 +70,7 @@ function getTranscribeFolder() {
 // ─── Audio Export Preset ──────────────────────────────────────
 
 function findOrCreateAudioPreset() {
-    var cachedPreset = "/tmp/EditorPro_wav_preset.epr";
+    var cachedPreset = Folder.temp.fsName + "/EditorPro_wav_preset.epr";
     var cached = new File(cachedPreset);
     if (cached.exists) {
         return JSON.stringify({ success: true, path: cachedPreset, cached: true });
@@ -123,7 +123,7 @@ function exportSequenceAudio(presetPath) {
         if (!seq) return JSON.stringify({ error: "No hay secuencia activa." });
 
         var projPath = app.project.path;
-        var outputDir = "/tmp";
+        var outputDir = Folder.temp.fsName;
         var projDir = "";
 
         if (projPath && projPath !== "") {

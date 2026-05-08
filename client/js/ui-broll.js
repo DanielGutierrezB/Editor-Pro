@@ -100,7 +100,10 @@
         }
 
         try {
-            require("child_process").exec("ffmpeg -version 2>/dev/null || /opt/homebrew/bin/ffmpeg -version 2>/dev/null", { timeout: 3000 }, function(err) {
+            var _ffmpegCheck = (process && process.platform === 'win32')
+                ? 'ffmpeg -version 2>NUL'
+                : 'ffmpeg -version 2>/dev/null || /opt/homebrew/bin/ffmpeg -version 2>/dev/null';
+            require("child_process").exec(_ffmpegCheck, { timeout: 3000 }, function(err) {
                 _setDotStatus("br-dep-ffmpeg-dot", "br-dep-ffmpeg-text", !err, !err ? "ffmpeg ✓" : "ffmpeg — no instalado");
             });
         } catch(e) {

@@ -326,7 +326,7 @@
 
     function writeAndPlaceMarkers(markers, callback) {
         if (!fs) { callback(false); return; }
-        var tmpPath = require("os").tmpdir() + "/editorpro_sc_markers.json";
+        var tmpPath = require("path").join(require("os").tmpdir(), "editorpro_sc_markers.json");
         try {
             fs.writeFileSync(tmpPath, JSON.stringify(markers, null, 2), "utf8");
             csInterface.evalScript('addMarkersFromFile("' + escExtend(tmpPath) + '")', function(res) {

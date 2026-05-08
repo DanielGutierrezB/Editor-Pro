@@ -421,6 +421,13 @@
         }
         candidates.push("/opt/homebrew/bin/whisper-cli");
         candidates.push("/usr/local/bin/whisper-cli");
+        // Windows common locations
+        if (process && process.env && process.env.LOCALAPPDATA) {
+            candidates.push(process.env.LOCALAPPDATA + "\\whisper-cli\\whisper-cli.exe");
+        }
+        if (process && process.env && process.env.ProgramFiles) {
+            candidates.push(process.env.ProgramFiles + "\\whisper-cli\\whisper-cli.exe");
+        }
 
         for (var i = 0; i < candidates.length; i++) {
             try { if (fs.existsSync(candidates[i])) return { binary: candidates[i] }; } catch(e) {}
@@ -428,8 +435,14 @@
 
         if (childProcess) {
             try {
-                var found = childProcess.execSync("which whisper-cli 2>/dev/null", { encoding: "utf8" }).trim();
-                if (found) return { binary: found };
+                // Use 'which' on Mac/Linux, 'where' on Windows
+                var whichCmd = (process && process.platform === 'win32') ? 'where whisper-cli 2>NUL' : 'which whisper-cli 2>/dev/null';
+                var found = childProcess.execSync(whichCmd, { encoding: "utf8" }).trim();
+                if (found) {
+                    // 'where' on Windows may return multiple lines
+                    found = found.split(/\r?\n/)[0];
+                    return { binary: found };
+                }
             } catch(e) {}
         }
 
@@ -492,7 +505,7 @@
         // copy the file to /tmp/ which is universally accessible
         if (filePath.indexOf("TemporaryItems") !== -1 || filePath.indexOf("/private/var/folders") !== -1) {
             var baseName = filePath.replace(/\\/g, "/").split("/").pop();
-            var safePath = "/tmp/CDEduPro_" + baseName;
+            var safePath = path ? path.join((os ? os.tmpdir() : '/tmp'), 'CDEduPro_' + baseName) : ('/tmp/CDEduPro_' + baseName);
             try {
                 fs.copyFileSync(filePath, safePath);
                 return safePath;
@@ -918,7 +931,7 @@
 
         try {
             var srtContent = this.generateSRT(result, wordsPerLine || 8);
-            var srtPath = outputFolder + "/" + safeName + ".srt";
+            var srtPath = path ? path.join(outputFolder, safeName + ".srt") : (outputFolder + "/" + safeName + ".srt");
             fs.writeFileSync(srtPath, srtContent, "utf8");
             paths.path = srtPath;
         } catch(e) {

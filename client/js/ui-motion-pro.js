@@ -2634,7 +2634,7 @@
 
     function _writeTempJson(data, prefix) {
         try {
-            var tmpDir = os ? os.tmpdir() : "/tmp";
+            var tmpDir = os ? os.tmpdir() : (process && process.platform === 'win32' ? (process.env.TEMP || 'C:\\Temp') : '/tmp');
             var filePath = path.join(tmpDir, (prefix || "mp") + "_" + Date.now() + ".json");
             fs.writeFileSync(filePath, JSON.stringify(data), "utf8");
             return filePath;

@@ -330,14 +330,21 @@
             motionPro.startStudio(function(err, result) {
                 if (err) console.warn("[Motion-Pro] Studio error:", err.message);
                 var url = (result && result.url) || "http://localhost:3000";
-                try { require("child_process").exec('open "' + url + '"'); } catch(e) {}
+                try {
+                    var _openCmd = (process && process.platform === 'win32') ? 'start "" "' + url + '"' : 'open "' + url + '"';
+                    require("child_process").exec(_openCmd);
+                } catch(e) {}
                 var mpUI = window.EditorProUI && window.EditorProUI.motionPro;
                 var _mpSessionName = (mpUI && mpUI.getSessionName) ? mpUI.getSessionName() : "global";
                 showToast("Abriendo Remotion Studio (sesión: " + _mpSessionName + ")", "info");
             }, (window.EditorProUI && window.EditorProUI.motionPro && window.EditorProUI.motionPro.getOutputDir) ? window.EditorProUI.motionPro.getOutputDir() : undefined);
         });
         on("btn-mp-docs", "click", function() {
-            try { require("child_process").exec('open "http://localhost:' + MotionPro.SERVER_PORT + '/docs/docs.html"'); } catch(e) {}
+            try {
+                var _docsUrl = 'http://localhost:' + MotionPro.SERVER_PORT + '/docs/docs.html';
+                var _openDocsCmd = (process && process.platform === 'win32') ? 'start "" "' + _docsUrl + '"' : 'open "' + _docsUrl + '"';
+                require("child_process").exec(_openDocsCmd);
+            } catch(e) {}
         });
         on("btn-mp-server-toggle", "click", mpToggleServer);
         on("btn-mp-brandfetch-save", "click", mpSaveBrandfetchKey);
