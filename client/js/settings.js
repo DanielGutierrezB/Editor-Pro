@@ -15,6 +15,9 @@
         var provider = localStorage.getItem("pr_provider") || "ollama";
         var model = localStorage.getItem("pr_model") || "";
 
+        // Validate provider exists, fall back to ollama if corrupted
+        if (!AIAnalyzer.PROVIDERS[provider]) provider = "ollama";
+
         state.settings.aiProvider = provider;
         aiAnalyzer.setProvider(provider);
 
@@ -35,6 +38,8 @@
 
         // STT settings
         var sttProv = localStorage.getItem("edupro_stt_provider") || "elevenlabs";
+        // Validate STT provider exists, fall back to elevenlabs if corrupted
+        if (!SpeechToText.PROVIDERS[sttProv]) sttProv = "elevenlabs";
         state.settings.sttProvider = sttProv;
         stt.setProvider(sttProv);
 
@@ -55,6 +60,7 @@
 
         var prov = state.settings.aiProvider;
         var info = AIAnalyzer.PROVIDERS[prov];
+        if (!info) { prov = "ollama"; info = AIAnalyzer.PROVIDERS[prov]; state.settings.aiProvider = prov; }
         var isOllama = prov === "ollama";
 
         var provSelect = document.getElementById("ai-provider-select");
@@ -166,6 +172,7 @@
         var el = document.getElementById("ai-status");
         if (!el) return;
         var info = AIAnalyzer.PROVIDERS[state.settings.aiProvider];
+        if (!info) { state.settings.aiProvider = "ollama"; info = AIAnalyzer.PROVIDERS["ollama"]; }
         var isOllama = state.settings.aiProvider === "ollama";
 
         var sttOk = stt && stt.isConfigured();

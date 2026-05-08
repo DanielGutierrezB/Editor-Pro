@@ -1231,11 +1231,11 @@
     // ═══════════════════════════════════════════════════════════════
 
     function startSupertexts2() {
-        if (state.analyzing) return;
+        if (state.st2Analyzing) return;
         if (!checkAIReady()) return;
 
         if (window.EPLogger) EPLogger.log("supertexts", "analysis-start", "transcriptLen=" + (state.transcript ? state.transcript.length : 0));
-        state.analyzing = true;
+        state.st2Analyzing = true;
         expandSection("supertexts2");
         hideElement("st2-results");
         hideElement("st2-empty");
@@ -1273,13 +1273,13 @@
                     return;
                 }
 
-                state.analyzing = false;
+                state.st2Analyzing = false;
                 hideElement("st2-progress"); hideElement("st2-progress-header");
                 enableBtn("btn-supertexts2");
                 showElement("st2-empty");
                 showToast("No se encontraron subtítulos. Carga un SRT en la sección Transcripción", "info");
             } catch(e) {
-                state.analyzing = false;
+                state.st2Analyzing = false;
                 hideElement("st2-progress"); hideElement("st2-progress-header");
                 enableBtn("btn-supertexts2");
                 showToast("Error: " + e.message, "error");
@@ -1328,7 +1328,7 @@
                         setTimeout(function() { if (typeof _st2ResizeOpenStep === 'function') _st2ResizeOpenStep(); }, 100);
                         showToast(state.supertexts2.length + " supertextos detectados", "success");
                     } finally {
-                        state.analyzing = false;
+                        state.st2Analyzing = false;
                     }
                 }, 500);
             });
@@ -2236,7 +2236,6 @@
 
         csInterface.evalScript('insertSupertextMOGRTs("' + escExtend(safePath) + '")', function(res) {
             hideElement("st2-progress"); hideElement("st2-progress-header");
-            hideElement("st2-progress-header");
             enableBtn("btn-st2-create-graphics");
             try {
                 var data = JSON.parse(res);
@@ -3035,8 +3034,8 @@
             } else if (ctrl.classList.contains('st2-toggle')) {
                 // Checkbox toggle
                 props[propName] = ctrl.dataset.value === 'true';
-            } else if (ctrl.type === 'number') {
-                // Number (slider or dropdown index)
+            } else if (ctrl.type === 'number' || ctrl.type === 'range') {
+                // Number input or range slider
                 props[propName] = parseFloat(ctrl.value);
             } else if (ctrl.tagName === 'SELECT') {
                 if (!ctrl.value) return; // "Sin cambio" selected

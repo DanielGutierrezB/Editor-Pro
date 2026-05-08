@@ -698,11 +698,13 @@
     setTimeout(_checkForUpdates, 5000);
 
     function _cleanupBeforeReload(callback) {
+        var _called = false;
+        function _once() { if (_called) return; _called = true; callback(); }
         try {
             if (window._epMotionPro && typeof window._epMotionPro.stopServer === "function") {
                 console.log("[Editor-Pro] Stopping motion-server before reload...");
-                window._epMotionPro.stopServer(function() { callback(); });
-                setTimeout(callback, 2000);
+                window._epMotionPro.stopServer(_once);
+                setTimeout(_once, 2000);
                 return;
             }
         } catch(_e) {}

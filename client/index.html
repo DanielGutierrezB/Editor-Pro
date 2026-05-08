@@ -1069,6 +1069,32 @@
                     <button id="btn-mp-docs" class="btn btn-sm btn-ghost" title="Abrir documentación de Motion-Pro">📖 Docs</button>
                     <button id="btn-mp-server-toggle" class="btn btn-sm btn-ghost">Iniciar</button>
                 </div>
+                <!-- Brandfetch Logo API -->
+                <div class="mp-brandfetch-row" style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:10px;">
+                    <span id="mp-brandfetch-dot" class="mp-server-dot mp-dot-off" style="width:6px;height:6px;"></span>
+                    <span id="mp-brandfetch-text" style="color:var(--text-muted);">Sin configurar</span>
+                    <input id="mp-brandfetch-key" type="password" class="input-field" placeholder="Brandfetch API Key" style="flex:1;font-size:9px;padding:2px 4px;max-width:160px;">
+                    <button id="btn-mp-brandfetch-save" class="btn btn-sm btn-ghost" style="font-size:9px;padding:1px 4px;">Guardar</button>
+                </div>
+                <!-- Generation Prompts -->
+                <div style="margin-top:4px;">
+                    <button id="mp-gen-prompts-toggle" class="btn btn-sm btn-ghost" style="font-size:10px;width:100%;"><span id="mp-gen-prompts-icon">▸</span> Prompts de Generación</button>
+                    <div id="mp-gen-prompts-body" class="hidden" style="padding:4px 0;">
+                        <div style="font-size:9px;color:var(--text-muted);margin-bottom:4px;">Personaliza los prompts usados para generar motion graphics:</div>
+                        <label style="font-size:9px;color:var(--text-muted);">System</label>
+                        <textarea id="mp-gp-system" class="input-field" rows="3" style="font-size:9px;width:100%;margin-bottom:4px;"></textarea>
+                        <label style="font-size:9px;color:var(--text-muted);">Style Guide</label>
+                        <textarea id="mp-gp-style" class="input-field" rows="3" style="font-size:9px;width:100%;margin-bottom:4px;"></textarea>
+                        <label style="font-size:9px;color:var(--text-muted);">Design Fundamentals</label>
+                        <textarea id="mp-gp-design" class="input-field" rows="3" style="font-size:9px;width:100%;margin-bottom:4px;"></textarea>
+                        <label style="font-size:9px;color:var(--text-muted);">Motion Types</label>
+                        <textarea id="mp-gp-types" class="input-field" rows="3" style="font-size:9px;width:100%;margin-bottom:4px;"></textarea>
+                        <div style="display:flex;gap:4px;">
+                            <button id="btn-mp-gp-save" class="btn btn-sm btn-success" style="font-size:9px;">💾 Guardar</button>
+                            <button id="btn-mp-gp-reset" class="btn btn-sm btn-ghost" style="font-size:9px;">↩ Restaurar</button>
+                        </div>
+                    </div>
+                </div>
                 <!-- Session indicator -->
                 <div id="mp-session-info" class="mp-session-info">
                     <span class="mp-session-label">Secuencia:</span>

@@ -48,6 +48,7 @@
     global.hideInfoModal = hideInfoModal;
     global.showTranscriptExportInstructions = showTranscriptExportInstructions;
     global._epShowInfoModal = showInfoModal;
+    global._epHideInfoModal = hideInfoModal;
     global._epShowTranscriptExportInstructions = showTranscriptExportInstructions;
 
 })(window);

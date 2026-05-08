@@ -84,10 +84,10 @@
     }
 
     function startSpellCheck() {
-        if (state.analyzing) return;
+        if (state.spellChecking) return;
         if (!checkAIReady()) return;
 
-        state.analyzing = true;
+        state.spellChecking = true;
         state.clipResults = {};
         expandSection("spellcheck");
         if (window.EPLogger) EPLogger.log("spellcheck", "start", "wordCount=" + (state.textClips ? state.textClips.length : 0));
@@ -131,7 +131,7 @@
             } finally {
                 // Ensure analyzing is reset even on unexpected errors
                 if (!state.textClips || state.textClips.length === 0) {
-                    state.analyzing = false;
+                    state.spellChecking = false;
                 }
             }
         });
@@ -187,7 +187,7 @@
     }
 
     function finishSpellCheck() {
-        state.analyzing = false;
+        state.spellChecking = false;
         hideElement("sc-progress");
         enableBtn("btn-spellcheck");
         refreshSequenceInfo();

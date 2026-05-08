@@ -1245,7 +1245,7 @@
     }
 
     function startTakeAnalysis() {
-        if (state.analyzing) {
+        if (state.recAnalyzing) {
             cancelTakeAnalysis();
             return;
         }
@@ -1257,7 +1257,7 @@
 
         if (window.EPLogger) EPLogger.log("recording", "take-analysis-start", (recorder.words ? recorder.words.length : 0) + " words");
         recStepStart(4);
-        state.analyzing = true;
+        state.recAnalyzing = true;
         state.supplementaryPairs = [];
         setAnalyzeButtonMode("cancel");
         showElement("take-progress");
@@ -1271,7 +1271,7 @@
 
             setTimeout(function() {
                 hideElement("take-progress");
-                state.analyzing = false;
+                state.recAnalyzing = false;
                 setAnalyzeButtonMode("analyze");
 
                 if (result.error) {
@@ -1319,7 +1319,7 @@
 
     function cancelTakeAnalysis() {
         aiAnalyzer.abort();
-        state.analyzing = false;
+        state.recAnalyzing = false;
         hideElement("take-progress");
         setAnalyzeButtonMode("analyze");
         showToast("Análisis detenido", "info");

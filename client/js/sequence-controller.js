@@ -321,6 +321,10 @@
         state.es2Errors = [];
         state.reelProposals = [];
         state.analyzing = false;
+        state.st2Analyzing = false;
+        state.es2Analyzing = false;
+        state.recAnalyzing = false;
+        state.spellChecking = false;
         state.mpGenerating = false;
         restoreUIFromState(null);
     }
