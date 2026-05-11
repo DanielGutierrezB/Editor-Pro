@@ -1,11 +1,78 @@
-# Editor-Pro — Guía Completa de Instalación
+# Editor-Pro — Guía de Instalación
+
+Hay dos formas de instalar Editor-Pro:
+
+- **🚀 Instalación rápida (ZXP)** — Descarga un archivo, instálalo, listo. Recomendado.
+- **🔧 Instalación para desarrollo (Git)** — Clona el repo, instala dependencias. Para quienes van a modificar el código.
+
+---
+
+## 🚀 Instalación Rápida (ZXP)
+
+### 1. Descargar el ZXP
+
+Descarga la última versión desde GitHub Releases:
+
+👉 **[Descargar EditorPro.zxp](https://github.com/DanielGutierrezB/Editor-Pro/releases/latest)**
+
+Click en **EditorPro.zxp** en la sección "Assets" para descargar el archivo.
+
+### 2. Instalar ZXP Installer
+
+Necesitas una herramienta para instalar archivos `.zxp`. Descarga **ZXP Installer**:
+
+👉 **[Descargar ZXP Installer](https://aescripts.com/learn/zxp-installer/)**
+
+> También puedes usar [Anastasiy's Extension Manager](https://install.anastasiy.com/) como alternativa.
+
+### 3. Instalar la extensión
+
+1. Abre **ZXP Installer**
+2. Arrastra el archivo **EditorPro.zxp** sobre la ventana de ZXP Installer
+3. Espera a que diga "Installation Complete"
+
+### 4. Habilitar extensiones en Premiere Pro
+
+Premiere Pro bloquea extensiones externas por defecto. Hay que habilitarlas:
+
+**En Mac** — Abre Terminal y ejecuta:
+```bash
+defaults write com.adobe.CSXS.9 PlayerDebugMode 1
+defaults write com.adobe.CSXS.10 PlayerDebugMode 1
+defaults write com.adobe.CSXS.11 PlayerDebugMode 1
+defaults write com.adobe.CSXS.12 PlayerDebugMode 1
+```
+
+**En Windows** — Abre `regedit` y en cada una de estas rutas:
+- `HKEY_CURRENT_USER\SOFTWARE\Adobe\CSXS.9`
+- `HKEY_CURRENT_USER\SOFTWARE\Adobe\CSXS.10`
+- `HKEY_CURRENT_USER\SOFTWARE\Adobe\CSXS.11`
+- `HKEY_CURRENT_USER\SOFTWARE\Adobe\CSXS.12`
+
+Crea un **String Value** llamado `PlayerDebugMode` con valor `1`.
+
+### 5. Abrir en Premiere Pro
+
+1. **Cierra Premiere Pro** si estaba abierto
+2. Ábrelo de nuevo
+3. Ve a **Ventana → Extensiones → Editor-Pro**
+4. ¡Listo! 🎉
+
+### Actualizar (ZXP)
+
+Cuando haya una nueva versión:
+1. Descarga el nuevo `.zxp` desde [Releases](https://github.com/DanielGutierrezB/Editor-Pro/releases/latest)
+2. Instálalo con ZXP Installer (sobrescribe la versión anterior automáticamente)
+3. Reinicia Premiere Pro
+
+---
+
+## 🔧 Instalación para Desarrollo (Git)
 
 > Esta guía asume que NO tienes experiencia con terminal/línea de comandos.
 > Sigue cada paso exactamente como está escrito. Si algo falla, ve a la sección de **Problemas comunes** al final.
 
----
-
-## 📋 Antes de empezar
+### 📋 Antes de empezar
 
 Necesitas instalar 2 programas y crear 1 cuenta:
 
@@ -21,7 +88,7 @@ También necesitas:
 
 ---
 
-## ⚠️ Si tienes una versión anterior (ZXP)
+### ⚠️ Si tienes una versión anterior (ZXP)
 
 Si ya tenías Editor-Pro instalado como ZXP, **desinstálalo primero** para evitar conflictos:
 
@@ -41,7 +108,7 @@ Reinicia Premiere después de desinstalar.
 
 ---
 
-## 🖥️ Paso 1: Instalar Node.js
+### 🖥️ Paso 1: Instalar Node.js
 
 ### En Mac:
 1. Abre Safari y ve a **https://nodejs.org/**
@@ -68,7 +135,7 @@ Debe mostrar algo como `v22.x.x`.
 
 ---
 
-## 🔧 Paso 2: Instalar Git
+### 🔧 Paso 2: Instalar Git
 
 ### En Mac:
 Git usualmente ya viene instalado. Verifica abriendo **Terminal** y escribiendo:
@@ -91,7 +158,7 @@ Debe mostrar algo como `git version 2.x.x`.
 
 ---
 
-## 🔑 Paso 3: Crear cuenta en OpenRouter
+### 🔑 Paso 3: Crear cuenta en OpenRouter
 
 1. Abre **https://openrouter.ai/** en tu navegador
 2. Click en **Sign Up** (esquina superior derecha)
@@ -108,7 +175,7 @@ Debe mostrar algo como `git version 2.x.x`.
 
 ---
 
-## 📥 Paso 4: Descargar Editor-Pro
+### 📥 Paso 4: Descargar Editor-Pro
 
 ### En Mac:
 Abre **Terminal** y escribe estos comandos uno por uno (copia y pega cada línea):
@@ -146,7 +213,7 @@ Espera a que termine de descargar (~30 segundos).
 
 ---
 
-## 📦 Paso 5: Instalar dependencias
+### 📦 Paso 5: Instalar dependencias
 
 ### En Mac:
 ```bash
@@ -184,11 +251,11 @@ npm install
 
 ---
 
-## 🔓 Paso 6: Habilitar extensiones en Premiere Pro
+### 🔓 Paso 6: Habilitar extensiones en Premiere Pro
 
 Premiere Pro bloquea extensiones externas por seguridad. Necesitamos decirle que las permita.
 
-### En Mac:
+#### En Mac:
 Abre **Terminal** y copia/pega TODAS estas líneas (una por una):
 ```bash
 defaults write com.adobe.CSXS.9 PlayerDebugMode 1
@@ -203,7 +270,7 @@ defaults write com.adobe.CSXS.11 PlayerDebugMode 1
 defaults write com.adobe.CSXS.12 PlayerDebugMode 1
 ```
 
-### En Windows:
+#### En Windows:
 1. Presiona **Win + R**, escribe `regedit` y presiona Enter
 2. Navega a: `HKEY_CURRENT_USER\SOFTWARE\Adobe\CSXS.11`
    - Si no existe la carpeta `CSXS.11`, click derecho en `Adobe` → New → Key → nombra `CSXS.11`
@@ -216,7 +283,7 @@ defaults write com.adobe.CSXS.12 PlayerDebugMode 1
 
 ---
 
-## 🔗 Paso 7: Conectar Editor-Pro con Premiere Pro
+### 🔗 Paso 7: Conectar Editor-Pro con Premiere Pro
 
 Premiere Pro busca extensiones en una carpeta específica. Creamos un "acceso directo" (symlink) para que la encuentre.
 
@@ -252,7 +319,7 @@ Debe mostrar `com.codigo.editorpro`.
 
 ---
 
-## 🎬 Paso 8: Abrir Editor-Pro en Premiere
+### 🎬 Paso 8: Abrir Editor-Pro en Premiere
 
 1. **Abre Adobe Premiere Pro** (o reinícialo si estaba abierto)
 2. Abre cualquier proyecto (o crea uno nuevo)
@@ -267,7 +334,7 @@ Debe mostrar `com.codigo.editorpro`.
 
 ---
 
-## ⚙️ Paso 9: Configurar tu API Key
+### ⚙️ Paso 9: Configurar tu API Key
 
 1. En el panel de Editor-Pro (dentro de Premiere), busca el ícono de ⚙️ engranaje (esquina superior derecha)
 2. Click en ⚙️ para abrir la configuración
@@ -281,7 +348,7 @@ Debe mostrar `com.codigo.editorpro`.
 
 ---
 
-## ✅ Paso 10: Verificar que todo funciona
+### ✅ Paso 10: Verificar que todo funciona
 
 1. Asegúrate de tener una **secuencia activa** en Premiere (con al menos un clip de video)
 2. En el panel Editor-Pro, deberías ver el nombre de tu secuencia arriba
