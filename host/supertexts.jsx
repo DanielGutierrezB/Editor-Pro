@@ -743,12 +743,12 @@ function insertSupertextMOGRTs(jsonPath) {
                 // For MOGRTs with Title+Text (definition, data, step, summary):
                 // set Title to type label, Text to supertext content
                 var TYPE_TITLE_LABELS = {
-                    definition: "Definición",
                     data: "Dato",
                     step: "Paso",
                     summary: "Resumen"
                 };
-                var titleLabel = TYPE_TITLE_LABELS[st.type] || null;
+                // Definitions use the term name as title instead of generic "Definición"
+                var titleLabel = (st.type === "definition" && st.term) ? st.term : (TYPE_TITLE_LABELS[st.type] || null);
                 var didSetText = _setMGTText(trackItem, st.text, i, errors, titleLabel);
                 if (didSetText) textSet++;
                 $.sleep(200);
@@ -909,12 +909,12 @@ function replaceMOGRTClip(jsonPath) {
 
         var errors = [];
         var REP_TYPE_LABELS = {
-            definition: "Definición",
             data: "Dato",
             step: "Paso",
             summary: "Resumen"
         };
-        var repTitleLabel = REP_TYPE_LABELS[data.type] || null;
+        // Definitions use the term name as title
+        var repTitleLabel = (data.type === "definition" && data.term) ? data.term : (REP_TYPE_LABELS[data.type] || null);
         _setMGTText(trackItem, data.text, 0, errors, repTitleLabel);
         $.sleep(200);
 
