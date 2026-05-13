@@ -785,27 +785,26 @@
             if (err) { clearTimeout(pipelineTimer); return callback(err); }
             if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
 
-            // Render a preview still — use last frame so all elements are visible
-            var lastFrame2 = Math.max(1, (result.durationFrames || 90) - 1);
-            var previewBody = {
+            // Render full video (MP4) instead of just a preview still
+            var renderBody = {
                 compositionId: result.compositionId,
                 sessionDir: outputDir || "",
-                outputDir: outputDir || "",
-                frame: lastFrame2
+                durationFrames: result.durationFrames || null
             };
+            if (outputDir) renderBody.outputDir = outputDir;
 
-            self._post("/api/render/preview", previewBody, function(enqueueErr, enqueueResult) {
+            self._post("/api/render", renderBody, function(renderErr, renderResponse) {
                 if (timedOut) return;
-                if (enqueueErr) { clearTimeout(pipelineTimer); return callback(enqueueErr); }
-                if (enqueueResult.error) { clearTimeout(pipelineTimer); return callback(new Error(enqueueResult.error)); }
+                if (renderErr) { clearTimeout(pipelineTimer); return callback(renderErr); }
+                if (renderResponse.error) { clearTimeout(pipelineTimer); return callback(new Error(renderResponse.error)); }
 
-                if (!enqueueResult.jobId) {
+                if (!renderResponse.jobId) {
                     clearTimeout(pipelineTimer);
-                    return callback(new Error("Server did not return jobId for feedback preview"));
+                    return callback(new Error("Server did not return jobId for feedback render"));
                 }
 
-                // Poll until preview completes
-                self._pollRenderJob(enqueueResult.jobId, function(pollErr, prevResult) {
+                // Poll until video render completes
+                self._pollRenderJob(renderResponse.jobId, function(pollErr, renderResult) {
                     if (timedOut) return;
                     clearTimeout(pipelineTimer);
                     if (pollErr) return callback(pollErr);
@@ -814,11 +813,10 @@
                         version: newVersion,
                         compositionId: result.compositionId,
                         tsxPath: result.tsxPath,
-                        pngPath: prevResult.pngPath || null,
-                        // NOTE: base64 NOT stored — passed via callback only
-                        mp4Path: null,
-                        mediaDurationSec: null,
-                        status: "preview",
+                        pngPath: null,
+                        mp4Path: renderResult.mp4Path,
+                        mediaDurationSec: typeof renderResult.mediaDurationSec === "number" ? renderResult.mediaDurationSec : null,
+                        status: "rendered",
                         feedback: feedback,
                         createdAt: new Date().toISOString()
                     };
@@ -829,8 +827,7 @@
                     callback(null, {
                         motionId: motionId,
                         version: newVersion,
-                        pngPath: prevResult.pngPath,
-                        preview: prevResult.preview,
+                        mp4Path: renderResult.mp4Path,
                         compositionId: result.compositionId
                     });
                 });
