@@ -2335,8 +2335,13 @@
         try {
             var home = os ? os.homedir() : (process.env.HOME || process.env.USERPROFILE || "");
             var downloadsDir = path ? path.join(home, "Downloads") : home + "/Downloads";
-            var safeName = seqName.replace(/[^a-zA-Z0-9_\-]/g, "_").substring(0, 60);
-            var filename = "supertexts_" + safeName + ".json";
+            var now = new Date();
+            var mm = (now.getMonth() + 1 < 10 ? "0" : "") + (now.getMonth() + 1);
+            var dd = (now.getDate() < 10 ? "0" : "") + now.getDate();
+            var hh = (now.getHours() < 10 ? "0" : "") + now.getHours();
+            var mi = (now.getMinutes() < 10 ? "0" : "") + now.getMinutes();
+            var ss = (now.getSeconds() < 10 ? "0" : "") + now.getSeconds();
+            var filename = "ST_" + mm + dd + "_" + hh + "-" + mi + "-" + ss + ".json";
             var filePath = path ? path.join(downloadsDir, filename) : downloadsDir + "/" + filename;
             fs.writeFileSync(filePath, json, "utf8");
             showToast("Exportado a Descargas: " + filename, "success");
