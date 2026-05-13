@@ -2313,9 +2313,10 @@
 
     function exportSupertexts2JSON() {
         if (state.supertexts2.length === 0) { showToast("Nada que exportar", "info"); return; }
+        var seqName = (state.sequenceInfo && state.sequenceInfo.name) || "supertexts";
         var exportData = {
             exportedAt: new Date().toISOString(),
-            sequence: (state.sequenceInfo && state.sequenceInfo.name) || "unknown",
+            sequence: seqName,
             total: state.supertexts2.length,
             typeCounts: {},
             supertexts: state.supertexts2.map(function(st) {
@@ -2326,13 +2327,24 @@
                 return obj;
             })
         };
-        // Count types
         exportData.supertexts.forEach(function(st) {
             exportData.typeCounts[st.type] = (exportData.typeCounts[st.type] || 0) + 1;
         });
         var json = JSON.stringify(exportData, null, 2);
-        copyToClipboard(json);
-        showToast("JSON copiado (" + exportData.total + " supertextos)", "success");
+        // Save to Downloads folder
+        try {
+            var home = os ? os.homedir() : (process.env.HOME || process.env.USERPROFILE || "");
+            var downloadsDir = path ? path.join(home, "Downloads") : home + "/Downloads";
+            var safeName = seqName.replace(/[^a-zA-Z0-9_\-]/g, "_").substring(0, 60);
+            var filename = "supertexts_" + safeName + ".json";
+            var filePath = path ? path.join(downloadsDir, filename) : downloadsDir + "/" + filename;
+            fs.writeFileSync(filePath, json, "utf8");
+            showToast("Exportado a Descargas: " + filename, "success");
+        } catch(e) {
+            // Fallback: copy to clipboard
+            copyToClipboard(json);
+            showToast("No se pudo guardar archivo, JSON copiado al portapapeles", "info");
+        }
     }
 
 
