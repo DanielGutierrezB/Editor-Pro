@@ -486,10 +486,7 @@
             paletteCategory: self.paletteCategory || null
         };
 
-        // If the proposal has a pre-approved visual description, use free-form generation
-        if (proposal.visualProposal && proposal.visualProposal.description) {
-            body.visualDescription = proposal.visualProposal.description;
-        }
+        // Template-based generation — no visual description needed
 
         // Health check before starting
         self._healthCheckOrRestart(function(healthOk) {

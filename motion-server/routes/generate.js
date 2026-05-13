@@ -3,6 +3,8 @@ const router = express.Router();
 const { sendLLM } = require('../lib/llm');
 const RemotionManager = require('../lib/remotion-manager');
 const { getGenerationPrompt } = require('../lib/prompts');
+const TemplateManager = require('../lib/template-manager');
+const { getTemplateFillingPrompt } = require('../lib/template-prompt');
 
 router.post('/', (req, res) => {
   const {
@@ -13,8 +15,6 @@ router.post('/', (req, res) => {
     apiKey,
     sessionDir,
     brandfetchKey,
-    customPalette,
-    paletteCategory,
   } = req.body;
 
   if (!proposal || !transcriptSegment) {
@@ -35,8 +35,6 @@ router.post('/', (req, res) => {
     durationFrames,
     compositionId,
     brandfetchKey: brandfetchKey || '',
-    customPalette: customPalette || null,
-    paletteCategory: paletteCategory || null,
   });
 
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {
@@ -54,15 +52,15 @@ router.post('/', (req, res) => {
       // Sync session before writing (ensures clean state)
       if (sessionDir) manager.syncFromSession(sessionDir);
       const result = manager.writeComposition(compositionId, tsxCode, durationFrames);
-
+      
       // Check if writeComposition returned a syntax error object
       if (result && result.syntaxError) {
-        return res.status(500).json({
+        return res.status(500).json({ 
           error: 'Syntax error in generated TSX: ' + (result.errors || []).join('; '),
           compositionId,
         });
       }
-
+      
       // Save back to session folder
       if (sessionDir) manager.saveToSession(compositionId, sessionDir);
       res.json({
@@ -78,12 +76,15 @@ router.post('/', (req, res) => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Free-form generation — always uses free-form TSX, visualDescription is optional
-// context that guides the art direction when provided.
+// Template-based generation — AI fills content values only, template handles layout.
+// When visualDescription is provided, falls back to free-form TSX generation guided
+// by the pre-approved visual layout description.
 // ──────────────────────────────────────────────────────────────────────────────
 router.post('/template', (req, res) => {
-  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, visualDescription, customPalette, paletteCategory } = req.body;
-  console.log('[generate/template] provider=' + provider + ' model=' + model + (visualDescription ? ' [guided by visualDescription]' : ' [free-form]') + (customPalette ? ' [custom palette]' : ''));
+  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, paletteCategory } = req.body;
+  if (customPalette) console.log('[generate/template] Custom palette received:', customPalette.bg, customPalette.accent);
+  else console.log("[generate/template] No custom palette");
+  console.log("[generate/template] provider=" + provider + " model=" + model + " [template]");
 
   if (!proposal || !transcriptSegment) {
     return res.status(400).json({ error: 'Missing proposal or transcriptSegment' });
@@ -93,37 +94,44 @@ router.post('/template', (req, res) => {
   const durationSecs = (proposal.endTime || 0) - (proposal.startTime || 0);
   const durationFrames = Math.max(90, Math.round(durationSecs * 30) + 6);
 
-  const { systemMsg, userMsg } = getGenerationPrompt({
-    transcriptSegment,
-    type: proposal.type,
-    description: proposal.description,
-    durationFrames,
-    compositionId,
-    brandfetchKey: '',
-    visualDescription: visualDescription || null,
-    customPalette: customPalette || null,
-    paletteCategory: paletteCategory || null,
-  });
+  // Always use template-based generation
+  const templateManager = new TemplateManager();
 
-  sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {
+  const { systemMsg, userMsg } = getTemplateFillingPrompt(
+    proposal.type, transcriptSegment, proposal.description, durationFrames
+  );
+
+  sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawResponse) => {
     if (err) return res.status(500).json({ error: 'LLM error: ' + err.message });
 
-    if (!rawCode || rawCode.trim().length === 0) {
+    // Guard against empty LLM response
+    if (!rawResponse || rawResponse.trim().length === 0) {
+      console.error('[generate/template] LLM returned empty response. provider=' + provider + ' model=' + model);
       return res.status(500).json({ error: 'LLM returned empty response — check API key and model' });
     }
 
-    let tsxCode = rawCode;
-    const codeMatch = rawCode.match(/```(?:tsx?|jsx?|react)?\s*\n([\s\S]*?)```/);
-    if (codeMatch) tsxCode = codeMatch[1].trim();
-
     try {
+      // Parse JSON from response (strip markdown if present)
+      let jsonStr = rawResponse.trim();
+      const jsonMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+      if (jsonMatch) jsonStr = jsonMatch[1].trim();
+
+      console.log('[generate/template] Parsing LLM response (' + jsonStr.length + ' chars)');
+      const contentValues = JSON.parse(jsonStr);
+
+      // Fill template with content values (apply custom palette if provided)
+      const tsxCode = templateManager.fillTemplate(
+        proposal.type, contentValues, compositionId, durationFrames, proposal.startTime, transcriptSegment, customPalette
+      );
+
+      // Write and register composition
       const manager = new RemotionManager(req.app.locals.renderProject);
       if (sessionDir) manager.syncFromSession(sessionDir);
       const result = manager.writeComposition(compositionId, tsxCode, durationFrames);
 
       if (result && result.syntaxError) {
         return res.status(500).json({
-          error: 'Syntax error in generated TSX: ' + (result.errors || []).join('; '),
+          error: 'Template syntax error: ' + (result.errors || []).join('; '),
           compositionId,
         });
       }
@@ -135,10 +143,11 @@ router.post('/template', (req, res) => {
         tsxPath: typeof result === 'string' ? result : (result && result.filePath) || '',
         durationFrames,
         status: 'generated',
-        method: 'free-form',
+        method: 'template',
       });
-    } catch (writeErr) {
-      res.status(500).json({ error: 'Write error: ' + writeErr.message });
+    } catch (e) {
+      console.error('[generate/template] Template fill error:', e.message);
+      res.status(500).json({ error: 'Template fill error: ' + e.message });
     }
   });
 });
