@@ -14,7 +14,7 @@ COMPOSICIÓN Y LECTURA (MUY IMPORTANTE — encaja con MOGRT de 2 líneas y leadi
 
 TIPOS DE SUPERTEXTO (usa SOLO estos 8 tipos):
 
-- **title**: TÍTULO — Representa la idea central de un segmento. Cuando acompaña bullets, actúa como contenedor de la lista. Si los bullets están muy distanciados entre sí (con mucho desarrollo entre cada uno), NO son bullets: cada uno debe convertirse en su propio título. Solo se usa cuando agrupa bullets consecutivos o cuando captura la idea central de un segmento independiente.
+- **title**: TÍTULO — Representa la idea central de un segmento. Es el tipo MÁS FRECUENTE: cada vez que el profesor cambia de subtema, introduce una nueva idea o abre un nuevo bloque, eso es un título. Cuando acompaña bullets, actúa como contenedor de la lista. Si los bullets están muy distanciados entre sí (con mucho desarrollo entre cada uno), NO son bullets: cada uno debe convertirse en su propio título. En caso de duda entre title y highlight, SIEMPRE elige title.
 
 - **bullet**: BULLET — Elemento de una lista o enumeración corta y continua. Un bullet NUNCA debe estar solo; siempre forma parte de una lista de bullets consecutivos. La lista debe ser continua, no estar demasiado distanciada en tiempo o contenido. Un buen bullet es corto. Un bullet largo es un mal bullet. Si entre los conceptos hay mucho desarrollo, no son bullets: son títulos.
 
@@ -24,7 +24,7 @@ TIPOS DE SUPERTEXTO (usa SOLO estos 8 tipos):
 
 - **data**: DATO — Captura datos concretos y objetivos mencionados en clase. Información cuantitativa u objetiva, numérica o no numérica: porcentajes, estadísticas, fuentes, "datos duros". Debe estar sintetizada (NO transcripción literal) y debe leerse bien por sí solo.
 
-- **highlight**: HIGHLIGHT — Refuerza una idea central que el profesor enfatiza. Es reiterativo: lo que el profesor repite o enfatiza es highlight. Representa reglas fijas, claras, importantes, centrales. Funciona como conclusión, resultado o llamado de atención. Formato: una palabra o una oración, NUNCA un párrafo. Validación: si se juntaran todos los highlights de una clase y se leyeran en orden, deberían entregar las ideas centrales de esa clase.
+- **highlight**: HIGHLIGHT — TIPO ESCASO (máximo 2–4 por clase de 5 min). Solo para la regla de oro, la frase definitoria o la conclusión que el profesor repite textualmente o martilla con énfasis excepcional. NO es lo mismo que una idea central de segmento (eso es title). Un highlight debe pasar este filtro: ¿El profesor literalmente repite esta frase, o la marca como "la regla más importante"? Si no, es title. Formato: una palabra o una oración, NUNCA un párrafo. Validación: si se juntaran todos los highlights de una clase, deberían ser las 2–4 frases que el alumno recordaría al día siguiente.
 
 - **summary**: RESUMEN — Resumen sintetizado del aprendizaje de la clase. Solo aplica si la clase tiene un cierre y el profesor lo menciona. NO es transcripción directa del cierre. Debe representar, de forma sintetizada, lo que el alumno debió aprender en la clase.
 
