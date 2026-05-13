@@ -2311,6 +2311,30 @@
         copyToClipboard(lines.join("\n"));
     }
 
+    function exportSupertexts2JSON() {
+        if (state.supertexts2.length === 0) { showToast("Nada que exportar", "info"); return; }
+        var exportData = {
+            exportedAt: new Date().toISOString(),
+            sequence: (state.sequenceInfo && state.sequenceInfo.name) || "unknown",
+            total: state.supertexts2.length,
+            typeCounts: {},
+            supertexts: state.supertexts2.map(function(st) {
+                var obj = { time: st.time, endTime: st.endTime, text: st.text, type: st.type };
+                if (st.group) obj.group = st.group;
+                if (st.importance) obj.importance = st.importance;
+                if (st.reason) obj.reason = st.reason;
+                return obj;
+            })
+        };
+        // Count types
+        exportData.supertexts.forEach(function(st) {
+            exportData.typeCounts[st.type] = (exportData.typeCounts[st.type] || 0) + 1;
+        });
+        var json = JSON.stringify(exportData, null, 2);
+        copyToClipboard(json);
+        showToast("JSON copiado (" + exportData.total + " supertextos)", "success");
+    }
+
 
     function setST2Progress(pct, text) {
         setProgress("st2-progress-fill", "st2-progress-text", pct, text);
@@ -3096,6 +3120,7 @@
         createGraphics: createSupertext2Graphics,
         replaceSingle: replaceSingleSupertext,
         exportData: exportSupertexts2,
+        exportJSON: exportSupertexts2JSON,
         excludeByTrack: st2ExcludeByTrack,
         buildPayload: buildST2Payload,
         trimOverlaps: _st2TrimOverlaps,

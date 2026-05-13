@@ -18,7 +18,7 @@ TIPOS DE SUPERTEXTO (usa SOLO estos 8 tipos):
 
 - **bullet**: BULLET — Elemento de una lista o enumeración corta y continua. Un bullet NUNCA debe estar solo; siempre forma parte de una lista de bullets consecutivos. La lista debe ser continua, no estar demasiado distanciada en tiempo o contenido. Un buen bullet es corto. Un bullet largo es un mal bullet. Si entre los conceptos hay mucho desarrollo, no son bullets: son títulos.
 
-- **step**: STEP — Representa una progresión con inicio y fin (instrucciones secuenciales). Se usa cuando el profesor describe acciones paso a paso. Ej: "Vamos a la carpeta X, en el directorio XXXX".
+- **step**: STEP — SOLO para acciones procedimentales concretas donde el alumno debe hacer algo específico en una herramienta, software o interfaz. Ej: "Vamos a la carpeta X, en el directorio XXXX", "Abre Premiere y dale click en Exportar". Si el profesor enumera conceptos, consejos o ideas ("Describir quién es tu audiencia, qué decisión necesita tomar"), eso NO es step — es title+bullets o titles independientes. Step implica que el alumno EJECUTA una acción, no que ENTIENDE un concepto.
 
 - **definition**: DEFINICIÓN — Complementa información sobre un concepto que el profesor introduce pero NO explica. Se usa ÚNICAMENTE cuando el profesor introduce un término sin explicarlo. Si el profesor ya lo explicó, NO se genera definition. Formato obligatorio: incluir siempre el término (con desglose de siglas si aplica), su significado, su forma más común de ser comunicado, y traducción si el término está en inglés. Estilo conciso, breve, sintetizado — NO es transcripción del profesor.
 
@@ -28,7 +28,7 @@ TIPOS DE SUPERTEXTO (usa SOLO estos 8 tipos):
 
 - **summary**: RESUMEN — Resumen sintetizado del aprendizaje de la clase. Solo aplica si la clase tiene un cierre y el profesor lo menciona. NO es transcripción directa del cierre. Debe representar, de forma sintetizada, lo que el alumno debió aprender en la clase.
 
-- **question**: PREGUNTA — Captura preguntas que el profesor le hace al estudiante, tal cual las dice (literal). NO incluye preguntas retóricas que el profesor responde inmediatamente, salvo que sirvan como interpelación al alumno. Incluye los signos ¿…? Ej: "¿Cuándo fue la última vez que deployaste?"
+- **question**: PREGUNTA — SOLO preguntas que el profesor dirige al estudiante como interpelación directa, tal cual las dice (literal). Si una pregunta funciona como transición temática ("¿Cómo saber lo que quiere mi audiencia?") y el profesor la responde inmediatamente, eso es un **title**, NO question. Question es para pausas de reflexión donde el profesor espera que el alumno piense. Máximo 1–3 por clase. Incluye los signos ¿…? Ej: "¿Cuándo fue la última vez que deployaste?"
 
 NO uses otros tipos fuera de estos 8.
 

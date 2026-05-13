@@ -219,6 +219,7 @@
         on("btn-st2-select-all", "click", toggleSelectAllSupertexts2);
         on("btn-st2-create-graphics", "click", createSupertext2Graphics);
         on("btn-st2-export", "click", exportSupertexts2);
+        on("btn-st2-export-json", "click", exportSupertexts2JSON);
         on("btn-st2-exclude-track", "click", st2ExcludeByTrack);
         on("btn-st2-prompt-toggle", "click", function() { togglePromptEditorById("st2"); });
         on("btn-st2-prompt-save", "click", function() { savePromptById("st2"); });
@@ -533,6 +534,7 @@
     function toggleSelectAllSupertexts2() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.toggleSelectAll(); }
     function createSupertext2Graphics() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.createGraphics(); }
     function exportSupertexts2() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.exportData(); }
+    function exportSupertexts2JSON() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.exportJSON(); }
     function st2ExcludeByTrack() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.excludeByTrack(); }
     function selectMOGRTFile(type) { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.selectMOGRTFile(type); }
     function loadMOGRTConfig() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.loadMOGRTConfig(); }
