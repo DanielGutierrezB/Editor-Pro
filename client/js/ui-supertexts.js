@@ -2009,6 +2009,7 @@
                         bulletPositionY: cascYOffsets[c],
                         _cascadeId: cascId
                     };
+                    if (cst.term) itemObj.term = cst.term;
                     var cstProps = _st2BuildMogrtProps(cst);
                     if (cstProps) itemObj.mogrtProps = cstProps;
 
@@ -2102,6 +2103,7 @@
                 bulletPositionY: 0,
                 _cascadeId: "s" + (cascadeCounter++)
             };
+            if (st.term) indepObj.term = st.term;
             var indepProps = _st2BuildMogrtProps(st);
             if (indepProps) indepObj.mogrtProps = indepProps;
             items.push(indepObj);
@@ -2287,6 +2289,7 @@
             mogrtPath: mogrtPath,
             trackIndex: trackIdx
         };
+        if (st.term) payload.term = st.term;
 
         var tmpFile = path.join(os.tmpdir(), "EditorPro_ST2_Replace.json");
         fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
