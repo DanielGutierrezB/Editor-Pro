@@ -99,11 +99,34 @@
             var fs   = require("fs");
             var path = require("path");
             var ext  = _getExtensionPath();
-            if (!ext) return;
-            fs.writeFileSync(path.join(ext, ".update-sha"), sha, "utf8");
+            if (!ext) { _log("Write .update-sha: no extension path"); return false; }
+            var shaFile = path.join(ext, ".update-sha");
+            fs.writeFileSync(shaFile, sha, "utf8");
+            // Verify the write actually persisted (Windows permission issues)
+            var verify = fs.readFileSync(shaFile, "utf8").trim();
+            if (verify !== sha) {
+                _log("Write .update-sha: verify mismatch! wrote=" + sha.substr(0,7) + " read=" + verify.substr(0,7));
+                return false;
+            }
+            return true;
         } catch(e) {
             _log("Write .update-sha error: " + e.message);
+            return false;
         }
+    }
+
+    function _readLocalVersion() {
+        try {
+            var fs   = require("fs");
+            var path = require("path");
+            var ext  = _getExtensionPath();
+            if (!ext) return null;
+            var f = path.join(ext, "VERSION");
+            if (fs.existsSync(f)) return fs.readFileSync(f, "utf8").trim();
+        } catch(e) {
+            _log("Read VERSION error: " + e.message);
+        }
+        return null;
     }
 
     // ─── HTTPS helpers ──────────────────────────────────────────────────────────
@@ -439,21 +462,40 @@
 
                         _latestSha = remoteSha;
 
-                        if (!localSha || localSha !== remoteSha) {
-                            _log("Update available: " + remoteSha.substr(0, 7) + (localSha ? " (local: " + localSha.substr(0, 7) + ")" : " (no local SHA)") + (_isGitRepo ? " [git]" : " [zip]"));
-                            _updateAvailable = true;
-                            var btn = document.getElementById("btn-reload");
-                            if (btn) {
-                                _originalBtnHTML = btn.innerHTML;
-                                btn.style.cssText = "background:#0ae98d;color:#1a1d23;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;animation:pulse-update 1.5s infinite;white-space:nowrap;";
-                                btn.innerHTML = "⬇";
-                                btn.title = "Hay una actualización disponible — click para actualizar" + (_isGitRepo ? " (git pull)" : "");
-                            }
-                            if (callback) callback(true);
-                        } else {
+                        if (localSha && localSha === remoteSha) {
                             _log("Up to date: " + remoteSha.substr(0, 7) + (_isGitRepo ? " [git]" : " [zip]"));
                             if (callback) callback(false);
+                            return;
                         }
+
+                        // No local SHA (fresh install or write failed) — check VERSION to avoid false positives
+                        if (!localSha && !_isGitRepo) {
+                            _log("No local SHA found, checking VERSION file...");
+                            var localVer = _readLocalVersion();
+                            // Fetch remote VERSION to compare
+                            var versionUrl = "https://raw.githubusercontent.com/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/" + GITHUB_BRANCH + "/VERSION";
+                            _httpsGetText(versionUrl, 5, function(vErr, vBody) {
+                                var remoteVer = vErr ? null : (vBody || "").trim();
+                                _log("VERSION check: local=" + localVer + " remote=" + remoteVer);
+                                if (localVer && remoteVer && localVer === remoteVer) {
+                                    // Same version — seed the SHA file so we don't check again
+                                    _log("Same VERSION, seeding .update-sha with " + remoteSha.substr(0, 7));
+                                    _writeLocalSha(remoteSha);
+                                    if (callback) callback(false);
+                                    return;
+                                }
+                                // Different version or couldn't compare — show update
+                                _log("Update available: " + remoteSha.substr(0, 7) + " (no local SHA, version mismatch)");
+                                _showUpdateBtn(remoteSha);
+                                if (callback) callback(true);
+                            });
+                            return;
+                        }
+
+                        // SHA mismatch — update available
+                        _log("Update available: " + remoteSha.substr(0, 7) + (localSha ? " (local: " + localSha.substr(0, 7) + ")" : "") + (_isGitRepo ? " [git]" : " [zip]"));
+                        _showUpdateBtn(remoteSha);
+                        if (callback) callback(true);
                     } catch(e) {
                         _log("Parse error: " + e.message);
                         if (callback) callback(false);
@@ -471,6 +513,19 @@
         } catch(e) {
             _log("Unexpected error: " + e.message);
             if (callback) callback(false);
+        }
+    }
+
+    // ─── Show update button ─────────────────────────────────────────────────────
+
+    function _showUpdateBtn(remoteSha) {
+        _updateAvailable = true;
+        var btn = document.getElementById("btn-reload");
+        if (btn) {
+            _originalBtnHTML = btn.innerHTML;
+            btn.style.cssText = "background:#0ae98d;color:#1a1d23;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;animation:pulse-update 1.5s infinite;white-space:nowrap;";
+            btn.innerHTML = "⬇";
+            btn.title = "Hay una actualización disponible — click para actualizar" + (_isGitRepo ? " (git pull)" : "");
         }
     }
 
