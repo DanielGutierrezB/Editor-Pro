@@ -2311,6 +2311,47 @@
         copyToClipboard(lines.join("\n"));
     }
 
+    function exportSupertexts2JSON() {
+        if (state.supertexts2.length === 0) { showToast("Nada que exportar", "info"); return; }
+        var seqName = (state.sequenceInfo && state.sequenceInfo.name) || "supertexts";
+        var exportData = {
+            exportedAt: new Date().toISOString(),
+            sequence: seqName,
+            total: state.supertexts2.length,
+            typeCounts: {},
+            supertexts: state.supertexts2.map(function(st) {
+                var obj = { time: st.time, endTime: st.endTime, text: st.text, type: st.type };
+                if (st.group) obj.group = st.group;
+                if (st.importance) obj.importance = st.importance;
+                if (st.reason) obj.reason = st.reason;
+                return obj;
+            })
+        };
+        exportData.supertexts.forEach(function(st) {
+            exportData.typeCounts[st.type] = (exportData.typeCounts[st.type] || 0) + 1;
+        });
+        var json = JSON.stringify(exportData, null, 2);
+        // Save to Downloads folder
+        try {
+            var home = os ? os.homedir() : (process.env.HOME || process.env.USERPROFILE || "");
+            var downloadsDir = path ? path.join(home, "Downloads") : home + "/Downloads";
+            var now = new Date();
+            var mm = (now.getMonth() + 1 < 10 ? "0" : "") + (now.getMonth() + 1);
+            var dd = (now.getDate() < 10 ? "0" : "") + now.getDate();
+            var hh = (now.getHours() < 10 ? "0" : "") + now.getHours();
+            var mi = (now.getMinutes() < 10 ? "0" : "") + now.getMinutes();
+            var ss = (now.getSeconds() < 10 ? "0" : "") + now.getSeconds();
+            var filename = "ST_" + mm + dd + "_" + hh + "-" + mi + "-" + ss + ".json";
+            var filePath = path ? path.join(downloadsDir, filename) : downloadsDir + "/" + filename;
+            fs.writeFileSync(filePath, json, "utf8");
+            showToast("Exportado a Descargas: " + filename, "success");
+        } catch(e) {
+            // Fallback: copy to clipboard
+            copyToClipboard(json);
+            showToast("No se pudo guardar archivo, JSON copiado al portapapeles", "info");
+        }
+    }
+
 
     function setST2Progress(pct, text) {
         setProgress("st2-progress-fill", "st2-progress-text", pct, text);
@@ -3096,6 +3137,7 @@
         createGraphics: createSupertext2Graphics,
         replaceSingle: replaceSingleSupertext,
         exportData: exportSupertexts2,
+        exportJSON: exportSupertexts2JSON,
         excludeByTrack: st2ExcludeByTrack,
         buildPayload: buildST2Payload,
         trimOverlaps: _st2TrimOverlaps,
