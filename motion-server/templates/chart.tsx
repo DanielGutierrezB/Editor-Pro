@@ -1,0 +1,164 @@
+// ============================================================
+// TEMPLATE: CHART
+// Description: Animated bar chart with values
+// ============================================================
+import "@fontsource/dm-sans/400.css";
+import "@fontsource/dm-sans/500.css";
+import "@fontsource/dm-sans/600.css";
+import "@fontsource/dm-sans/700.css";
+import React from 'react';
+import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, delayRender, continueRender, spring, Sequence, Img, Easing, getInputProps} from 'remotion';
+import * as LucideIcons from 'lucide-react';
+
+const _static = (getInputProps() as any).staticPreview === true;
+
+const C = {
+  bg:'#1a1d23', card:'#2d323a', accent:'#0ae98d', green:'#0ae98d',
+  orange:'#fb923c', purple:'#a78bfa', red:'#f87171', text:'#ffffff',
+  dim:'rgba(255,255,255,0.7)', border:'rgba(255,255,255,0.08)',
+  glow:'rgba(10,233,141,0.08)',
+};
+
+const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({children,style}) => (
+  <div style={{position:'absolute',left:160,top:180,right:160,bottom:160,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',...style}}>{children}</div>
+);
+
+const E:React.FC<{d:number;children:React.ReactNode;from?:string;style?:React.CSSProperties}> = ({d,children,from='up',style}) => {
+  const frame = useCurrentFrame();
+  if (_static) return <div style={{opacity:1,...style}}>{children}</div>;
+  const progress = interpolate(frame-d, [0, 30], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft:'clamp', extrapolateRight:'clamp',
+  });
+  const y = from==='up'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='down'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
+  const x = from==='left'?interpolate(progress,[0,1],[50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):from==='right'?interpolate(progress,[0,1],[-50,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):0;
+  const sc = from==='pop'?interpolate(progress,[0,1],[0.85,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}):1;
+  return <div style={{transform:`translate(${x}px,${y}px) scale(${sc})`,opacity:progress,...style}}>{children}</div>;
+};
+
+const Fd:React.FC<{children:React.ReactNode;fi?:number;fo?:number;dur:number}> = ({children,fi=10,fo=10,dur}) => {
+  const frame = useCurrentFrame();
+  if (_static) return <div style={{opacity:1,position:'absolute',inset:0}}>{children}</div>;
+  const _fi = Math.max(1, fi);
+  const _fo = Math.max(1, fo);
+  const _end = Math.max(_fi + 1, dur - _fo);
+  return <div style={{opacity:interpolate(frame,[0,_fi,_end,dur],[0,1,1,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'}),position:'absolute',inset:0}}>{children}</div>;
+};
+
+const Icon:React.FC<{name:string;size?:number;color?:string;strokeWidth?:number}> = ({name,size=60,color=C.accent,strokeWidth=1.5}) => {
+  const IconComp = (LucideIcons as any)[name] || LucideIcons.Circle;
+  return <IconComp size={size} color={color} strokeWidth={strokeWidth}/>;
+};
+
+// ============================================================
+// CONTENT BLOCK — AI fills ONLY this section
+// ============================================================
+const CLIP_START_TIME = 0; // Will be replaced by template-manager
+const TITLE = "Inversión por Plataforma";
+const SUBTITLE = "Distribución del presupuesto Q4 2024";
+const BARS = [
+  {label:"Meta", value:45, color:"#0AE88A"},
+  {label:"Google", value:32, color:"#0099DD"},
+  {label:"TikTok", value:18, color:"#F3B562"},
+  {label:"LinkedIn", value:12, color:"#F06060"},
+];
+const VALUE_SUFFIX = "%";
+
+// ============================================================
+// FIXED IMPLEMENTATION — DO NOT MODIFY
+// ============================================================
+
+function readingFrames(text: string): number {
+  const words = text.split(' ').length;
+  if (words <= 4) return 45;
+  if (words <= 8) return 75;
+  return 105;
+}
+
+function itemDelay(item: {time?: number; label?: string; title?: string; text?: string}, index: number, totalItems: number, items: any[], dur: number): number {
+  if (item.time !== undefined && item.time > 0) {
+    return Math.round(item.time * 30);
+  }
+  if (index === 0) return 30;
+  const prevItem = items[index - 1];
+  const prevText = prevItem.label || prevItem.title || prevItem.text || '';
+  const prevDelay = itemDelay(prevItem, index - 1, totalItems, items, dur);
+  return Math.min(prevDelay + readingFrames(prevText), dur - 60);
+}
+
+const fmtValue = (v:number):string => v >= 1000 ? (v/1000).toFixed(v%1000===0?0:1)+'K' : String(v);
+
+const Section1:React.FC = () => {
+  const frame = useCurrentFrame();
+  const {fps, durationInFrames: dur} = useVideoConfig();
+  const maxValue = Math.max(...BARS.map(d => d.value));
+  const maxBarH = 440;
+  const barW = Math.min(120, Math.floor(1200 / BARS.length));
+
+  return (
+    <Fd dur={dur} fo={10}>
+      <Safe style={{justifyContent:'space-between', alignItems:'center'}}>
+        <div style={{textAlign:'center', marginBottom:48, width:'100%'}}>
+          <E d={0} from="up">
+            <div style={{fontSize:42, fontWeight:400, color:C.text}}>{TITLE}</div>
+          </E>
+          {SUBTITLE && (
+            <E d={8} from="up">
+              <div style={{fontSize:24, color:C.dim, marginTop:8}}>{SUBTITLE}</div>
+            </E>
+          )}
+        </div>
+        <div style={{display:'flex', gap:Math.min(40, Math.floor(800 / BARS.length)), alignItems:'flex-end', justifyContent:'center'}}>
+          {BARS.map((d, i) => {
+            const barColor = d.color || C.accent;
+            const barDelay = itemDelay(d, i, BARS.length, BARS, dur);
+            const barProgress = spring({
+              frame: frame - barDelay, fps,
+              config: {damping: 200, mass: 0.5, stiffness: 80},
+            });
+            const barH = interpolate(barProgress, [0, 1], [0, (d.value / maxValue) * maxBarH], {
+              extrapolateLeft:'clamp', extrapolateRight:'clamp',
+            });
+            const countValue = Math.round(interpolate(barProgress, [0, 1], [0, d.value], {
+              extrapolateLeft:'clamp', extrapolateRight:'clamp',
+            }));
+            return (
+              <div key={i} style={{display:'flex', flexDirection:'column', alignItems:'center', gap:8}}>
+                <div style={{
+                  fontSize:22, fontWeight:700, color:'#ffffff',
+                  textShadow:'0 0 4px rgba(0,0,0,0.8)',
+                  opacity: interpolate(barProgress, [0.3, 0.6], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'}),
+                }}>
+                  {fmtValue(countValue)}{VALUE_SUFFIX}
+                </div>
+                <div style={{
+                  width:barW, height:barH, borderRadius:'6px 6px 0 0',
+                  backgroundColor:barColor,
+                }}/>
+                <div style={{
+                  fontSize:16, fontWeight:500, color:C.dim, marginTop:4,
+                  opacity: interpolate(barProgress, [0, 0.3], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'}),
+                }}>
+                  {d.label}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{width:BARS.length * (barW + 40), maxWidth:'100%', height:2, backgroundColor:C.border}}/>
+      </Safe>
+    </Fd>
+  );
+};
+
+export const MyComposition:React.FC = () => {
+  const {durationInFrames} = useVideoConfig();
+  // Font guard — block render until DM Sans loads
+  const [_fontOk] = React.useState(() => { const h = delayRender("Loading font"); if (typeof document !== "undefined") { document.fonts.ready.then(() => continueRender(h)); } else { continueRender(h); } return true; });
+  return (
+    <AbsoluteFill style={{backgroundColor:C.bg, fontFamily:"'DM Sans',sans-serif"}}>
+      <Sequence from={0} durationInFrames={durationInFrames} premountFor={10}>
+        <Section1/>
+      </Sequence>
+    </AbsoluteFill>
+  );
+};

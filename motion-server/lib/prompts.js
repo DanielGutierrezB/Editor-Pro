@@ -33,7 +33,8 @@ const QUALITY_RULES = _loadDoc('quality-rules.md', '');
 const FULL_SYSTEM_PROMPT = [
   SYSTEM_PROMPT_DOC,
   AVAILABLE_PACKAGES ? '\n\n---\n\n# AVAILABLE PACKAGES (USE THESE)\n\n' + AVAILABLE_PACKAGES : '',
-  DESIGN_SYSTEM ? '\n\n---\n\n# DESIGN SYSTEM (YOUR VISUAL IDENTITY)\n\n' + DESIGN_SYSTEM : '',
+  // DESIGN_SYSTEM removed — using template-based generation instead of free-form
+  '',
   QUALITY_RULES ? '\n\n---\n\n# QUALITY RULES (MUST FOLLOW)\n\n' + QUALITY_RULES : '',
 ].join('');
 
@@ -667,7 +668,7 @@ The design system uses:
 - Components available: GlowCard (dark card with glow), AnimatedText (word-by-word reveal), AccentSeparator (accent line), CascadeItem (stagger blur), ProgressDots (step indicator), AnimatedLine (SVG line draw), OdometerDigit (count-up number)
 ${paletteNote}
 
-${DESIGN_SYSTEM ? '## Design Philosophy\n' + DESIGN_SYSTEM + '\n\n' : ''}Your description must be:
+Your description must be:
 - Specific enough to generate code from (include sizes, colors, layout direction)
 - Bold and expressive — no generic centered grids. Apply the design philosophy above.
 - Written in the SAME LANGUAGE as the transcript
