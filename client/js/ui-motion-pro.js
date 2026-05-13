@@ -3048,13 +3048,12 @@
                         if (state.mpFeedbackActive) delete state.mpFeedbackActive[motionId];
                         if (err) {
                             showToast("Error con feedback: " + err.message, "error");
-                            // Re-enable this card's controls without full re-render
                             _mpRestoreFeedbackCard(motionId, savedFeedbackText);
                         } else {
-                            showToast("Versión " + result.version + " preview con feedback", "success");
-                            // Place new PNG preview in timeline, then save + update card
-                            if (result.pngPath) {
-                                mpPlacePreviewInTimeline(motionId, function() {
+                            showToast("Versión " + result.version + " renderizada con feedback", "success");
+                            // Place rendered MP4 video in timeline
+                            if (result.mp4Path) {
+                                mpPlaceMotionInTimeline(motionId, function() {
                                     motionPro.saveState();
                                     _mpUpdateSingleCard(motionId);
                                 });
