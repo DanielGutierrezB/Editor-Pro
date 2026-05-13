@@ -1970,7 +1970,8 @@
         // Parallel generation with concurrency limit — auto-detect from system RAM
         var _os = (function() { try { return require('os'); } catch(_e) { return null; } })();
         var _ramBytes = _os ? _os.totalmem() : 0;
-        var CONCURRENCY = _ramBytes > 16 * 1024 * 1024 * 1024 ? 4 : _ramBytes > 8 * 1024 * 1024 * 1024 ? 3 : 2;
+        // Serial rendering — video renders are heavy (Remotion + Chrome headless)
+        var CONCURRENCY = 1;
         var nextIndex = 0;
         var activeWorkers = 0;
 
@@ -2062,8 +2063,8 @@
 
             var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
 
-            // Use preview flow: template → still (PNG) instead of full video render
-            motionPro.generatePreview(proposal, segment, aiConfig, function(err, result) {
+            // Full pipeline: template fill → render video (MP4) → place in timeline
+            motionPro.generateMotion(proposal, segment, aiConfig, function(err, result) {
                 done++;
                 activeWorkers--;
 
@@ -2078,11 +2079,11 @@
                         console.log('[Motion-Pro] Retrying ' + proposal.id + ' after error: ' + errMsg);
                         if (window.EPLogger) EPLogger.log("motion-pro", "retry", proposal.id + " — " + errMsg);
                         showToast("🔄 Reintentando " + proposal.id + "...", "info");
-                        done--; // Don't count as done yet
+                        done--;
                         activeWorkers++;
                         setTimeout(function() {
                             _mpTimers.itemStarts[proposal.id] = Date.now();
-                            motionPro.generatePreview(proposal, segment, aiConfig, function(err2, result2) {
+                            motionPro.generateMotion(proposal, segment, aiConfig, function(err2, result2) {
                                 done++;
                                 activeWorkers--;
                                 if (err2) {
@@ -2091,9 +2092,9 @@
                                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
                                     launchWorker();
                                 } else {
-                                    if (window.EPLogger) EPLogger.log("motion-pro", "preview-complete", proposal.id + " → " + (result2.motionId || "?") + " (retry success)");
-                                    mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando still " + done + "/" + total + " en timeline...");
-                                    mpPlacePreviewInTimeline(result2.motionId, function() {
+                                    if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result2.motionId || "?") + " (retry success)");
+                                    mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando video " + done + "/" + total + " en timeline...");
+                                    mpPlaceMotionInTimeline(result2.motionId, function() {
                                         proposal.generated = true;
                                         motionPro.saveState();
                                         mpRenderControlPanel();
@@ -2111,15 +2112,15 @@
                         showToast("⏱ Timeout en " + proposal.id + " — saltando al siguiente", "warning");
                     }
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
-                    launchWorker(); // Launch next
+                    launchWorker();
                 } else {
-                    if (window.EPLogger) EPLogger.log("motion-pro", "preview-complete", proposal.id + " → " + (result.motionId || "?"));
-                    mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando still " + done + "/" + total + " en timeline...");
-                    mpPlacePreviewInTimeline(result.motionId, function() {
+                    if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result.motionId || "?"));
+                    mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando video " + done + "/" + total + " en timeline...");
+                    mpPlaceMotionInTimeline(result.motionId, function() {
                         proposal.generated = true;
                         motionPro.saveState();
                         mpRenderControlPanel();
-                        launchWorker(); // Launch next
+                        launchWorker();
                     });
                 }
             }, outputDir);
@@ -2181,6 +2182,83 @@
     }
 
     // ─── Place PNG preview still in timeline ────────────────────
+
+    function mpPlaceMotionInTimeline(motionId, callback) {
+        var motion = motionPro._findMotion(motionId);
+        if (!motion) { if (callback) callback(); return; }
+        var v = motionPro.getActiveVersion(motionId);
+        if (!v || !v.mp4Path) { if (callback) callback(); return; }
+        if (window.EPLogger) EPLogger.log("motion-pro", "timeline-place-video", motionId + " v" + v.version + " at " + motion.startTime.toFixed(1) + "s");
+
+        var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
+        var mpDuration = v.mediaDurationSec || Math.max(0.1, motion.endTime - mpStart);
+        var mediaPath = mpNormalizeMediaPath(v.mp4Path);
+        var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1);
+
+        var isNewVersion = v.version > 1 && motion.placedInTimeline && motion.baseTrackIndex >= 0;
+
+        if (isNewVersion) {
+            var payload = {
+                mp4Path: mediaPath,
+                startTimeSecs: mpStart,
+                durationSecs: mpDuration,
+                newTrackIndex: motion.baseTrackIndex + 1,
+                clipName: clipName + "_v" + v.version,
+                labelColor: _mpLabelColorForType(motion.type)
+            };
+            var tmpPath = _writeTempJson(payload, "mp_video_v" + v.version);
+            if (!tmpPath) { if (callback) callback(); return; }
+
+            csInterface.evalScript('replaceMotionOnTrack("' + mpEscapePathForEvalScript(tmpPath) + '")', function(res) {
+                try {
+                    var result = typeof res === "string" ? JSON.parse(res) : res;
+                    if (result && result.error) {
+                        console.warn("[Motion-Pro] PlaceVideo v" + v.version + " error:", result.error);
+                        showToast("Video no colocado: " + result.error, "error");
+                    } else {
+                        mpMovePlayhead(mpStart);
+                    }
+                } catch(e) {
+                    console.warn("[Motion-Pro] PlaceVideo parse error:", e.message);
+                }
+                if (callback) callback();
+            });
+        } else {
+            var payload2 = {
+                clips: [{
+                    mp4Path: mediaPath,
+                    startTimeSecs: mpStart,
+                    durationSecs: mpDuration,
+                    clipName: clipName,
+                    labelColor: _mpLabelColorForType(motion.type)
+                }]
+            };
+            var tmpPath2 = _writeTempJson(payload2, "mp_video");
+            if (!tmpPath2) { if (callback) callback(); return; }
+
+            csInterface.evalScript('importAndPlaceMotions("' + mpEscapePathForEvalScript(tmpPath2) + '")', function(res) {
+                if (res === undefined || res === null || res === "undefined" || res === "null" || res === "EvalScript error." || (typeof res === "string" && res.trim() === "")) {
+                    console.warn("[Motion-Pro] PlaceVideo: evalScript returned empty or error:", res);
+                    if (callback) callback();
+                    return;
+                }
+                try {
+                    var result = typeof res === "string" ? JSON.parse(res) : res;
+                    if (result.error) {
+                        console.warn("[Motion-Pro] PlaceVideo error:", result.error);
+                        showToast("Video no colocado: " + result.error, "error");
+                    } else {
+                        motion.placedInTimeline = true;
+                        motion.baseTrackIndex = result.trackIndex != null ? result.trackIndex : -1;
+                        mpMovePlayhead(mpStart);
+                    }
+                } catch(e) {
+                    console.warn("[Motion-Pro] PlaceVideo parse error:", e.message);
+                }
+                if (callback) callback();
+            });
+        }
+    }
 
     function mpPlacePreviewInTimeline(motionId, callback) {
         var motion = motionPro._findMotion(motionId);
@@ -3086,6 +3164,7 @@
         animateSingle: mpAnimateSingle,
         animateAll: mpAnimateAll,
         placePreviewInTimeline: mpPlacePreviewInTimeline,
+        placeMotionInTimeline: mpPlaceMotionInTimeline,
         getSessionName: function() { return _mpSessionName; },
         getOutputDir: function() { return _mpOutputDir; }
     };
