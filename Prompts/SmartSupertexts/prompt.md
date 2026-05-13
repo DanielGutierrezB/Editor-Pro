@@ -13,14 +13,22 @@ COMPOSICIÓN Y LECTURA (MUY IMPORTANTE — encaja con MOGRT de 2 líneas y leadi
 - Máximo aproximado **~90 caracteres totales** por supertexto (en 1 o 2 líneas).
 
 TIPOS DE SUPERTEXTO (usa SOLO estos 8 tipos):
-- **title**: TÍTULOS DE TEMAS — nuevo bloque o sección. Tipografía más grande, otro color — marcan cambio de tema.
-- **bullet**: IDEAS CLAVE — conceptos, reglas. Aparecen uno a uno conforme el transcript va señalándolo.
-- **step**: PASO A PASO — procedimientos numerados, instrucciones secuenciales.
-- **definition**: DEFINICIONES — términos nuevos o técnicos que el profesor explica por primera vez.
-- **data**: DATOS CLAVE — estadísticas, URLs, nombres técnicos, números importantes que vale la pena leer.
-- **highlight**: FRASES MEMORABLES — reglas de oro, conclusiones impactantes, frases que el alumno debería recordar.
-- **summary**: RESUMEN — frase de cierre o conclusión de un bloque temático.
-- **question**: PREGUNTAS DEL PROFESOR — cuando hace una pregunta retórica o directa a la audiencia (ej: "¿Qué pasaría si nos caemos?", "¿Cuál crees que es el error más común?"). Captura la pregunta tal como la formula. Incluye los signos ¿…? Ayuda a delimitar momentos de reflexión y recalcarlos visualmente.
+
+- **title**: TÍTULO — Representa la idea central de un segmento. Cuando acompaña bullets, actúa como contenedor de la lista. Si los bullets están muy distanciados entre sí (con mucho desarrollo entre cada uno), NO son bullets: cada uno debe convertirse en su propio título. Solo se usa cuando agrupa bullets consecutivos o cuando captura la idea central de un segmento independiente.
+
+- **bullet**: BULLET — Elemento de una lista o enumeración corta y continua. Un bullet NUNCA debe estar solo; siempre forma parte de una lista de bullets consecutivos. La lista debe ser continua, no estar demasiado distanciada en tiempo o contenido. Un buen bullet es corto. Un bullet largo es un mal bullet. Si entre los conceptos hay mucho desarrollo, no son bullets: son títulos.
+
+- **step**: STEP — Representa una progresión con inicio y fin (instrucciones secuenciales). Se usa cuando el profesor describe acciones paso a paso. Ej: "Vamos a la carpeta X, en el directorio XXXX".
+
+- **definition**: DEFINICIÓN — Complementa información sobre un concepto que el profesor introduce pero NO explica. Se usa ÚNICAMENTE cuando el profesor introduce un término sin explicarlo. Si el profesor ya lo explicó, NO se genera definition. Formato obligatorio: incluir siempre el término (con desglose de siglas si aplica), su significado, su forma más común de ser comunicado, y traducción si el término está en inglés. Estilo conciso, breve, sintetizado — NO es transcripción del profesor.
+
+- **data**: DATO — Captura datos concretos y objetivos mencionados en clase. Información cuantitativa u objetiva, numérica o no numérica: porcentajes, estadísticas, fuentes, "datos duros". Debe estar sintetizada (NO transcripción literal) y debe leerse bien por sí solo.
+
+- **highlight**: HIGHLIGHT — Refuerza una idea central que el profesor enfatiza. Es reiterativo: lo que el profesor repite o enfatiza es highlight. Representa reglas fijas, claras, importantes, centrales. Funciona como conclusión, resultado o llamado de atención. Formato: una palabra o una oración, NUNCA un párrafo. Validación: si se juntaran todos los highlights de una clase y se leyeran en orden, deberían entregar las ideas centrales de esa clase.
+
+- **summary**: RESUMEN — Resumen sintetizado del aprendizaje de la clase. Solo aplica si la clase tiene un cierre y el profesor lo menciona. NO es transcripción directa del cierre. Debe representar, de forma sintetizada, lo que el alumno debió aprender en la clase.
+
+- **question**: PREGUNTA — Captura preguntas que el profesor le hace al estudiante, tal cual las dice (literal). NO incluye preguntas retóricas que el profesor responde inmediatamente, salvo que sirvan como interpelación al alumno. Incluye los signos ¿…? Ej: "¿Cuándo fue la última vez que deployaste?"
 
 NO uses otros tipos fuera de estos 8.
 
