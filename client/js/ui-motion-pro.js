@@ -2995,9 +2995,8 @@
 
         var toolbar = document.createElement('div');
         toolbar.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;';
-        toolbar.innerHTML = (previewCount > 0 ?
-                            '<button class="btn btn-sm btn-success" id="btn-mp-animate-all" title="Renderizar video de todos los previews">🎬 Animar Todos (' + previewCount + ')</button>' : '') +
-                            '<button class="btn btn-sm btn-ghost" id="btn-mp-expand-all">Desplegar todos</button>' +
+        // NOTE: "Animar Todos" deprecated (v1.12.20) — full render is the default flow now
+        toolbar.innerHTML = '<button class="btn btn-sm btn-ghost" id="btn-mp-expand-all">Desplegar todos</button>' +
                             '<button class="btn btn-sm btn-ghost" id="btn-mp-collapse-all">Replegar todos</button>';
         list.appendChild(toolbar);
 
@@ -3095,8 +3094,7 @@
                         '<select class="mp-version-select select-input" data-motion-id="' + m.id + '">' + versionOptions + '</select>' +
                     '</div>' +
                     '<div class="mp-action-row">' +
-                        (activeV && activeV.status === "preview" ?
-                            '<button class="btn btn-sm btn-success mp-btn-animate" data-motion-id="' + m.id + '" title="Renderizar video y colocar en timeline">🎬 Animar</button>' : '') +
+                        // NOTE: "Animar" per-card button deprecated (v1.12.20)
                         '<button class="btn btn-sm btn-ghost mp-btn-studio" data-motion-id="' + m.id + '" title="Abrir en Remotion Studio">🖥 Remotion</button>' +
                         '<button class="btn btn-sm btn-ghost mp-btn-regen" data-motion-id="' + m.id + '" title="Regenerar del todo">🔄 Regenerar</button>' +
                     '</div>' +
@@ -3142,25 +3140,7 @@
                 });
 
                 // Animate (render video from preview)
-                var animateBtn = card.querySelector(".mp-btn-animate");
-                if (animateBtn) animateBtn.addEventListener("click", function() {
-                    if (!motionPro.serverRunning) { showToast("Inicia el servidor primero", "error"); return; }
-                    if (state.mpGenerating) { showToast("Espera a que termine el proceso actual", "info"); return; }
-                    state.mpGenerating = true;
-                    animateBtn.disabled = true;
-                    animateBtn.textContent = "🎬 Animando...";
-                    if (window.EPLogger) EPLogger.log("motion-pro", "animate-single", motionId);
-
-                    mpAnimateSingle(motionId, function(err) {
-                        state.mpGenerating = false;
-                        if (err) {
-                            showToast("Error al animar: " + err.message, "error");
-                            if (window.EPLogger) EPLogger.error("motion-pro", "animate-error", motionId + ": " + err.message);
-                        }
-                        motionPro.saveState();
-                        mpRenderControlPanel();
-                    });
-                });
+                // NOTE: "Animar" per-card listener deprecated (v1.12.20) — full render is the default flow
 
                 // Remotion Studio
                 var studioBtn = card.querySelector(".mp-btn-studio");
@@ -3380,16 +3360,7 @@
 
         // Bind toolbar buttons
         setTimeout(function() {
-            var animateAllBtn = document.getElementById('btn-mp-animate-all');
-            if (animateAllBtn) animateAllBtn.addEventListener('click', function() {
-                if (!motionPro.serverRunning) { showToast("Inicia el servidor primero", "error"); return; }
-                if (state.mpGenerating) { showToast("Espera a que termine el proceso actual", "info"); return; }
-                animateAllBtn.disabled = true;
-                animateAllBtn.textContent = "🎬 Animando...";
-                mpAnimateAll(function() {
-                    // Control panel re-rendered by mpAnimateAll
-                });
-            });
+            // NOTE: "Animar Todos" toolbar button deprecated (v1.12.20)
 
             var expandBtn = document.getElementById('btn-mp-expand-all');
             var collapseBtn = document.getElementById('btn-mp-collapse-all');
