@@ -24,6 +24,10 @@ const MIN_VISIBLE = {
 const ENTRANCE_FRAMES = 24;  // 0.8s entrance animation
 // Section fade-out duration
 const SECTION_FADE_OUT = 15; // 0.5s fade out
+// Maximum allowed gap between elements (frames)
+const MAX_GAP_FRAMES = 2.5 * FPS; // 75 frames = 2.5s — any longer is dead time
+// Minimum coverage: elements should visually cover at least this % of the composition
+const MIN_COVERAGE_PCT = 0.80; // 80% of total frames should have something visible
 
 /**
  * Classify text complexity for minimum visible time.
@@ -155,6 +159,62 @@ function validateTimingPlan(plan) {
     }
   }
 
+  // ── Pass 4: Detect large gaps between elements ──
+  // If element B starts much later than element A, the viewer sees nothing.
+  // We flag gaps and compute "hold until" for each element so the LLM knows
+  // that element A should STAY on screen until element B appears.
+  for (var g = 0; g < elements.length; g++) {
+    var gapStart = elements[g].frame + ENTRANCE_FRAMES; // element is fully visible
+    var gapEnd;
+    if (g < elements.length - 1) {
+      gapEnd = elements[g + 1].frame;
+    } else {
+      gapEnd = total - SECTION_FADE_OUT;
+    }
+    var gapSize = gapEnd - gapStart;
+
+    // Calculate how long this element should stay visible
+    // (until the next element appears, or until composition end)
+    elements[g].holdUntil = gapEnd;
+    elements[g].visibleDuration = gapEnd - elements[g].frame;
+
+    if (gapSize > MAX_GAP_FRAMES && g < elements.length - 1) {
+      conflicts.push(
+        'Gap of ' + Math.round(gapSize) + ' frames (' + (gapSize / FPS).toFixed(1) + 's) between elements ' +
+        (elements[g].index + 1) + ' and ' + (elements[g + 1].index + 1) +
+        '. Element ' + (elements[g].index + 1) + ' should PERSIST on screen until frame ' + gapEnd +
+        '. Consider adding more visual content in this gap.'
+      );
+      elements[g].hasGapAfter = true;
+    }
+  }
+
+  // ── Pass 5: Coverage check ──
+  // Estimate how much of the composition has visible content
+  var coveredFrames = 0;
+  for (var cv = 0; cv < elements.length; cv++) {
+    var visStart = elements[cv].frame;
+    var visEnd = elements[cv].holdUntil || (total - SECTION_FADE_OUT);
+    // Don't double-count overlapping regions
+    if (cv > 0) {
+      var prevEnd = elements[cv - 1].holdUntil || elements[cv - 1].frame + elements[cv - 1].minVisible;
+      visStart = Math.max(visStart, prevEnd);
+    }
+    coveredFrames += Math.max(0, visEnd - visStart);
+  }
+  // Add first element's contribution
+  if (elements.length > 0) {
+    coveredFrames = Math.min(coveredFrames + elements[0].minVisible, total);
+  }
+  var coveragePct = total > 0 ? coveredFrames / total : 1;
+  var needsMoreContent = coveragePct < MIN_COVERAGE_PCT;
+  if (needsMoreContent) {
+    conflicts.push(
+      'Low visual coverage: only ' + Math.round(coveragePct * 100) + '% of ' + total +
+      ' frames have visible content. Add more visual elements to fill the composition.'
+    );
+  }
+
   // Re-sort by original index for output
   elements.sort(function(a, b) { return a.index - b.index; });
 
@@ -167,6 +227,9 @@ function validateTimingPlan(plan) {
         idealFrame: el.idealFrame,
         frame: el.frame,
         minVisible: el.minVisible,
+        holdUntil: el.holdUntil || null,
+        visibleDuration: el.visibleDuration || el.minVisible,
+        hasGapAfter: el.hasGapAfter || false,
         adjusted: el.adjusted,
         strategy: el.strategy,
       };
@@ -174,6 +237,8 @@ function validateTimingPlan(plan) {
     conflicts: conflicts,
     valid: isValid,
     totalFrames: total,
+    coverage: Math.round(coveragePct * 100),
+    needsMoreContent: needsMoreContent,
   };
 }
 
@@ -211,21 +276,37 @@ function timingPlanToPrompt(validated) {
 
   var lines = ['## Timing Plan (FOLLOW THESE EXACT DELAYS)'];
   lines.push('Total duration: ' + validated.totalFrames + ' frames (' + (validated.totalFrames / FPS).toFixed(1) + 's)');
+  lines.push('Visual coverage: ' + (validated.coverage || '?') + '%');
+  lines.push('');
+
+  lines.push('CRITICAL RULE: Elements must PERSIST on screen until the next element appears.');
+  lines.push('Do NOT fade out an element early — it stays visible until replaced or until composition ends.');
+  lines.push('Use Sections to keep content visible for the full duration of each segment.');
   lines.push('');
 
   validated.elements.forEach(function(el, i) {
     var note = el.adjusted ? ' ⚠️ adjusted: ' + el.strategy : '';
-    lines.push('Element ' + (i + 1) + ': delay={' + el.frame + '} — "' + el.text.substring(0, 50) + '"' + note);
+    var holdNote = el.holdUntil ? ' (visible until frame ' + el.holdUntil + ' = ' + (el.visibleDuration / FPS).toFixed(1) + 's on screen)' : '';
+    var gapWarning = el.hasGapAfter ? ' ⚠️ GAP AFTER — keep this element visible!' : '';
+    lines.push('Element ' + (i + 1) + ': delay={' + el.frame + '} — "' + el.text.substring(0, 50) + '"' + holdNote + note + gapWarning);
   });
+
+  if (validated.needsMoreContent) {
+    lines.push('');
+    lines.push('⚠️ LOW COVERAGE: Only ' + validated.coverage + '% of the composition has visual content.');
+    lines.push('Add MORE visual elements (subtitles, icons, supporting text) to fill dead time.');
+    lines.push('Every second of the composition should have SOMETHING visible on screen.');
+  }
 
   if (validated.conflicts.length > 0) {
     lines.push('');
-    lines.push('Adjustments made:');
+    lines.push('Timing adjustments:');
     validated.conflicts.forEach(function(c) { lines.push('- ' + c); });
   }
 
   lines.push('');
   lines.push('Use these exact delay values in your <Anim> components. Do NOT change the delays.');
+  lines.push('Elements stay visible once they appear — they do NOT disappear until replaced by the next Section.');
 
   return lines.join('\n');
 }

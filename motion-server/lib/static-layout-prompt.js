@@ -243,12 +243,15 @@ Available types:
 - <Anim type="fade" delay={25}>     — simple opacity fade (good for backgrounds)
 
 Stagger delays by 8-12 frames between elements. All elements should be visible within 36 frames.
+IMPORTANT: Once an element appears, it STAYS on screen. Elements do NOT disappear — they persist until the Section ends.
+This means the viewer always has something to read. No blank time.
 
 ## SECTIONS (CRITICAL — no dead time!)
 
 Use <Section from={startFrame} dur={durationInFrames}> to create sequential visual "slides":
-- Each Section fades in, holds, then fades out
-- Content inside uses <Anim> for element-level entrance stagger
+- Each Section fades in, holds content visible, then fades out
+- ALL content inside a Section remains visible for the Section's FULL duration
+- Content inside uses <Anim> for element-level entrance stagger (elements appear progressively but NEVER disappear)
 - Sections MUST cover the ENTIRE composition duration with NO GAPS:
   - Section 1 starts at from={0}
   - Each Section starts immediately when the previous one ends
