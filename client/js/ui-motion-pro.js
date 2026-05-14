@@ -2394,11 +2394,12 @@
         var isNewVersion = v.version > 1 && motion.placedInTimeline && motion.baseTrackIndex >= 0;
 
         if (isNewVersion) {
+            var versionTrackOffset = v.version - 1; // v2 → +1, v3 → +2, v4 → +3
             var payload = {
                 mp4Path: mediaPath,
                 startTimeSecs: mpStart,
                 durationSecs: mpDuration,
-                newTrackIndex: motion.baseTrackIndex + 1,
+                newTrackIndex: motion.baseTrackIndex + versionTrackOffset,
                 clipName: clipName + "_v" + v.version,
                 labelColor: _mpLabelColorForType(motion.type)
             };
@@ -2469,15 +2470,16 @@
         var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId);
 
         // Version > 1 (feedback/regen): place on track ABOVE the original clip
-        // Always baseTrackIndex + 1 — if the track doesn't exist, replaceMotionOnTrack creates it
+        // Each version gets its own track: v2 → base+1, v3 → base+2, etc.
         var isNewVersion = v.version > 1 && motion.placedInTimeline && motion.baseTrackIndex >= 0;
 
         if (isNewVersion) {
+            var versionTrackOffset = v.version - 1;
             var payload = {
                 mp4Path: mediaPath,
                 startTimeSecs: mpStart,
                 durationSecs: mpDuration,
-                newTrackIndex: motion.baseTrackIndex + 1,
+                newTrackIndex: motion.baseTrackIndex + versionTrackOffset,
                 clipName: clipName + "_v" + v.version,
                 labelColor: _mpLabelColorForType(motion.type)
             };
