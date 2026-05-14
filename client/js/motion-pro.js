@@ -493,6 +493,7 @@
 
             var renderBody = { compositionId: result.compositionId, sessionDir: outputDir || "" };
             if (outputDir) renderBody.outputDir = outputDir;
+            if (self.bgMode) renderBody.bgMode = self.bgMode;
 
             // Health check before render (the server may have died during generate)
             self._healthCheckOrRestart(function(renderHealthOk) {
@@ -655,6 +656,7 @@
                 durationFrames: result.durationFrames || null
             };
             if (outputDir) renderBody.outputDir = outputDir;
+            if (self.bgMode) renderBody.bgMode = self.bgMode;
 
             self._post("/api/render", renderBody, function(renderErr, renderResponse) {
                 if (timedOut) return;

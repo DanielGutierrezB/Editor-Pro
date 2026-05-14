@@ -280,7 +280,8 @@ class RemotionManager {
     console.log('[RemotionManager] Cleaned compositions dir and reset Root.tsx');
   }
 
-  render(compositionId, callback, customOutputDir) {
+  render(compositionId, callback, customOutputDir, options) {
+    const opts = options || {};
     const sessionDir = customOutputDir || this.outputDir;
     const rendersDir = customOutputDir ? path.join(sessionDir, 'renders') : sessionDir;
     if (!fs.existsSync(rendersDir)) {
@@ -291,6 +292,12 @@ class RemotionManager {
     // Fast encoding on macOS with hardware acceleration. Larger files but perfect for editing.
     const outputPath = path.join(rendersDir, `${compositionId}.mov`);
 
+    // Alpha mode: ProRes 4444 with alpha channel (for chroma/transparent bg)
+    const useAlpha = opts.bgMode === 'chroma';
+    const proresProfile = useAlpha ? '4444' : 'standard';
+    const pixelFormat = useAlpha ? 'yuva444p10le' : 'yuv422p10le';
+    if (useAlpha) console.log(`[RemotionManager] Alpha render: ProRes 4444 + yuva444p10le for ${compositionId}`);
+
     let npxPath;
     try { npxPath = execSync('which npx', { encoding: 'utf8' }).trim(); } catch(_e) { npxPath = 'npx'; }
     const args = [
@@ -299,8 +306,8 @@ class RemotionManager {
       compositionId,
       outputPath,
       '--codec=prores',
-      '--prores-profile=standard',
-      '--pixel-format=yuv422p10le',
+      `--prores-profile=${proresProfile}`,
+      `--pixel-format=${pixelFormat}`,
       '--muted',
       '--image-format=png',
       '--concurrency=1',

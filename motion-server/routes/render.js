@@ -165,7 +165,9 @@ function _ensureRenderFn(app) {
       return done(new Error('Composition ' + job.compositionId + ' not found'));
     }
 
-    console.log('[render/video] Rendering via Remotion (ProRes)...');
+    var renderOpts = {};
+    if (job.bgMode) renderOpts.bgMode = job.bgMode;
+    console.log('[render/video] Rendering via Remotion (ProRes' + (job.bgMode === 'chroma' ? ' 4444 alpha' : '') + ')...');
     manager.render(job.compositionId, function(err, result) {
       if (err) {
         console.error('[render/video] Remotion render failed after ' + (Date.now() - renderStart) + 'ms: ' + String(err.message).substring(0, 300));
@@ -198,14 +200,14 @@ function _ensureRenderFn(app) {
       } else {
         finish();
       }
-    }, job.outputDir || null);
+    }, job.outputDir || null, renderOpts);
   });
 }
 
 // POST /api/render — enqueue a video render job, return jobId immediately
 // Optional: durationFrames overrides the composition's registered duration (used by "Animar" to match timeline clip length)
 router.post('/', (req, res) => {
-  const { compositionId, outputDir, sessionDir, durationFrames } = req.body;
+  const { compositionId, outputDir, sessionDir, durationFrames, bgMode } = req.body;
 
   if (!compositionId) {
     console.error('[render] POST / — missing compositionId');
@@ -223,6 +225,7 @@ router.post('/', (req, res) => {
     outputDir: outputDir || null,
     sessionDir: sessionDir || null,
     durationFrames: durationFrames ? parseInt(durationFrames, 10) : null,
+    bgMode: bgMode || null,
   });
 
   console.log('[render] Enqueued jobId=' + job.id + ' status=' + job.status);
