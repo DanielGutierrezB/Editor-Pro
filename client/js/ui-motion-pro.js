@@ -507,6 +507,18 @@
         if (resetBtn) resetBtn.style.display = "none";
     }
 
+    function _initSingleMotionToggle() {
+        var markersOnlyCb = document.getElementById("mp-markers-only");
+        var singleLabel = document.getElementById("mp-single-motion-label");
+        if (!markersOnlyCb || !singleLabel) return;
+
+        function updateVisibility() {
+            singleLabel.style.display = markersOnlyCb.checked ? "flex" : "none";
+        }
+        updateVisibility();
+        markersOnlyCb.addEventListener("change", updateVisibility);
+    }
+
     function mpInit() {
         _initRefs();
         mpUpdateServerUI();
@@ -518,6 +530,7 @@
         _initPresets();
         _initHistory();
         _initRegenPalette();
+        _initSingleMotionToggle();
 
         // On init, restart server to ensure clean state
         if (motionPro) {
@@ -1290,9 +1303,21 @@
                 if (_markersDone) return;
                 _markersDone = true;
                 clearTimeout(_markersTimeout);
+
+                var singleMotionCb = document.getElementById("mp-single-motion");
+                var singleMotionMode = singleMotionCb && singleMotionCb.checked;
+
                 try {
                     var data = JSON.parse(res);
                     if (data.markers && data.markers.length > 0) {
+                        // --- Single Motion Mode: skip AI analysis, create 1 proposal per marker ---
+                        if (singleMotionMode) {
+                            if (window.EPLogger) EPLogger.log("motion-pro", "single-motion-mode", data.markers.length + " markers → single motion each");
+                            showToast(data.markers.length + " marcadores → un motion cada uno", "info");
+                            _mpSingleMotionFromMarkers(data.markers, timedTranscript);
+                            return;
+                        }
+
                         var markerText = '\n\nGENERAR MOTIONS SOLO EN ESTOS RANGOS DE TIEMPO (marcadores del editor):\n';
                         data.markers.forEach(function(m, i) {
                             var mStart = parseFloat(m.startSeconds);
@@ -1475,6 +1500,132 @@
             showToast(proposals.length + " momentos identificados para motions", "success");
         });
         } // end _mpRunAnalysis
+
+        // ── Single Motion Mode: one motion per marker, AI picks the best type + description ──
+        function _mpSingleMotionFromMarkers(markers, timedTranscript) {
+            var seqPrefix = _mpBuildSeqPrefix();
+            var proposals = [];
+
+            // Extract transcript lines to build segment text per marker
+            var transcriptLines = timedTranscript.split('\n');
+
+            for (var mi = 0; mi < markers.length; mi++) {
+                var m = markers[mi];
+                var mStart = parseFloat(m.startSeconds);
+                var mEnd = parseFloat(m.endSeconds);
+                if (Math.abs(mEnd - mStart) < 0.1) {
+                    mStart = Math.max(0, mStart - 5);
+                    mEnd = mEnd + 5;
+                }
+
+                // Extract transcript segment within marker range
+                var segLines = [];
+                for (var li = 0; li < transcriptLines.length; li++) {
+                    var line = transcriptLines[li];
+                    var timeMatch = line.match(/\[(\d+\.?\d*)s/);
+                    if (timeMatch) {
+                        var lineTime = parseFloat(timeMatch[1]);
+                        if (lineTime >= mStart && lineTime <= mEnd) segLines.push(line);
+                    }
+                }
+                var segment = segLines.join('\n') || ('Marcador de ' + mStart.toFixed(1) + 's a ' + mEnd.toFixed(1) + 's');
+
+                var clipNum = String(mi + 1).length < 2 ? "0" + (mi + 1) : String(mi + 1);
+                proposals.push({
+                    id: clipNum + "-motion-" + seqPrefix,
+                    startTime: mStart,
+                    endTime: mEnd,
+                    type: "reveal",
+                    description: (m.name || "Motion completo") + " — cubre todo el marcador como una sola composición con secciones internas",
+                    priority: "alta",
+                    selected: true,
+                    transcriptSegment: segment,
+                    group: "",
+                    singleMotion: true
+                });
+            }
+
+            // Now run AI analysis per marker to get a better type + description
+            var aiConfig = {
+                provider: state.settings.aiProvider,
+                model: 'anthropic/claude-sonnet-4',
+                apiKey: aiAnalyzer.getActiveKey()
+            };
+
+            var pending = proposals.length;
+            var completed = 0;
+
+            if (pending === 0) {
+                _mpSingleMotionFinish(proposals, seqPrefix);
+                return;
+            }
+
+            // For each marker, ask AI what type + description fits best (fast, parallel)
+            proposals.forEach(function(prop, idx) {
+                var singlePrompt = 'Analiza este segmento de transcripción y propón UN SOLO motion graphic que cubra TODO el contenido como una composición unificada con secciones internas (Sequence blocks).\n\n' +
+                    'TRANSCRIPCIÓN DEL SEGMENTO [' + prop.startTime.toFixed(1) + 's - ' + prop.endTime.toFixed(1) + 's]:\n' +
+                    prop.transcriptSegment + '\n\n' +
+                    'Responde SOLO con JSON válido:\n' +
+                    '{"type":"<tipo>","description":"<descripción visual detallada del motion completo con sus secciones internas>"}\n\n' +
+                    'Tipos disponibles: title, callout, reveal, icons, cards, diagram, steps, chart, metrics, list, comparison, beforeafter, funnel, timeline\n' +
+                    'Elige el tipo que MEJOR represente el concepto completo. La descripción debe ser un brief visual detallado de la composición unificada con sus secciones internas.';
+
+                var systemMsg = 'Eres un diseñador de motion graphics para cursos educativos. Respondes SOLO JSON válido, sin markdown ni explicaciones adicionales.';
+
+                aiAnalyzer._send(systemMsg, singlePrompt, function(result) {
+                    completed++;
+                    try {
+                        var parsed = (typeof result === "string") ? JSON.parse(result) : result;
+                        // Handle markdown-wrapped JSON
+                        if (typeof result === "string" && !parsed.type) {
+                            var jsonMatch = result.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+                            if (jsonMatch) parsed = JSON.parse(jsonMatch[1].trim());
+                        }
+                        if (parsed.type) {
+                            prop.type = parsed.type.toLowerCase();
+                            prop.id = (String(idx + 1).length < 2 ? "0" + (idx + 1) : String(idx + 1)) + "-" + prop.type + "-" + seqPrefix;
+                        }
+                        if (parsed.description) prop.description = parsed.description;
+                    } catch(e) {
+                        console.warn("[Motion-Pro] Single motion AI parse error for marker " + (idx + 1) + ":", e.message);
+                    }
+
+                    mpSetProgress("mp-analyze", 15 + Math.round((completed / pending) * 80), "Analizando marcador " + completed + "/" + pending + "…");
+
+                    if (completed >= pending) {
+                        _mpSingleMotionFinish(proposals, seqPrefix);
+                    }
+                });
+            });
+        }
+
+        function _mpSingleMotionFinish(proposals, seqPrefix) {
+            mpClearMotionAnalysisHeartbeat();
+            state.mpAnalyzing = false;
+            mpSetMotionAnalyzeButtonMode(false);
+            hideElement("mp-analyze-progress");
+            refreshMPHeaderProgressVisibility();
+
+            var analysisTime = ((Date.now() - _mpTimers.analysisStart) / 1000).toFixed(1);
+            motionPro.proposals = proposals;
+            motionPro.saveState();
+            mpShowStep(2);
+            try {
+                mpRenderProposals();
+            } catch(renderErr) {
+                if (window.EPLogger) EPLogger.error("motion-pro", "render-proposals-crash", renderErr.message);
+                showToast("ERROR rendering proposals: " + renderErr.message, "error");
+            }
+            var step2Body = document.getElementById("mp-step-body-2");
+            if (step2Body) {
+                step2Body.classList.remove("hidden");
+                var step2Arrow = step2Body.previousElementSibling ? step2Body.previousElementSibling.querySelector(".rec-step-arrow") : null;
+                if (step2Arrow) step2Arrow.textContent = "▾";
+            }
+            var hint = document.getElementById("mp-step-hint-1");
+            if (hint) hint.textContent = proposals.length + " motions (" + analysisTime + "s)";
+            showToast(proposals.length + " motions únicos generados desde marcadores", "success");
+        }
     }
 
     // ─── Proposals rendering ──────────────────────────────────────
