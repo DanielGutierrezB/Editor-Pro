@@ -545,14 +545,31 @@
 
     function _initSingleMotionToggle() {
         var markersOnlyCb = document.getElementById("mp-markers-only");
+        var singleMotionCb = document.getElementById("mp-single-motion");
         var singleLabel = document.getElementById("mp-single-motion-label");
         if (!markersOnlyCb || !singleLabel) return;
+
+        // Restore saved checkbox states
+        try {
+            var savedMarkers = localStorage.getItem("mp-markers-only");
+            if (savedMarkers !== null) markersOnlyCb.checked = savedMarkers === "true";
+            var savedSingle = localStorage.getItem("mp-single-motion");
+            if (savedSingle !== null && singleMotionCb) singleMotionCb.checked = savedSingle === "true";
+        } catch(_e) {}
 
         function updateVisibility() {
             singleLabel.style.display = markersOnlyCb.checked ? "flex" : "none";
         }
         updateVisibility();
-        markersOnlyCb.addEventListener("change", updateVisibility);
+        markersOnlyCb.addEventListener("change", function() {
+            updateVisibility();
+            try { localStorage.setItem("mp-markers-only", markersOnlyCb.checked); } catch(_e) {}
+        });
+        if (singleMotionCb) {
+            singleMotionCb.addEventListener("change", function() {
+                try { localStorage.setItem("mp-single-motion", singleMotionCb.checked); } catch(_e) {}
+            });
+        }
     }
 
     function mpInit() {
