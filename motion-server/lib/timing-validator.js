@@ -183,7 +183,7 @@ function validateTimingPlan(plan) {
         'Gap of ' + Math.round(gapSize) + ' frames (' + (gapSize / FPS).toFixed(1) + 's) between elements ' +
         (elements[g].index + 1) + ' and ' + (elements[g + 1].index + 1) +
         '. Element ' + (elements[g].index + 1) + ' should PERSIST on screen until frame ' + gapEnd +
-        '. Consider adding more visual content in this gap.'
+        '. Review the transcript for this time range — there may be supporting details, examples, or key phrases worth visualizing.'
       );
       elements[g].hasGapAfter = true;
     }
@@ -211,7 +211,7 @@ function validateTimingPlan(plan) {
   if (needsMoreContent) {
     conflicts.push(
       'Low visual coverage: only ' + Math.round(coveragePct * 100) + '% of ' + total +
-      ' frames have visible content. Add more visual elements to fill the composition.'
+      ' frames have visible content. Re-read the transcript — there are likely more concepts, examples, or details worth highlighting visually.'
     );
   }
 
@@ -294,8 +294,8 @@ function timingPlanToPrompt(validated) {
   if (validated.needsMoreContent) {
     lines.push('');
     lines.push('⚠️ LOW COVERAGE: Only ' + validated.coverage + '% of the composition has visual content.');
-    lines.push('Add MORE visual elements (subtitles, icons, supporting text) to fill dead time.');
-    lines.push('Every second of the composition should have SOMETHING visible on screen.');
+    lines.push('Re-read the transcript for this segment — extract more concepts, examples, key phrases, or supporting details to visualize.');
+    lines.push('Each visual element should be MEANINGFUL and RELATED to what the professor is saying at that moment.');
   }
 
   if (validated.conflicts.length > 0) {

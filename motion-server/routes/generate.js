@@ -231,7 +231,11 @@ Return a JSON object with:
    - "timingPlan": Array of visual elements with timing: [{"text": "visible text", "timestamp": seconds_when_professor_says_it, "type": "title|subtitle|item|metric|icon"}]
      → timestamp = the ABSOLUTE second in the video when this concept is mentioned
      → text = what should appear on screen (concise, readable)
-     → List 2-5 elements per segment, ordered by timestamp
+     → Each element should represent a meaningful concept from the transcript at that moment
+     → Scale with segment duration: ~1 element per 2-3 seconds of content
+       (e.g. 5s segment → 2-3 elements, 10s segment → 4-5 elements, 15s+ → 5-7 elements)
+     → Spread elements across the ENTIRE segment duration — don't cluster them all at the start
+     → Look for: key terms, examples, numbers, comparisons, cause-effect, steps, tools mentioned
 
 Example response:
 {"summary":"Video sobre cómo funciona Git","segments":[{"context":"Después de explicar control de versiones","keyMessage":"Git rastrea cambios","narrativeRole":"explanation","timingPlan":[{"text":"Control de versiones","timestamp":12.5,"type":"title"},{"text":"Rastrea cambios en archivos","timestamp":15.2,"type":"subtitle"}]}]}`;
