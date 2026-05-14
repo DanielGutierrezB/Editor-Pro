@@ -299,7 +299,7 @@ class RemotionManager {
       compositionId,
       outputPath,
       '--codec=prores',
-      '--prores-profile=light',
+      '--prores-profile=standard',
       '--pixel-format=yuv422p10le',
       '--muted',
       '--image-format=png',
