@@ -62,12 +62,29 @@ function buildSystemPrompt(type) {
  * Build the `const C = {...}` TSX code block using a custom palette or defaults.
  * Returns the exact code string for the template.
  */
-function _isGreenish(hex) {
-  if (!hex || typeof hex !== 'string') return false;
+function _parseHex(hex) {
+  if (!hex || typeof hex !== 'string') return null;
   const h = hex.replace('#', '');
-  if (h.length !== 6) return false;
-  const r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
-  return g > 150 && g > r * 1.3 && g > b * 1.3;
+  if (h.length !== 6) return null;
+  return { r: parseInt(h.substr(0,2),16), g: parseInt(h.substr(2,2),16), b: parseInt(h.substr(4,2),16) };
+}
+
+function _isGreenish(hex) {
+  const c = _parseHex(hex);
+  if (!c) return false;
+  return c.g > 150 && c.g > c.r * 1.3 && c.g > c.b * 1.3;
+}
+
+function _isBluish(hex) {
+  const c = _parseHex(hex);
+  if (!c) return false;
+  return c.b > 120 && c.b > c.r * 1.2 && c.b > c.g * 1.2;
+}
+
+function _chromaSafe(hex, chromaIsBlue) {
+  if (chromaIsBlue && _isBluish(hex)) return '#fb923c';
+  if (!chromaIsBlue && _isGreenish(hex)) return '#a78bfa';
+  return hex;
 }
 
 function _buildPaletteCode(customPalette, bgMode) {
@@ -79,8 +96,15 @@ function _buildPaletteCode(customPalette, bgMode) {
     dim = 'rgba(0,0,0,0.55)'; border = 'rgba(0,0,0,0.08)'; glow = 'rgba(10,233,141,0.06)';
   } else if (bgMode === 'chroma') {
     const hasGreen = _isGreenish(p.accent) || _isGreenish(p.green);
-    bg = hasGreen ? '#0000FF' : '#00FF00';
+    const chromaIsBlue = hasGreen;
+    bg = chromaIsBlue ? '#0000FF' : '#00FF00';
     card = 'rgba(0,0,0,0.65)';
+    return `const C = {\n`
+      + `  bg:'${bg}', card:'${card}', accent:'${_chromaSafe(p.accent, chromaIsBlue)}', green:'${_chromaSafe(p.green, chromaIsBlue)}',\n`
+      + `  orange:'${_chromaSafe(p.orange, chromaIsBlue)}', purple:'${_chromaSafe(p.purple, chromaIsBlue)}', red:'${_chromaSafe(p.red, chromaIsBlue)}', text:'${text}',\n`
+      + `  dim:'${dim}', border:'${border}',\n`
+      + `  glow:'${glow}',\n`
+      + `};`;
   }
 
   return `const C = {\n`

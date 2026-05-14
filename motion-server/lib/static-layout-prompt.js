@@ -27,12 +27,30 @@ const DESIGN_SYSTEM = _loadDoc('DESIGN.md');
 const CHROMA_GREEN = '#00FF00';
 const CHROMA_BLUE = '#0000FF';
 
-function _isGreenish(hex) {
-  if (!hex || typeof hex !== 'string') return false;
+function _parseHex(hex) {
+  if (!hex || typeof hex !== 'string') return null;
   const h = hex.replace('#', '');
-  if (h.length !== 6) return false;
-  const r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
-  return g > 150 && g > r * 1.3 && g > b * 1.3;
+  if (h.length !== 6) return null;
+  return { r: parseInt(h.substr(0,2),16), g: parseInt(h.substr(2,2),16), b: parseInt(h.substr(4,2),16) };
+}
+
+function _isGreenish(hex) {
+  const c = _parseHex(hex);
+  if (!c) return false;
+  return c.g > 150 && c.g > c.r * 1.3 && c.g > c.b * 1.3;
+}
+
+function _isBluish(hex) {
+  const c = _parseHex(hex);
+  if (!c) return false;
+  return c.b > 120 && c.b > c.r * 1.2 && c.b > c.g * 1.2;
+}
+
+// Replace colors that would blend with the chroma background
+function _chromaSafe(hex, chromaIsBlue) {
+  if (chromaIsBlue && _isBluish(hex)) return '#fb923c'; // swap blue→orange
+  if (!chromaIsBlue && _isGreenish(hex)) return '#a78bfa'; // swap green→purple
+  return hex;
 }
 
 function _buildPaletteCode(customPalette, bgMode) {
@@ -49,9 +67,16 @@ function _buildPaletteCode(customPalette, bgMode) {
   } else if (bgMode === 'chroma') {
     // Use green chroma by default; if accent/green are greenish, use blue
     const hasGreen = _isGreenish(p.accent) || _isGreenish(p.green);
-    bg = hasGreen ? CHROMA_BLUE : CHROMA_GREEN;
+    const chromaIsBlue = hasGreen;
+    bg = chromaIsBlue ? CHROMA_BLUE : CHROMA_GREEN;
     card = 'rgba(0,0,0,0.65)';
-    // Keep text white for readability over chroma
+    // Swap any palette color that would blend with the chroma bg
+    return `const C = {
+  bg:'${bg}', card:'${card}', accent:'${_chromaSafe(p.accent, chromaIsBlue)}', green:'${_chromaSafe(p.green, chromaIsBlue)}',
+  orange:'${_chromaSafe(p.orange, chromaIsBlue)}', purple:'${_chromaSafe(p.purple, chromaIsBlue)}', red:'${_chromaSafe(p.red, chromaIsBlue)}', text:'${text}',
+  dim:'${dim}', border:'${border}',
+  glow:'${glow}',
+};`;
   }
 
   return `const C = {

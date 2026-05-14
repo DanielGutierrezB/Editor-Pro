@@ -2296,8 +2296,11 @@
 
             var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
 
-            // Show per-card progress
+            // Show per-card progress — persist state so re-renders pick it up
+            if (!window._mpGenCardState) window._mpGenCardState = {};
+            window._mpGenCardState[proposal.id] = { pct: 5, msg: "En cola…" };
             var _genCardProgress = function(pct, msg) {
+                window._mpGenCardState[proposal.id] = { pct: pct, msg: msg };
                 var _gc = document.querySelector('.mp-gen-progress[data-motion-id="' + proposal.id + '"]');
                 if (!_gc) return;
                 _gc.classList.remove("hidden");
@@ -2305,6 +2308,7 @@
                 var _gt = _gc.querySelector(".mp-gen-text");
                 if (_gf) _gf.style.width = pct + "%";
                 if (_gt) _gt.textContent = msg;
+                if (pct >= 100) delete window._mpGenCardState[proposal.id];
             };
             _genCardProgress(5, "En cola…");
 
@@ -3047,10 +3051,17 @@
                     statusBadge +
                 '</div>' +
                 previewThumbHtml +
-                '<div class="mp-gen-progress hidden" data-motion-id="' + m.id + '">' +
-                    '<div class="progress-track"><div class="progress-fill mp-gen-fill" style="width:0%"></div></div>' +
-                    '<span class="progress-text mp-gen-text">Esperando…</span>' +
-                '</div>' +
+                (function() {
+                    var _gs = window._mpGenCardState && window._mpGenCardState[m.id];
+                    if (_gs) {
+                        return '<div class="mp-gen-progress" data-motion-id="' + m.id + '">' +
+                            '<div class="progress-track"><div class="progress-fill mp-gen-fill" style="width:' + _gs.pct + '%"></div></div>' +
+                            '<span class="progress-text mp-gen-text">' + esc(_gs.msg) + '</span></div>';
+                    }
+                    return '<div class="mp-gen-progress hidden" data-motion-id="' + m.id + '">' +
+                        '<div class="progress-track"><div class="progress-fill mp-gen-fill" style="width:0%"></div></div>' +
+                        '<span class="progress-text mp-gen-text">Esperando…</span></div>';
+                })() +
                 '<div class="mp-motion-desc">' + esc(m.description) + '</div>' +
                 '<div class="mp-motion-controls">' +
                     '<div class="mp-version-row">' +
