@@ -95,7 +95,7 @@ router.post('/', (req, res) => {
 // The Anim wrapper handles all motion automatically.
 // ──────────────────────────────────────────────────────────────────────────────
 router.post('/template', (req, res) => {
-  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, paletteCategory } = req.body;
+  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, paletteCategory, bgMode } = req.body;
   if (customPalette) console.log('[generate/static-layout] Custom palette:', customPalette.bg, customPalette.accent);
   console.log('[generate/static-layout] provider=' + provider + ' model=' + model + ' type=' + (proposal && proposal.type));
 
@@ -116,6 +116,7 @@ router.post('/template', (req, res) => {
     compositionId,
     customPalette: customPalette || null,
     paletteCategory: paletteCategory || null,
+    bgMode: bgMode || 'dark',
   });
 
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {

@@ -422,7 +422,8 @@
             model: aiConfig.model,
             apiKey: aiConfig.apiKey,
             customPalette: self.customPalette || null,
-            paletteCategory: self.paletteCategory || null
+            paletteCategory: self.paletteCategory || null,
+            bgMode: self.bgMode || "dark"
         };
 
         self._post("/api/generate/propose", body, function(err, result) {
@@ -483,7 +484,8 @@
             sessionDir: outputDir || "",
             brandfetchKey: aiConfig.brandfetchKey || "",
             customPalette: self.customPalette || null,
-            paletteCategory: self.paletteCategory || null
+            paletteCategory: self.paletteCategory || null,
+            bgMode: self.bgMode || "dark"
         };
 
         // Template-based generation — no visual description needed
@@ -675,7 +677,8 @@
             sessionDir: outputDir || "",
             brandfetchKey: aiConfig.brandfetchKey || "",
             customPalette: self.customPalette || null,
-            paletteCategory: self.paletteCategory || null
+            paletteCategory: self.paletteCategory || null,
+            bgMode: self.bgMode || "dark"
         };
 
         // Health check before starting the pipeline
@@ -806,7 +809,10 @@
             sessionDir: outputDir || "",
             type: motion.type || "title",
             description: motion.description || "",
-            transcriptSegment: motion.transcriptSegment || ""
+            transcriptSegment: motion.transcriptSegment || "",
+            customPalette: self.customPalette || null,
+            paletteCategory: self.paletteCategory || null,
+            bgMode: self.bgMode || "dark"
         };
 
         self._post("/api/feedback", body, function(err, result) {

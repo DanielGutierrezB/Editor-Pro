@@ -23,17 +23,46 @@ const DESIGN_SYSTEM = _loadDoc('DESIGN.md');
 
 // ── Palette helpers ──────────────────────────────────────────────────────────
 
-function _buildPaletteCode(customPalette) {
+// Chroma key colors
+const CHROMA_GREEN = '#00FF00';
+const CHROMA_BLUE = '#0000FF';
+
+function _isGreenish(hex) {
+  if (!hex || typeof hex !== 'string') return false;
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return false;
+  const r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
+  return g > 150 && g > r * 1.3 && g > b * 1.3;
+}
+
+function _buildPaletteCode(customPalette, bgMode) {
   const p = customPalette ? (validatePalette(customPalette) || DEFAULT_PALETTE) : DEFAULT_PALETTE;
+  let bg = p.bg, card = p.card, text = p.text, dim = p.dim, border = p.border, glow = p.glow;
+
+  if (bgMode === 'light') {
+    bg = '#f8f9fa';
+    card = '#ffffff';
+    text = '#1a1d23';
+    dim = 'rgba(0,0,0,0.55)';
+    border = 'rgba(0,0,0,0.08)';
+    glow = 'rgba(10,233,141,0.06)';
+  } else if (bgMode === 'chroma') {
+    // Use green chroma by default; if accent/green are greenish, use blue
+    const hasGreen = _isGreenish(p.accent) || _isGreenish(p.green);
+    bg = hasGreen ? CHROMA_BLUE : CHROMA_GREEN;
+    card = 'rgba(0,0,0,0.65)';
+    // Keep text white for readability over chroma
+  }
+
   return `const C = {
-  bg:'${p.bg}', card:'${p.card}', accent:'${p.accent}', green:'${p.green}',
-  orange:'${p.orange}', purple:'${p.purple}', red:'${p.red}', text:'${p.text}',
-  dim:'${p.dim}', border:'${p.border}',
-  glow:'${p.glow}',
+  bg:'${bg}', card:'${card}', accent:'${p.accent}', green:'${p.green}',
+  orange:'${p.orange}', purple:'${p.purple}', red:'${p.red}', text:'${text}',
+  dim:'${dim}', border:'${border}',
+  glow:'${glow}',
 };`;
 }
 
-function _paletteNote(customPalette, paletteCategory) {
+function _paletteNote(customPalette, paletteCategory, bgMode) {
   const parts = [];
   if (paletteCategory && paletteCategory !== 'auto') {
     const desc = getCategoryDescription(paletteCategory);
@@ -42,6 +71,13 @@ function _paletteNote(customPalette, paletteCategory) {
   if (customPalette) {
     const p = validatePalette(customPalette);
     if (p) parts.push(`Custom palette — bg: ${p.bg}, accent: ${p.accent}, card: ${p.card}. Use these colors.`);
+  }
+  if (bgMode === 'light') {
+    parts.push('LIGHT MODE: Background is white/light. Text must be dark (#1a1d23). Ensure high contrast for all text against light backgrounds.');
+  } else if (bgMode === 'chroma') {
+    const hasGreen = customPalette && (_isGreenish(customPalette.accent) || _isGreenish(customPalette.green));
+    const chromaColor = hasGreen ? 'blue (#0000FF)' : 'green (#00FF00)';
+    parts.push(`CHROMA KEY MODE: Background is solid ${chromaColor} for chroma keying. DO NOT use ${hasGreen ? 'blue' : 'green'} or similar colors in ANY visual element (text, icons, cards, borders, fills). Avoid colors close to the chroma color. The background will be removed in post-production.`);
   }
   return parts.length ? '\n## ACTIVE PALETTE\n' + parts.join('\n') : '';
 }
@@ -72,7 +108,7 @@ const LAYOUT_HINTS = {
 
 // ── Main prompt builder ──────────────────────────────────────────────────────
 
-function getStaticLayoutPrompt({ transcriptSegment, type, description, durationFrames, compositionId, customPalette, paletteCategory }) {
+function getStaticLayoutPrompt({ transcriptSegment, type, description, durationFrames, compositionId, customPalette, paletteCategory, bgMode }) {
   const compName = _componentName(compositionId);
   const layoutHint = LAYOUT_HINTS[type] || LAYOUT_HINTS.title;
   const durationSecs = (durationFrames / 30).toFixed(1);
@@ -130,7 +166,7 @@ import {AbsoluteFill, Img, staticFile} from 'remotion';
 // Import icons as needed:
 // import { Zap, ArrowRight, CheckCircle } from 'lucide-react';
 
-${_buildPaletteCode(customPalette)}
+${_buildPaletteCode(customPalette, bgMode)}
 
 const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({children,style}) => (
   <div style={{position:'absolute',left:160,top:180,right:160,bottom:160,
@@ -200,7 +236,7 @@ export const ${compName}:React.FC = () => (
   </AbsoluteFill>
 );
 \`\`\`
-${_paletteNote(customPalette, paletteCategory)}
+${_paletteNote(customPalette, paletteCategory, bgMode)}
 
 ## Composition Details
 - Export: ${compName}

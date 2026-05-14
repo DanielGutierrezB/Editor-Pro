@@ -507,6 +507,42 @@
         if (resetBtn) resetBtn.style.display = "none";
     }
 
+    function _initBgModeToggle() {
+        var btns = document.querySelectorAll(".mp-bg-mode-btn");
+        if (!btns.length) return;
+
+        // Restore saved mode
+        var savedMode = "dark";
+        try { savedMode = localStorage.getItem("mp-bg-mode") || "dark"; } catch(_e) {}
+        if (motionPro) motionPro.bgMode = savedMode;
+
+        function _updateBgBtns(activeMode) {
+            btns.forEach(function(b) {
+                var mode = b.getAttribute("data-bg-mode");
+                if (mode === activeMode) {
+                    b.style.opacity = "1";
+                    b.style.background = "var(--accent)";
+                    b.style.color = "var(--bg-primary)";
+                } else {
+                    b.style.opacity = "0.5";
+                    b.style.background = "";
+                    b.style.color = "";
+                }
+            });
+        }
+        _updateBgBtns(savedMode);
+
+        btns.forEach(function(btn) {
+            btn.addEventListener("click", function() {
+                var mode = btn.getAttribute("data-bg-mode");
+                if (motionPro) motionPro.bgMode = mode;
+                try { localStorage.setItem("mp-bg-mode", mode); } catch(_e) {}
+                _updateBgBtns(mode);
+                showToast("Modo fondo: " + mode, "info");
+            });
+        });
+    }
+
     function _initSingleMotionToggle() {
         var markersOnlyCb = document.getElementById("mp-markers-only");
         var singleLabel = document.getElementById("mp-single-motion-label");
@@ -531,6 +567,7 @@
         _initHistory();
         _initRegenPalette();
         _initSingleMotionToggle();
+        _initBgModeToggle();
 
         // On init, restart server to ensure clean state
         if (motionPro) {

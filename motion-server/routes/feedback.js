@@ -109,6 +109,9 @@ router.post('/', (req, res) => {
     type,
     description,
     transcriptSegment,
+    customPalette,
+    paletteCategory,
+    bgMode,
   } = req.body;
 
   if (!compositionId || !feedback) {
@@ -183,6 +186,9 @@ router.post('/', (req, res) => {
     type: type || 'title',
     description: description || '',
     transcriptSegment: transcriptSegment || '',
+    customPalette: customPalette || null,
+    paletteCategory: paletteCategory || null,
+    bgMode: bgMode || 'dark',
   });
 
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {
