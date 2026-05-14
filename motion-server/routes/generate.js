@@ -3,9 +3,8 @@ const router = express.Router();
 const { sendLLM } = require('../lib/llm');
 const RemotionManager = require('../lib/remotion-manager');
 const { getGenerationPrompt } = require('../lib/prompts');
-// TemplateManager and template-prompt kept for potential fallback
-// const TemplateManager = require('../lib/template-manager');
-// const { getTemplateFillingPrompt } = require('../lib/template-prompt');
+const { getStaticLayoutPrompt } = require('../lib/static-layout-prompt');
+const { injectAnimWrapper } = require('../lib/anim-wrapper');
 
 router.post('/', (req, res) => {
   const {
@@ -82,14 +81,14 @@ router.post('/', (req, res) => {
 // by the pre-approved visual layout description.
 // ──────────────────────────────────────────────────────────────────────────────
 // ──────────────────────────────────────────────────────────────────────────────
-// Free-form generation — LLM generates full TSX directly, guided by design system
-// and quality rules. Palette colors are injected into the prompt.
+// Static Layout + Animation Engine
+// LLM generates only layout + styling (no animation code).
+// The Anim wrapper handles all motion automatically.
 // ──────────────────────────────────────────────────────────────────────────────
 router.post('/template', (req, res) => {
   const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, paletteCategory } = req.body;
-  if (customPalette) console.log('[generate/free-form] Custom palette received:', customPalette.bg, customPalette.accent);
-  else console.log('[generate/free-form] No custom palette');
-  console.log('[generate/free-form] provider=' + provider + ' model=' + model + ' type=' + (proposal && proposal.type));
+  if (customPalette) console.log('[generate/static-layout] Custom palette:', customPalette.bg, customPalette.accent);
+  console.log('[generate/static-layout] provider=' + provider + ' model=' + model + ' type=' + (proposal && proposal.type));
 
   if (!proposal || !transcriptSegment) {
     return res.status(400).json({ error: 'Missing proposal or transcriptSegment' });
@@ -99,14 +98,13 @@ router.post('/template', (req, res) => {
   const durationSecs = (proposal.endTime || 0) - (proposal.startTime || 0);
   const durationFrames = Math.max(90, Math.round(durationSecs * 30) + 6);
 
-  // Free-form: LLM generates complete TSX code with expressive animations
-  const { systemMsg, userMsg } = getGenerationPrompt({
+  // Static Layout: LLM designs layout only, Anim wrapper handles motion
+  const { systemMsg, userMsg } = getStaticLayoutPrompt({
     transcriptSegment,
     type: proposal.type,
     description: proposal.description,
     durationFrames,
     compositionId,
-    brandfetchKey: '',
     customPalette: customPalette || null,
     paletteCategory: paletteCategory || null,
   });
@@ -115,13 +113,16 @@ router.post('/template', (req, res) => {
     if (err) return res.status(500).json({ error: 'LLM error: ' + err.message });
 
     if (!rawCode || rawCode.trim().length === 0) {
-      console.error('[generate/free-form] LLM returned empty response. provider=' + provider + ' model=' + model);
-      return res.status(500).json({ error: 'LLM returned empty response \u2014 check API key and model' });
+      console.error('[generate/static-layout] LLM returned empty response');
+      return res.status(500).json({ error: 'LLM returned empty response' });
     }
 
     let tsxCode = rawCode;
     const codeMatch = rawCode.match(/```(?:tsx?|jsx?|react)?\s*\n([\s\S]*?)```/);
     if (codeMatch) tsxCode = codeMatch[1].trim();
+
+    // Inject the Anim and Section animation implementations
+    tsxCode = injectAnimWrapper(tsxCode);
 
     try {
       const manager = new RemotionManager(req.app.locals.renderProject);
@@ -142,7 +143,7 @@ router.post('/template', (req, res) => {
         tsxPath: typeof result === 'string' ? result : (result && result.filePath) || '',
         durationFrames,
         status: 'generated',
-        method: 'free-form',
+        method: 'static-layout',
       });
     } catch (writeErr) {
       res.status(500).json({ error: 'Write error: ' + writeErr.message });
