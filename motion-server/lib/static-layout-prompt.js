@@ -244,14 +244,20 @@ Available types:
 
 Stagger delays by 8-12 frames between elements. All elements should be visible within 36 frames.
 
-## SECTIONS
+## SECTIONS (CRITICAL — no dead time!)
 
 Use <Section from={startFrame} dur={durationInFrames}> to create sequential visual "slides":
 - Each Section fades in, holds, then fades out
 - Content inside uses <Anim> for element-level entrance stagger
-- Sections are sequential — they do NOT overlap
+- Sections MUST cover the ENTIRE composition duration with NO GAPS:
+  - Section 1 starts at from={0}
+  - Each Section starts immediately when the previous one ends
+  - Last Section must extend to the end of the composition
+  - Example for ${durationFrames} frames with ${numSections} sections: each ≈ ${Math.round(durationFrames / numSections)} frames
+- There should be NO dead time (blank frames with nothing visible)
+- Overlap by ~15 frames between sections is OK (cross-fade effect)
 
-This composition needs ${numSections} section(s).`;
+This composition needs ${numSections} section(s) covering all ${durationFrames} frames.`;
 
   const userMsg = `Design a layout for this ${durationSecs}s motion graphic (${durationFrames} frames at 30fps).
 

@@ -1118,14 +1118,16 @@
     /** Extract HH-MM-SS timestamp from a compositionId (last 8 chars: HH-MM-SS) or generate current time */
     function _mpExtractTimeId(compositionId) {
         if (compositionId) {
-            var m = compositionId.match(/(\d{2}-\d{2}-\d{2})$/);
+            // Match HH-MM-SS-mmm (with ms) or HH-MM-SS
+            var m = compositionId.match(/(\d{2}-\d{2}-\d{2}(?:-\d{2,3})?)$/);
             if (m) return m[1];
         }
         var now = new Date();
         var hh = String(now.getHours()); if (hh.length < 2) hh = "0" + hh;
         var mm = String(now.getMinutes()); if (mm.length < 2) mm = "0" + mm;
         var ss = String(now.getSeconds()); if (ss.length < 2) ss = "0" + ss;
-        return hh + "-" + mm + "-" + ss;
+        var ms = String(now.getMilliseconds()); while (ms.length < 3) ms = "0" + ms;
+        return hh + "-" + mm + "-" + ss + "-" + ms;
     }
 
     // ─── Brandfetch Logo API ──────────────────────────────────────
@@ -2470,7 +2472,8 @@
         var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
         var mpDuration = v.mediaDurationSec || Math.max(0.1, motion.endTime - mpStart);
         var mediaPath = mpNormalizeMediaPath(v.mp4Path);
-        var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId);
+        // Use compositionId directly as clip name so it matches the src/ file name
+        var clipName = v.compositionId || (_mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId));
 
         var isNewVersion = v.version > 1 && motion.placedInTimeline && motion.baseTrackIndex >= 0;
 
@@ -2550,7 +2553,7 @@
             durationSecs: mpComputeClipDurationSecs(motion, v),
             oldTrackIndex: motion.baseTrackIndex,
             newTrackIndex: motion.baseTrackIndex + (v.version - 1),
-            clipName: _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId),
+            clipName: v.compositionId || (_mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId)),
             labelColor: _mpLabelColorForType(motion.type),
             oldClipPattern: _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0]
         };
