@@ -95,6 +95,17 @@ function _buildPaletteCode(customPalette, bgMode) {
     bg = '#f8f9fa'; card = '#ffffff'; text = '#1a1d23';
     dim = 'rgba(0,0,0,0.55)'; border = 'rgba(0,0,0,0.08)'; glow = 'rgba(10,233,141,0.06)';
   } else if (bgMode === 'chroma') {
+    const hasGreen = _isGreenish(p.accent) || _isGreenish(p.green);
+    const chromaIsBlue = hasGreen;
+    bg = chromaIsBlue ? '#0000FF' : '#00FF00';
+    card = 'rgba(0,0,0,0.65)';
+    return `const C = {\n`
+      + `  bg:'${bg}', card:'${card}', accent:'${_chromaSafe(p.accent, chromaIsBlue)}', green:'${_chromaSafe(p.green, chromaIsBlue)}',\n`
+      + `  orange:'${_chromaSafe(p.orange, chromaIsBlue)}', purple:'${_chromaSafe(p.purple, chromaIsBlue)}', red:'${_chromaSafe(p.red, chromaIsBlue)}', text:'${text}',\n`
+      + `  dim:'${dim}', border:'${border}',\n`
+      + `  glow:'${glow}',\n`
+      + `};`;
+  } else if (bgMode === 'alpha') {
     bg = 'transparent';
     card = 'rgba(0,0,0,0.65)';
   }
@@ -946,6 +957,11 @@ ${transcriptSegment}\n`
   if (bgMode === 'light') {
     bgNote = '\n**LIGHT MODE**: Background is light/white. Text must be dark. Ensure high contrast.';
   } else if (bgMode === 'chroma') {
+    const p = customPalette ? (validatePalette(customPalette) || DEFAULT_PALETTE) : DEFAULT_PALETTE;
+    const hasGreen = _isGreenish(p.accent) || _isGreenish(p.green);
+    const chromaColor = hasGreen ? 'blue (#0000FF)' : 'green (#00FF00)';
+    bgNote = `\n**CHROMA KEY MODE**: Background is solid ${chromaColor}. DO NOT use ${hasGreen ? 'blue' : 'green'} colors in any visual element.`;
+  } else if (bgMode === 'alpha') {
     bgNote = '\n**ALPHA/TRANSPARENT MODE**: Background is transparent. Video renders with alpha channel (ProRes 4444). Cards float over the video.';
   }
 

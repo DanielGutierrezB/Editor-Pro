@@ -167,7 +167,7 @@ function _ensureRenderFn(app) {
 
     var renderOpts = {};
     if (job.bgMode) renderOpts.bgMode = job.bgMode;
-    console.log('[render/video] Rendering via Remotion (ProRes' + (job.bgMode === 'chroma' ? ' 4444 alpha' : '') + ')...');
+    console.log('[render/video] Rendering via Remotion (ProRes' + (job.bgMode === 'alpha' ? ' 4444 alpha' : '') + ')...');
     manager.render(job.compositionId, function(err, result) {
       if (err) {
         console.error('[render/video] Remotion render failed after ' + (Date.now() - renderStart) + 'ms: ' + String(err.message).substring(0, 300));

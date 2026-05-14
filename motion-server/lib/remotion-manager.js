@@ -292,8 +292,8 @@ class RemotionManager {
     // Fast encoding on macOS with hardware acceleration. Larger files but perfect for editing.
     const outputPath = path.join(rendersDir, `${compositionId}.mov`);
 
-    // Alpha mode: ProRes 4444 with alpha channel (for chroma/transparent bg)
-    const useAlpha = opts.bgMode === 'chroma';
+    // Alpha mode: ProRes 4444 with alpha channel (for transparent bg)
+    const useAlpha = opts.bgMode === 'alpha';
     const proresProfile = useAlpha ? '4444' : 'standard';
     const pixelFormat = useAlpha ? 'yuva444p10le' : 'yuv422p10le';
     if (useAlpha) console.log(`[RemotionManager] Alpha render: ProRes 4444 + yuva444p10le for ${compositionId}`);

@@ -100,6 +100,10 @@ function _paletteNote(customPalette, paletteCategory, bgMode) {
   if (bgMode === 'light') {
     parts.push('LIGHT MODE: Background is white/light. Text must be dark (#1a1d23). Ensure high contrast for all text against light backgrounds.');
   } else if (bgMode === 'chroma') {
+    const hasGreen = customPalette && (_isGreenish(customPalette.accent) || _isGreenish(customPalette.green));
+    const chromaColor = hasGreen ? 'blue (#0000FF)' : 'green (#00FF00)';
+    parts.push(`CHROMA KEY MODE: Background is solid ${chromaColor} for chroma keying. DO NOT use ${hasGreen ? 'blue' : 'green'} or similar colors in ANY visual element.`);
+  } else if (bgMode === 'alpha') {
     parts.push('ALPHA/TRANSPARENT MODE: Background is transparent (C.bg = "transparent"). The video will be rendered with alpha channel (ProRes 4444). DO NOT add any full-screen background elements. Cards and content will float over the video in Premiere Pro. Use C.card for card backgrounds (semi-transparent dark). Text should be white (C.text) for readability over any video.');
   }
   return parts.length ? '\n## ACTIVE PALETTE\n' + parts.join('\n') : '';
