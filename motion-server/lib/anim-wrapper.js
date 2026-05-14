@@ -1,12 +1,12 @@
 /**
- * Animation Wrapper — injects reliable Anim and Section components into LLM-generated layouts.
+ * Animation Wrapper v2 — injects Anim and Section components into LLM-generated layouts.
  *
- * The LLM generates static layouts using:
- *   <Anim type="fade-up" delay={0}>content</Anim>
- *   <Section from={0} dur={150}>layout</Section>
+ * Key fix: Section now uses Remotion's <Sequence> which properly resets
+ * useCurrentFrame() to local time. This means Anim delays work correctly
+ * in ALL sections, not just the first one.
  *
- * This module replaces the `declare const Anim` and `declare const Section` stubs
- * with actual Remotion implementations.
+ * v1 bug: Anim used global frame, so delay=0 in Section 2 (from=148)
+ * would calculate frame-0 = 148, making the animation instant (already done).
  */
 
 const ANIM_COMPONENT = `
@@ -33,21 +33,27 @@ const Anim:React.FC<{type?:string;delay?:number;children:React.ReactNode;style?:
 };
 `;
 
+// Section now uses Remotion's Sequence which resets useCurrentFrame() to local time.
+// This ensures Anim delays work correctly in every section.
+// Fade in/out is handled by a wrapper div with opacity interpolation.
 const SECTION_COMPONENT = `
 // ─── Section Engine (auto-injected, do not modify) ─────────────────────────
-const Section:React.FC<{from:number;dur:number;children:React.ReactNode}> = ({from,dur,children}) => {
+const SectionFade:React.FC<{dur:number;children:React.ReactNode}> = ({dur,children}) => {
   const frame = useCurrentFrame();
-  const {durationInFrames: totalDur} = useVideoConfig();
-  const localFrame = frame - from;
-  if (localFrame < -10 || localFrame >= dur) return null;
-  const fi = 10;
-  const fo = 10;
-  const fadeIn = interpolate(localFrame, [0, fi], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
+  const fi = 12;
+  const fo = 12;
   const endStart = Math.max(fi + 1, dur - fo);
-  const fadeOut = interpolate(localFrame, [endStart, dur], [1, 0], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
+  const fadeIn = interpolate(frame, [0, fi], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
+  const fadeOut = interpolate(frame, [endStart, dur], [1, 0], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
   const opacity = Math.min(fadeIn, fadeOut);
   return <div style={{position:'absolute',inset:0,opacity}}>{children}</div>;
 };
+
+const Section:React.FC<{from:number;dur:number;children:React.ReactNode}> = ({from,dur,children}) => (
+  <Sequence from={from} durationInFrames={dur} layout="none">
+    <SectionFade dur={dur}>{children}</SectionFade>
+  </Sequence>
+);
 `;
 
 /**
@@ -57,13 +63,12 @@ const Section:React.FC<{from:number;dur:number;children:React.ReactNode}> = ({fr
 function injectAnimWrapper(tsxCode) {
   let code = tsxCode;
 
-  // ── 1. Remove declare stubs (entire lines, including multi-line type declarations) ──
-  // These match: declare const Anim: React.FC<{...}>; (possibly spanning the whole line)
+  // ── 1. Remove declare stubs ────────────────────────────────────────────────
   code = code.replace(/^declare\s+const\s+Anim\b[^\n]*\n?/gm, '');
   code = code.replace(/^declare\s+const\s+Section\b[^\n]*\n?/gm, '');
 
   // ── 2. Ensure required imports from 'remotion' ─────────────────────────────
-  const neededImports = ['useCurrentFrame', 'useVideoConfig', 'interpolate', 'Easing'];
+  const neededImports = ['useCurrentFrame', 'useVideoConfig', 'interpolate', 'Easing', 'Sequence'];
   const importMatch = code.match(/import\s*\{([^}]+)\}\s*from\s*['"]remotion['"]/);
   if (importMatch) {
     const currentImports = importMatch[1].split(',').map(s => s.trim()).filter(Boolean);
@@ -73,7 +78,6 @@ function injectAnimWrapper(tsxCode) {
       code = code.replace(importMatch[0], `import {${newImports}} from 'remotion'`);
     }
   } else {
-    // No remotion import found — add one after the last import line
     const lastImportIdx = code.lastIndexOf('import ');
     if (lastImportIdx !== -1) {
       const endOfLine = code.indexOf('\n', lastImportIdx);
@@ -83,30 +87,26 @@ function injectAnimWrapper(tsxCode) {
     }
   }
 
-  // ── 3. Find insertion point — right before the first user layout const or export ──
+  // ── 3. Find insertion point ────────────────────────────────────────────────
   let insertIdx = -1;
 
-  // Try: before any "// ═══" marker
   const markerIdx = code.indexOf('// ═══');
   if (markerIdx !== -1) insertIdx = markerIdx;
 
-  // Try: before "const Layout" or any user-defined component
   if (insertIdx === -1) {
-    const layoutMatch = code.match(/^const Layout\d*/m);
+    const layoutMatch = code.match(/^const (Layout|Slide)\d*/m);
     if (layoutMatch) insertIdx = code.indexOf(layoutMatch[0]);
   }
 
-  // Try: before "export const"
   if (insertIdx === -1) {
     const exportIdx = code.indexOf('export const');
     if (exportIdx !== -1) insertIdx = exportIdx;
   }
 
-  // ── 4. Insert Anim and Section implementations ─────────────────────────────
+  // ── 4. Insert implementations ──────────────────────────────────────────────
   if (insertIdx !== -1) {
     code = code.slice(0, insertIdx) + ANIM_COMPONENT + '\n' + SECTION_COMPONENT + '\n' + code.slice(insertIdx);
   } else {
-    // Append before last line as fallback
     const lastNewline = code.lastIndexOf('\n');
     code = code.slice(0, lastNewline) + '\n' + ANIM_COMPONENT + '\n' + SECTION_COMPONENT + '\n' + code.slice(lastNewline);
   }
