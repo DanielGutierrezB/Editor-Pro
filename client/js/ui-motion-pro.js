@@ -2138,7 +2138,7 @@
             if (state.paletteCategory) motionPro.paletteCategory = state.paletteCategory;
             try {
                 var savedBgMode = localStorage.getItem("mp-bg-mode");
-                if (savedBgMode && !motionPro.bgMode) motionPro.bgMode = savedBgMode;
+                if (savedBgMode) motionPro.bgMode = savedBgMode;
             } catch(_e) {}
         }
 
