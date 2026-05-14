@@ -2149,8 +2149,24 @@
             brandfetchKey: mpGetBrandfetchKey()
         };
 
-        // Go directly to template-based generation (no visual proposal pre-pass)
-        _startActualGeneration();
+        // Context pass: analyze full transcript before batch generation
+        var _contextResult = null;
+        if (selected.length >= 1 && state.transcript) {
+            mpSetProgress("mp-generate", 0, "Analizando contexto del video…");
+            showElement("mp-step2-progress");
+            motionPro.getContextForSegments(state.transcript, selected, aiConfig, function(_ctxErr, ctxData) {
+                _contextResult = ctxData;
+                if (ctxData && ctxData.summary) {
+                    console.log("[Motion-Pro] Context pass OK: " + ctxData.summary);
+                    if (window.EPLogger) EPLogger.log("motion-pro", "context-pass-ok", ctxData.summary.substring(0, 100));
+                } else {
+                    console.log("[Motion-Pro] Context pass skipped or failed, continuing without context");
+                }
+                _startActualGeneration();
+            });
+        } else {
+            _startActualGeneration();
+        }
 
         function _finishGenerationWithCancel() {
             state.mpGenerateCancelRequested = false;
@@ -2274,6 +2290,24 @@
 
             var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
 
+            // Enrich segment with ±15s of surrounding transcript for better context
+            var extendedSegment = mpExtractSegment(
+                Math.max(0, proposal.startTime - 15),
+                proposal.endTime + 15
+            );
+            if (extendedSegment.length > segment.length) {
+                segment = "## Surrounding context (±15s)\n" + extendedSegment + "\n\n## This segment's transcript\n" + segment;
+            }
+
+            // Build per-segment context data from context pass
+            var _segCtxData = null;
+            if (_contextResult) {
+                _segCtxData = {
+                    summary: _contextResult.summary || "",
+                    segmentContext: (_contextResult.segments && _contextResult.segments[idx]) || null
+                };
+            }
+
             // Show per-card progress — persist state so re-renders pick it up
             if (!window._mpGenCardState) window._mpGenCardState = {};
             window._mpGenCardState[proposal.id] = { pct: 5, msg: "En cola…" };
@@ -2337,7 +2371,7 @@
                                         launchWorker();
                                     });
                                 }
-                            }, outputDir, _genCardProgress);
+                            }, outputDir, _genCardProgress, _segCtxData);
                         }, 3000);
                         return;
                     }
@@ -2361,7 +2395,7 @@
                         launchWorker();
                     });
                 }
-            }, outputDir, _genCardProgress);
+            }, outputDir, _genCardProgress, _segCtxData);
 
             // Placeholder motion was created synchronously — re-render so card appears with progress
             setTimeout(function() { mpRenderControlPanel(); }, 100);

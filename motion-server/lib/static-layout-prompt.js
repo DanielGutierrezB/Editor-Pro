@@ -133,9 +133,27 @@ const LAYOUT_HINTS = {
   beforeafter: 'Two panels side by side. Left=before, right=after.',
 };
 
+
+// ── Context block builder ────────────────────────────────────────────────────
+
+function _buildContextBlock(contextSummary, segmentContext) {
+  if (!contextSummary && !segmentContext) return '';
+  const parts = ['## Video Context'];
+  if (contextSummary) {
+    parts.push('This video is about: ' + contextSummary);
+  }
+  if (segmentContext) {
+    if (segmentContext.context) parts.push('What came before: ' + segmentContext.context);
+    if (segmentContext.keyMessage) parts.push('Key message of this segment: ' + segmentContext.keyMessage);
+    if (segmentContext.narrativeRole) parts.push('Role in narrative: ' + segmentContext.narrativeRole);
+  }
+  parts.push('');
+  return parts.join('\n') + '\n';
+}
+
 // ── Main prompt builder ──────────────────────────────────────────────────────
 
-function getStaticLayoutPrompt({ transcriptSegment, type, description, durationFrames, compositionId, customPalette, paletteCategory, bgMode }) {
+function getStaticLayoutPrompt({ transcriptSegment, type, description, durationFrames, compositionId, customPalette, paletteCategory, bgMode, contextSummary, segmentContext }) {
   const compName = _componentName(compositionId);
   const layoutHint = LAYOUT_HINTS[type] || LAYOUT_HINTS.title;
   const durationSecs = (durationFrames / 30).toFixed(1);
@@ -265,6 +283,7 @@ export const ${compName}:React.FC = () => (
 \`\`\`
 ${_paletteNote(customPalette, paletteCategory, bgMode)}
 
+${_buildContextBlock(contextSummary, segmentContext)}
 ## Composition Details
 - Export: ${compName}
 - Duration: ${durationFrames} frames (${durationSecs}s)
@@ -272,7 +291,7 @@ ${_paletteNote(customPalette, paletteCategory, bgMode)}
 - Type: ${type} — ${layoutHint}
 - Description: ${description}
 
-## Transcript
+## Transcript (this specific segment)
 ${transcriptSegment}
 
 ## YOUR TASK

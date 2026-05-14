@@ -404,9 +404,42 @@
         if (savedTimeout) MP_PIPELINE_TIMEOUT_MS = parseInt(savedTimeout, 10) || MP_PIPELINE_TIMEOUT_MS;
     } catch(_e) {}
 
+    /**
+     * Context Pass — analyze full transcript to generate context for each segment.
+     * Called once before batch generation. Returns { summary, segments[] }.
+     */
+    MotionPro.prototype.getContextForSegments = function(fullTranscript, segments, aiConfig, callback) {
+        var segData = segments.map(function(s) {
+            return {
+                startTime: s.startTime,
+                endTime: s.endTime,
+                type: s.type,
+                description: s.description || ""
+            };
+        });
+
+        var body = {
+            fullTranscript: fullTranscript,
+            segments: segData,
+            provider: aiConfig.provider,
+            model: aiConfig.model,
+            apiKey: aiConfig.apiKey
+        };
+
+        console.log("[Motion-Pro] Context pass: analyzing " + segments.length + " segments...");
+        this._post("/api/generate/context", body, function(err, result) {
+            if (err) {
+                console.warn("[Motion-Pro] Context pass failed (continuing without context):", err.message);
+                return callback(null, null);
+            }
+            console.log("[Motion-Pro] Context pass complete: " + (result.summary || "").substring(0, 80) + "... (" + result.llmMs + "ms)");
+            callback(null, result);
+        });
+    };
+
     // ─── Full pipeline: generate TSX → render video → place in timeline ────
 
-    MotionPro.prototype.generateMotion = function(proposal, transcriptSegment, aiConfig, callback, outputDir, onProgress) {
+    MotionPro.prototype.generateMotion = function(proposal, transcriptSegment, aiConfig, callback, outputDir, onProgress, contextData) {
         var self = this;
         var _progress = onProgress || function() {};
         var version = 1;
@@ -460,6 +493,12 @@
             paletteCategory: self.paletteCategory || null,
             bgMode: self.bgMode || "dark"
         };
+
+        // Attach context from context pass if available
+        if (contextData) {
+            if (contextData.summary) body.contextSummary = contextData.summary;
+            if (contextData.segmentContext) body.segmentContext = contextData.segmentContext;
+        }
 
         var _pipelineStart = Date.now();
         console.log("[Motion-Pro] generateMotion START id=" + proposal.id + " type=" + proposal.type + " v" + version);

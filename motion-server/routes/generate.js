@@ -106,7 +106,7 @@ router.post('/', (req, res) => {
 // The Anim wrapper handles all motion automatically.
 // ──────────────────────────────────────────────────────────────────────────────
 router.post('/template', (req, res) => {
-  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, paletteCategory, bgMode } = req.body;
+  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, paletteCategory, bgMode, contextSummary, segmentContext } = req.body;
   if (customPalette) console.log('[generate/static-layout] Custom palette:', customPalette.bg, customPalette.accent);
   console.log('[generate/static-layout] provider=' + provider + ' model=' + model + ' type=' + (proposal && proposal.type) + ' bgMode=' + bgMode);
 
@@ -128,6 +128,8 @@ router.post('/template', (req, res) => {
     customPalette: customPalette || null,
     paletteCategory: paletteCategory || null,
     bgMode: bgMode || 'dark',
+    contextSummary: contextSummary || null,
+    segmentContext: segmentContext || null,
   });
 
   const llmStart = Date.now();
@@ -182,6 +184,78 @@ router.post('/template', (req, res) => {
       console.error('[generate/static-layout] Write error for ' + compositionId + ':', writeErr.message);
       res.status(500).json({ error: 'Write error: ' + writeErr.message });
     }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Context Pass — Analyze full transcript and generate context notes for each
+// marked segment before batch generation. One LLM call for the whole batch.
+// ──────────────────────────────────────────────────────────────────────────────
+router.post('/context', (req, res) => {
+  const { fullTranscript, segments, provider, model, apiKey } = req.body;
+
+  if (!fullTranscript || !segments || !segments.length) {
+    return res.status(400).json({ error: 'Missing fullTranscript or segments' });
+  }
+
+  console.log('[generate/context] Analyzing ' + segments.length + ' segments from transcript (' + fullTranscript.length + ' chars)');
+
+  const segmentList = segments.map(function(s, i) {
+    return 'Segment ' + (i + 1) + ' [' + (s.startTime || 0).toFixed(1) + 's - ' + (s.endTime || 0).toFixed(1) + 's]: type=' + (s.type || '?') + ', description="' + (s.description || '') + '"';
+  }).join('\n');
+
+  const systemMsg = `You are a video content analyst. You will receive a full transcript of an educational video and a list of segments where motion graphics will be placed.
+
+Your job: provide context that helps a motion graphics designer understand each segment's role in the overall narrative.
+
+Respond in the SAME LANGUAGE as the transcript.
+Respond ONLY with valid JSON — no markdown, no explanation.`;
+
+  const userMsg = `## Full Transcript
+${fullTranscript}
+
+## Segments to analyze
+${segmentList}
+
+## Task
+Return a JSON object with:
+1. "summary": A 1-2 sentence summary of what this video is about
+2. "segments": An array (same order as input) where each element has:
+   - "context": What was discussed before this moment that gives it meaning (1-2 sentences)
+   - "keyMessage": The core concept or takeaway of this specific segment (1 sentence)
+   - "narrativeRole": One of: "introduction", "explanation", "example", "comparison", "summary", "transition", "detail", "conclusion"
+
+Example response:
+{"summary":"Video sobre cómo funciona Git internamente","segments":[{"context":"Viene de explicar qué es control de versiones","keyMessage":"Un repositorio es una carpeta rastreada por Git","narrativeRole":"explanation"}]}`;
+
+  const llmStart = Date.now();
+  sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, raw) => {
+    const llmMs = Date.now() - llmStart;
+    if (err) {
+      console.error('[generate/context] LLM error after ' + llmMs + 'ms:', err.message);
+      return res.status(500).json({ error: 'Context analysis failed: ' + err.message });
+    }
+
+    console.log('[generate/context] LLM responded in ' + llmMs + 'ms (' + (raw || '').length + ' chars)');
+
+    // Parse JSON from response (strip markdown fences if present)
+    let parsed;
+    try {
+      let jsonStr = raw.trim();
+      const jsonMatch = jsonStr.match(/```(?:json)?\s*\n([\s\S]*?)```/);
+      if (jsonMatch) jsonStr = jsonMatch[1].trim();
+      parsed = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      console.error('[generate/context] Failed to parse context JSON:', parseErr.message);
+      // Return a usable fallback instead of failing the whole batch
+      parsed = { summary: '', segments: segments.map(function() { return { context: '', keyMessage: '', narrativeRole: '' }; }) };
+    }
+
+    res.json({
+      summary: parsed.summary || '',
+      segments: parsed.segments || [],
+      llmMs: llmMs,
+    });
   });
 });
 
