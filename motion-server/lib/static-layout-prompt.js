@@ -76,7 +76,7 @@ function getStaticLayoutPrompt({ transcriptSegment, type, description, durationF
   const compName = _componentName(compositionId);
   const layoutHint = LAYOUT_HINTS[type] || LAYOUT_HINTS.title;
   const durationSecs = (durationFrames / 30).toFixed(1);
-  const numSections = durationFrames <= 240 ? 1 : durationFrames <= 450 ? 2 : durationFrames <= 600 ? 3 : 4;
+  const numSections = durationFrames <= 240 ? 1 : durationFrames <= 450 ? 2 : durationFrames <= 600 ? 3 : Math.min(6, Math.ceil(durationFrames / 210));
 
   const systemMsg = `You are a motion graphics designer for educational videos. Your graphics appear OVER a professor's video. The viewer sees your graphic for a few seconds while listening.
 

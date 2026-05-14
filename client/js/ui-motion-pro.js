@@ -1562,15 +1562,47 @@
 
             // For each marker, ask AI what type + description fits best (fast, parallel)
             proposals.forEach(function(prop, idx) {
-                var singlePrompt = 'Analiza este segmento de transcripción y propón UN SOLO motion graphic que cubra TODO el contenido como una composición unificada con secciones internas (Sequence blocks).\n\n' +
-                    'TRANSCRIPCIÓN DEL SEGMENTO [' + prop.startTime.toFixed(1) + 's - ' + prop.endTime.toFixed(1) + 's]:\n' +
-                    prop.transcriptSegment + '\n\n' +
-                    'Responde SOLO con JSON válido:\n' +
-                    '{"type":"<tipo>","description":"<descripción visual detallada del motion completo con sus secciones internas>"}\n\n' +
-                    'Tipos disponibles: title, callout, reveal, icons, cards, diagram, steps, chart, metrics, list, comparison, beforeafter, funnel, timeline\n' +
-                    'Elige el tipo que MEJOR represente el concepto completo. La descripción debe ser un brief visual detallado de la composición unificada con sus secciones internas.';
+                var durationSecs = (prop.endTime - prop.startTime).toFixed(1);
+                var estSections = durationSecs <= 8 ? 1 : durationSecs <= 15 ? 2 : durationSecs <= 20 ? 3 : Math.min(6, Math.ceil(durationSecs / 7));
 
-                var systemMsg = 'Eres un diseñador de motion graphics para cursos educativos. Respondes SOLO JSON válido, sin markdown ni explicaciones adicionales.';
+                var singlePrompt = 'Eres el director creativo de motion graphics para un curso educativo. Diseñas UNA composición unificada que cubre todo este segmento.\n\n' +
+                    'TRANSCRIPCIÓN [' + prop.startTime.toFixed(1) + 's - ' + prop.endTime.toFixed(1) + 's] (' + durationSecs + ' segundos):\n' +
+                    prop.transcriptSegment + '\n\n' +
+                    'DURACIÓN: ' + durationSecs + 's → necesita ~' + estSections + ' secciones visuales (cada sección = una "diapositiva" que aparece, se muestra, y desaparece con fade).\n\n' +
+                    'Tu respuesta debe ser un BRIEF VISUAL EXHAUSTIVO para el diseñador que va a implementar el TSX. Responde SOLO con JSON válido:\n' +
+                    '{\n' +
+                    '  "type": "<tipo principal>",\n' +
+                    '  "description": "<brief visual completo — ver instrucciones abajo>"\n' +
+                    '}\n\n' +
+                    'TIPOS DISPONIBLES:\n' +
+                    '- reveal: Revelación progresiva de un concepto (ideal cuando hay una narrativa que se construye)\n' +
+                    '- steps: Proceso paso a paso\n' +
+                    '- cards: Conceptos en tarjetas\n' +
+                    '- comparison: Dos cosas lado a lado\n' +
+                    '- timeline: Evolución cronológica\n' +
+                    '- diagram: Conexiones entre conceptos\n' +
+                    '- list: Enumeración de items\n' +
+                    '- icons: Conceptos con iconos\n' +
+                    '- metrics: Números/datos destacados\n' +
+                    '- chart: Gráficos/barras\n' +
+                    '- title: Título hero\n' +
+                    '- callout: Frase clave destacada\n' +
+                    '- funnel: Pipeline/embudo\n' +
+                    '- beforeafter: Antes vs después\n\n' +
+                    'LA DESCRIPCIÓN DEBE INCLUIR (esto es lo que lee el diseñador):\n' +
+                    '1. NARRATIVA VISUAL: ¿Qué historia cuenta esta composición de principio a fin?\n' +
+                    '2. SECCIONES (' + estSections + '): Para cada sección describir:\n' +
+                    '   - Qué se muestra (título, elementos, datos)\n' +
+                    '   - Layout (centrado, split, grid, horizontal, vertical)\n' +
+                    '   - Elementos específicos (cards, iconos, números grandes, barras, flechas)\n' +
+                    '   - Textos EXACTOS extraídos de la transcripción (corregir typos)\n' +
+                    '3. JERARQUÍA TIPOGRÁFICA: Qué es grande/hero, qué es secundario, qué es complementario\n' +
+                    '4. FLUJO DE ANIMACIÓN: Cómo progresa la narrativa entre secciones (build-up, reveal, conclusión)\n\n' +
+                    'EJEMPLO DE BUENA DESCRIPCIÓN:\n' +
+                    '"Composición de 4 secciones que explica el flujo de Git. Sección 1: Título hero \\"Control de Versiones con Git\\" centrado con ícono de Git, subtítulo \\"Tu máquina del tiempo para código\\". Sección 2: 3 cards horizontales mostrando los estados de archivos (Modified → Staged → Committed) con flechas entre ellas y etiquetas descriptivas. Sección 3: Diagrama vertical del flujo Working Directory → Staging Area → Repository con comandos git add y git commit como labels en las flechas. Sección 4: Split layout — izquierda muestra \\"Sin Git\\" (ícono de carpeta con ✗) vs derecha \\"Con Git\\" (ícono de timeline con ✓), cerrando con callout \\"Cada cambio queda registrado\\"."\n\n' +
+                    'NO escribas descripciones vagas como "Mostrar los conceptos principales". Sé ESPECÍFICO con layouts, textos y elementos.';
+
+                var systemMsg = 'Eres un director creativo de motion graphics educativos con 10 años de experiencia. Tu trabajo: crear briefs visuales tan detallados que un diseñador junior pueda implementarlos sin preguntas. Respondes SOLO JSON válido, sin markdown ni explicaciones fuera del JSON.';
 
                 aiAnalyzer._send(systemMsg, singlePrompt, function(result) {
                     completed++;
