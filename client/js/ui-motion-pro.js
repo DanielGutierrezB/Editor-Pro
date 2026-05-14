@@ -1856,15 +1856,10 @@
 
                 var typeInfo = MotionPro.TYPES[p.type] || { label: p.type, color: "#818cf8" };
                 var priorityClass = p.priority === "alta" ? "mp-priority-high" : p.priority === "baja" ? "mp-priority-low" : "mp-priority-med";
-                var hasVisual = !!(p.visualProposal && p.visualProposal.description);
-
                 var card = document.createElement("div");
-                card.className = "mp-proposal-card mp-grouped-card" + (hasVisual ? " mp-has-visual" : "");
+                card.className = "mp-proposal-card mp-grouped-card";
                 card.setAttribute("data-mp-idx", origIdx);
                 card.setAttribute("data-mp-group", grpName);
-
-                // Visual proposal UI removed — using template-based generation
-                var visualHtml = '';
 
                 card.innerHTML =
                     '<label class="mp-proposal-check">' +
@@ -1879,7 +1874,6 @@
                             '<span class="' + priorityClass + '">' + esc(p.priority) + '</span>' +
                         '</div>' +
                         '<div class="mp-proposal-desc">' + esc(p.description) + '</div>' +
-                        visualHtml +
                     '</div>';
 
                 // Hide generated items from selection
@@ -1898,9 +1892,7 @@
                     var infoEl = card.querySelector(".mp-proposal-info");
                     if (infoEl) {
                         infoEl.style.cursor = "pointer";
-                        infoEl.addEventListener("click", function(e) {
-                            // Don't trigger playhead if clicking on visual proposal buttons/textarea
-                            if (e.target.closest(".mp-visual-proposal")) return;
+                        infoEl.addEventListener("click", function() {
                             document.querySelectorAll(".mp-proposal-card.mp-card-active").forEach(function(c) {
                                 c.classList.remove("mp-card-active");
                             });
@@ -1908,8 +1900,6 @@
                             mpMovePlayhead(startTime);
                         });
                     }
-
-                    // Visual proposal buttons removed — using template-based generation
                 })(origIdx, p.startTime);
 
                 list.appendChild(card);
@@ -1949,41 +1939,6 @@
         var textEl = btn.querySelector(".btn-analyze-text");
         if (!textEl) return;
         textEl.textContent = "🎬 Generar Seleccionados";
-    }
-
-    /** Run visual proposal for a single proposal by index, then re-render */
-    function _mpProposeOne(idx) {
-        var proposal = motionPro.proposals[idx];
-        if (!proposal) return;
-        if (!motionPro.serverRunning) {
-            showToast("Inicia el servidor Motion-Pro primero", "error");
-            return;
-        }
-        var aiConfig = {
-            provider: state.settings.aiProvider,
-            model: state.settings.aiModel,
-            apiKey: aiAnalyzer.getActiveKey()
-        };
-        var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
-
-        // Update UI: show spinner on the card
-        var card = document.querySelector(".mp-proposal-card[data-mp-idx='" + idx + "']");
-        var visualArea = card && card.querySelector(".mp-visual-proposal");
-        if (visualArea) {
-            visualArea.innerHTML = '<span class="mp-visual-proposing">💭 Generando propuesta visual…</span>';
-        }
-
-        motionPro.proposeVisual(proposal, segment, aiConfig, function(err, result) {
-            if (err) {
-                showToast("Error generando propuesta visual: " + err.message, "error");
-                mpRenderProposals();
-                return;
-            }
-            motionPro.saveState();
-            mpRenderProposals();
-            mpUpdateGenerateButton();
-            showToast("Propuesta visual generada para Clip " + (idx + 1), "success");
-        });
     }
 
     function mpToggleSelectAll() {
@@ -2176,9 +2131,15 @@
     }
 
     function _runGenerationPipeline(selected, outputDir) {
-        // Ensure custom palette is synced to motionPro before generation
-        if (state.customPalette && motionPro) {
-            motionPro.customPalette = state.customPalette;
+        // Ensure palette state is fully synced to motionPro before generation
+        // (covers all paths into the pipeline regardless of prior init order)
+        if (motionPro) {
+            if (state.customPalette) motionPro.customPalette = state.customPalette;
+            if (state.paletteCategory) motionPro.paletteCategory = state.paletteCategory;
+            try {
+                var savedBgMode = localStorage.getItem("mp-bg-mode");
+                if (savedBgMode && !motionPro.bgMode) motionPro.bgMode = savedBgMode;
+            } catch(_e) {}
         }
 
         var aiConfig = {
@@ -2541,278 +2502,6 @@
         }
     }
 
-    function mpPlacePreviewInTimeline(motionId, callback) {
-        var motion = motionPro._findMotion(motionId);
-        if (!motion) { if (callback) callback(); return; }
-        var v = motionPro.getActiveVersion(motionId);
-        if (!v || !v.pngPath) { if (callback) callback(); return; }
-        if (window.EPLogger) EPLogger.log("motion-pro", "timeline-place-preview", motionId + " v" + v.version + " at " + motion.startTime.toFixed(1) + "s");
-
-        var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
-        var mpDuration = Math.max(0.1, motion.endTime - mpStart);
-        var mediaPath = mpNormalizeMediaPath(v.pngPath);
-        var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId);
-
-        // Version > 1 (feedback/regen): place on track ABOVE the original clip
-        // Each version gets its own track: v2 → base+1, v3 → base+2, etc.
-        var isNewVersion = v.version > 1 && motion.placedInTimeline && motion.baseTrackIndex >= 0;
-
-        if (isNewVersion) {
-            var versionTrackOffset = v.version - 1;
-            var payload = {
-                mp4Path: mediaPath,
-                startTimeSecs: mpStart,
-                durationSecs: mpDuration,
-                newTrackIndex: motion.baseTrackIndex + versionTrackOffset,
-                clipName: clipName + "_v" + v.version,
-                labelColor: _mpLabelColorForType(motion.type)
-            };
-
-            var tmpPath = _writeTempJson(payload, "mp_preview_v" + v.version);
-            if (!tmpPath) { if (callback) callback(); return; }
-
-            csInterface.evalScript('replaceMotionOnTrack("' + mpEscapePathForEvalScript(tmpPath) + '")', function(res) {
-                try {
-                    var result = typeof res === "string" ? JSON.parse(res) : res;
-                    if (result && result.error) {
-                        console.warn("[Motion-Pro] PlacePreview v" + v.version + " error:", result.error);
-                        showToast("Preview no colocado: " + result.error, "error");
-                    } else {
-                        mpMovePlayhead(mpStart);
-                    }
-                } catch(e) {
-                    console.warn("[Motion-Pro] PlacePreview parse error:", e.message);
-                }
-                if (callback) callback();
-            });
-        } else {
-            // First version: use importAndPlaceMotions (creates/reuses Motion-Pro track)
-            var payload2 = {
-                clips: [{
-                    mp4Path: mediaPath,
-                    startTimeSecs: mpStart,
-                    durationSecs: mpDuration,
-                    clipName: clipName,
-                    labelColor: _mpLabelColorForType(motion.type)
-                }]
-            };
-
-            var tmpPath2 = _writeTempJson(payload2, "mp_preview");
-            if (!tmpPath2) { if (callback) callback(); return; }
-
-            csInterface.evalScript('importAndPlaceMotions("' + mpEscapePathForEvalScript(tmpPath2) + '")', function(res) {
-                if (res === undefined || res === null || res === "undefined" || res === "null" || res === "EvalScript error." || (typeof res === "string" && res.trim() === "")) {
-                    console.warn("[Motion-Pro] PlacePreview: evalScript returned empty or error:", res);
-                    if (callback) callback();
-                    return;
-                }
-                try {
-                    var result = typeof res === "string" ? JSON.parse(res) : res;
-                    if (result.error) {
-                        console.warn("[Motion-Pro] PlacePreview error:", result.error);
-                        showToast("Preview no colocado: " + result.error, "error");
-                    } else {
-                        motion.placedInTimeline = true;
-                        motion.baseTrackIndex = result.trackIndex != null ? result.trackIndex : -1;
-                        mpMovePlayhead(mpStart);
-                    }
-                } catch(e) {
-                    console.warn("[Motion-Pro] PlacePreview parse error:", e.message);
-                }
-                if (callback) callback();
-            });
-        }
-    }
-
-    // ─── Animate: render video + replace PNG in timeline ──────────
-
-    function mpAnimateSingle(motionId, callback) {
-        var motion = motionPro._findMotion(motionId);
-        if (!motion) { if (callback) callback(new Error("Motion not found")); return; }
-        var v = motionPro.getActiveVersion(motionId);
-        if (!v || v.status !== "preview") { if (callback) callback(new Error("Not in preview state")); return; }
-
-        // Step 1: Find the PNG clip in Premiere to get its duration
-        var clipName = _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0] + "_" + _mpExtractTimeId(v.compositionId);
-
-        csInterface.evalScript('getClipInfoByName("' + mpEscapePathForEvalScript(clipName) + '")', function(clipRes) {
-            var clipInfo;
-            try { clipInfo = JSON.parse(clipRes); } catch(e) { clipInfo = { error: "Parse error" }; }
-
-            var fps = 30;
-            var durationFrames;
-
-            if (clipInfo.found && clipInfo.durationSecs > 0) {
-                durationFrames = Math.round(clipInfo.durationSecs * fps);
-            } else {
-                // Fallback: use proposal time range
-                var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
-                durationFrames = Math.round((motion.endTime - mpStart) * fps);
-            }
-
-            if (durationFrames < 30) durationFrames = 30; // Min 1 second
-
-            // Step 2: Animate (render video with duration override)
-            var aiConfig = {
-                provider: state.settings.aiProvider,
-                model: state.settings.aiModel,
-                apiKey: aiAnalyzer.getActiveKey()
-            };
-
-            motionPro.animateMotion(motionId, durationFrames, aiConfig, function(err, result) {
-                if (err) { if (callback) callback(err); return; }
-
-                // Step 3: Replace PNG with video in timeline
-                // v is the preview version (mediaDurationSec is always null for previews)
-                // Use the rendered result's duration, fallback to durationFrames/fps
-                var animDurationSecs = (result.mp4Path && motionPro.getActiveVersion(motionId) && typeof motionPro.getActiveVersion(motionId).mediaDurationSec === "number")
-                    ? motionPro.getActiveVersion(motionId).mediaDurationSec
-                    : (durationFrames / fps);
-                var payload = {
-                    mp4Path: mpNormalizeMediaPath(result.mp4Path),
-                    targetClipName: clipName,
-                    clipName: clipName + "_Anim",
-                    labelColor: _mpLabelColorForType(motion.type),
-                    durationSecs: animDurationSecs
-                };
-
-                var tmpPath = _writeTempJson(payload, "mp_animate");
-                if (!tmpPath) { if (callback) callback(); return; }
-
-                csInterface.evalScript('importAndPlaceAbove("' + mpEscapePathForEvalScript(tmpPath) + '")', function(placeRes) {
-                    try {
-                        var placeResult = JSON.parse(placeRes);
-                        if (placeResult.error) {
-                            console.warn("[Motion-Pro] Animate place error:", placeResult.error);
-                            showToast("Error al colocar animación: " + placeResult.error, "error");
-                        } else {
-                            motion.placedInTimeline = true;
-                            showToast("🎬 " + motionId + " animado (v" + result.version + ")", "success");
-                        }
-                    } catch(e) {
-                        console.warn("[Motion-Pro] Animate place parse error:", e.message);
-                    }
-                    motionPro.saveState();
-                    mpRenderControlPanel();
-                    if (callback) callback();
-                });
-            }, _mpOutputDir || undefined);
-        });
-    }
-
-    function mpAnimateAll(callback) {
-        var previews = [];
-        for (var i = 0; i < motionPro.motions.length; i++) {
-            var v = motionPro.getActiveVersion(motionPro.motions[i].id);
-            if (v && v.status === "preview") {
-                previews.push(motionPro.motions[i].id);
-            }
-        }
-        if (previews.length === 0) {
-            showToast("No hay previews para animar", "info");
-            if (callback) callback();
-            return;
-        }
-
-        var total = previews.length;
-        var done = 0;
-        var errors = [];
-
-        showToast("🎬 Animando " + total + " motions...", "info");
-
-        function next() {
-            if (done >= total) {
-                state.mpGenerating = false;
-                hideElement("mp-generate-progress");
-                refreshMPHeaderProgressVisibility();
-                if (errors.length > 0) {
-                    showToast("⚠️ " + (total - errors.length) + "/" + total + " animados, " + errors.length + " errores", "error");
-                } else {
-                    showToast("✅ " + total + " motions animados", "success");
-                }
-                mpRenderControlPanel();
-                if (callback) callback();
-                return;
-            }
-
-            var motionId = previews[done];
-            mpSetProgress("mp-generate", Math.round((done / total) * 100), "Animando " + (done + 1) + "/" + total + ": " + motionId);
-
-            mpAnimateSingle(motionId, function(err) {
-                done++;
-                if (err) errors.push({ id: motionId, error: err.message });
-                next();
-            });
-        }
-
-        state.mpGenerating = true;
-        showElement("mp-generate-progress");
-        next();
-    }
-
-    function mpPlaceSingleInTimeline(motionId, callback) {
-        var motion = motionPro._findMotion(motionId);
-        if (!motion) { if (callback) callback(); return; }
-        var v = motionPro.getActiveVersion(motionId);
-        if (!v || !v.mp4Path) { if (callback) callback(); return; }
-        if (window.EPLogger) EPLogger.log("motion-pro", "timeline-place", motionId + " at " + motion.startTime.toFixed(1) + "s");
-
-        var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
-        var mpDuration = mpComputeClipDurationSecs(motion, v);
-        var mediaPath = mpNormalizeMediaPath(v.mp4Path);
-
-        var payload = {
-            clips: [{
-                mp4Path: mediaPath,
-                startTimeSecs: mpStart,
-                durationSecs: mpDuration,
-                clipName: _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId),
-                labelColor: _mpLabelColorForType(motion.type)
-            }]
-        };
-
-        var tmpPath = _writeTempJson(payload, "mp_place");
-        if (!tmpPath) { if (callback) callback(); return; }
-
-        csInterface.evalScript('importAndPlaceMotions("' + mpEscapePathForEvalScript(tmpPath) + '")', function(res) {
-            if (res === undefined || res === null || res === "undefined" || res === "null" || res === "EvalScript error." || (typeof res === "string" && res.trim() === "")) {
-                console.warn("[Motion-Pro] Place: evalScript returned empty or error:", res);
-                showToast("Motion-Pro: Premiere no respondió al colocar el clip. Activa la secuencia correcta y recarga el panel (Cmd+R en el panel).", "error");
-                if (callback) callback();
-                return;
-            }
-            try {
-                var result = typeof res === "string" ? JSON.parse(res) : res;
-                if (result.error) {
-                    console.warn("[Motion-Pro] Place error:", result.error);
-                    showToast("Motion-Pro: no se colocó en timeline — " + result.error, "error");
-                } else {
-                    var errList = result.errors && result.errors.length ? result.errors.join("; ") : "";
-                    var ins = result.inserted;
-                    var okInsert = errList ? false : (typeof ins === "number" ? ins >= 1 : true);
-                    if (!okInsert) {
-                        var msg = errList || (typeof ins === "number" && ins < 1 ? "Ningún clip insertado (¿archivo no visible para Premiere?)" : "Colocación incompleta");
-                        console.warn("[Motion-Pro] Place failed:", msg, result);
-                        showToast("Motion-Pro: " + msg, "error");
-                    } else {
-                        motion.placedInTimeline = true;
-                        motion.baseTrackIndex = result.trackIndex != null ? result.trackIndex : -1;
-                        // Lleva el playhead al inicio del motion (si no, parece “vacío” al estar el clip más adelante o arriba del todo en pistas)
-                        mpMovePlayhead(mpStart);
-                        var vn = result.videoTrackNumber;
-                        if (typeof vn === "number" && vn > 0) {
-                            console.log("[Motion-Pro] Clip en pista de video V" + vn + " (~" + Math.round(mpStart) + "s)");
-                        }
-                    }
-                }
-            } catch(e) {
-                console.warn("[Motion-Pro] Place parse error:", e.message, res);
-                showToast("Motion-Pro: respuesta inválida al colocar (¿ExtendScript?). " + e.message, "error");
-            }
-            if (callback) callback();
-        });
-    }
-
     function mpReplaceInTimeline(motionId, version) {
         var motion = motionPro._findMotion(motionId);
         if (!motion) return;
@@ -2986,16 +2675,8 @@
         });
 
         // Expand All / Collapse All toolbar
-        // Count how many are in preview state
-        var previewCount = 0;
-        motions.forEach(function(m) {
-            var av = motionPro.getActiveVersion(m.id);
-            if (av && av.status === "preview") previewCount++;
-        });
-
         var toolbar = document.createElement('div');
         toolbar.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;';
-        // NOTE: "Animar Todos" deprecated (v1.12.20) — full render is the default flow now
         toolbar.innerHTML = '<button class="btn btn-sm btn-ghost" id="btn-mp-expand-all">Desplegar todos</button>' +
                             '<button class="btn btn-sm btn-ghost" id="btn-mp-collapse-all">Replegar todos</button>';
         list.appendChild(toolbar);
@@ -3094,7 +2775,6 @@
                         '<select class="mp-version-select select-input" data-motion-id="' + m.id + '">' + versionOptions + '</select>' +
                     '</div>' +
                     '<div class="mp-action-row">' +
-                        // NOTE: "Animar" per-card button deprecated (v1.12.20)
                         '<button class="btn btn-sm btn-ghost mp-btn-studio" data-motion-id="' + m.id + '" title="Abrir en Remotion Studio">🖥 Remotion</button>' +
                         '<button class="btn btn-sm btn-ghost mp-btn-regen" data-motion-id="' + m.id + '" title="Regenerar del todo">🔄 Regenerar</button>' +
                     '</div>' +
@@ -3138,9 +2818,6 @@
                     motionPro.saveState();
                     mpRenderControlPanel();
                 });
-
-                // Animate (render video from preview)
-                // NOTE: "Animar" per-card listener deprecated (v1.12.20) — full render is the default flow
 
                 // Remotion Studio
                 var studioBtn = card.querySelector(".mp-btn-studio");
@@ -3360,8 +3037,6 @@
 
         // Bind toolbar buttons
         setTimeout(function() {
-            // NOTE: "Animar Todos" toolbar button deprecated (v1.12.20)
-
             var expandBtn = document.getElementById('btn-mp-expand-all');
             var collapseBtn = document.getElementById('btn-mp-collapse-all');
             if (expandBtn) expandBtn.addEventListener('click', function() {
@@ -3441,9 +3116,6 @@
         bindStepHeaders: mpBindStepHeaders,
         switchToSequence: mpSwitchToSequence,
         updateAnalyzeButton: mpUpdateAnalyzeButton,
-        animateSingle: mpAnimateSingle,
-        animateAll: mpAnimateAll,
-        placePreviewInTimeline: mpPlacePreviewInTimeline,
         placeMotionInTimeline: mpPlaceMotionInTimeline,
         getSessionName: function() { return _mpSessionName; },
         getOutputDir: function() { return _mpOutputDir; }
