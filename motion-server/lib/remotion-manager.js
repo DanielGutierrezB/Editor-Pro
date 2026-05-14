@@ -286,7 +286,10 @@ class RemotionManager {
     if (!fs.existsSync(rendersDir)) {
       fs.mkdirSync(rendersDir, { recursive: true });
     }
-    const outputPath = path.join(rendersDir, `${compositionId}.mp4`);
+    // ProRes: every frame is a keyframe (intraframe codec).
+    // Premiere Pro can seek to any frame instantly — no "Error retrieving frame" errors.
+    // Fast encoding on macOS with hardware acceleration. Larger files but perfect for editing.
+    const outputPath = path.join(rendersDir, `${compositionId}.mov`);
 
     let npxPath;
     try { npxPath = execSync('which npx', { encoding: 'utf8' }).trim(); } catch(_e) { npxPath = 'npx'; }
@@ -295,12 +298,11 @@ class RemotionManager {
       path.join(this.projectPath, 'src', 'index.ts'),
       compositionId,
       outputPath,
-      '--codec=h264',
-      '--pixel-format=yuv420p',
-      '--crf=15',
+      '--codec=prores',
+      '--prores-profile=light',
+      '--pixel-format=yuv422p10le',
       '--muted',
-      '--image-format=jpeg',
-      '--jpeg-quality=100',
+      '--image-format=png',
       '--concurrency=1',
       '--timeout=60000',
       '--delay-render-timeout=30000',
