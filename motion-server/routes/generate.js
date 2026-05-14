@@ -5,6 +5,7 @@ const RemotionManager = require('../lib/remotion-manager');
 const { getGenerationPrompt } = require('../lib/prompts');
 const { getStaticLayoutPrompt } = require('../lib/static-layout-prompt');
 const { injectAnimWrapper } = require('../lib/anim-wrapper');
+const { validateTimingPlan, buildTimingPlan, timingPlanToPrompt } = require('../lib/timing-validator');
 
 /** HH-MM-SS-mmm timestamp for unique file IDs (ms prevents same-second collisions) */
 function _timeStamp() {
@@ -106,7 +107,7 @@ router.post('/', (req, res) => {
 // The Anim wrapper handles all motion automatically.
 // ──────────────────────────────────────────────────────────────────────────────
 router.post('/template', (req, res) => {
-  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, paletteCategory, bgMode } = req.body;
+  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, paletteCategory, bgMode, contextSummary, segmentContext, timingPrompt } = req.body;
   if (customPalette) console.log('[generate/static-layout] Custom palette:', customPalette.bg, customPalette.accent);
   console.log('[generate/static-layout] provider=' + provider + ' model=' + model + ' type=' + (proposal && proposal.type) + ' bgMode=' + bgMode);
 
@@ -128,6 +129,9 @@ router.post('/template', (req, res) => {
     customPalette: customPalette || null,
     paletteCategory: paletteCategory || null,
     bgMode: bgMode || 'dark',
+    contextSummary: contextSummary || null,
+    segmentContext: segmentContext || null,
+    timingPrompt: timingPrompt || null,
   });
 
   const llmStart = Date.now();
@@ -182,6 +186,103 @@ router.post('/template', (req, res) => {
       console.error('[generate/static-layout] Write error for ' + compositionId + ':', writeErr.message);
       res.status(500).json({ error: 'Write error: ' + writeErr.message });
     }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Context Pass — Analyze full transcript and generate context notes for each
+// marked segment before batch generation. One LLM call for the whole batch.
+// ──────────────────────────────────────────────────────────────────────────────
+router.post('/context', (req, res) => {
+  const { fullTranscript, segments, provider, model, apiKey } = req.body;
+
+  if (!fullTranscript || !segments || !segments.length) {
+    return res.status(400).json({ error: 'Missing fullTranscript or segments' });
+  }
+
+  console.log('[generate/context] Analyzing ' + segments.length + ' segments from transcript (' + fullTranscript.length + ' chars)');
+
+  const segmentList = segments.map(function(s, i) {
+    return 'Segment ' + (i + 1) + ' [' + (s.startTime || 0).toFixed(1) + 's - ' + (s.endTime || 0).toFixed(1) + 's] (' + ((s.endTime || 0) - (s.startTime || 0)).toFixed(1) + 's): type=' + (s.type || '?') + ', description="' + (s.description || '') + '"';
+  }).join('\n');
+
+  const systemMsg = `You are a video content analyst. You will receive a full transcript of an educational video and a list of segments where motion graphics will be placed.
+
+Your job:
+1. Provide context that helps a motion graphics designer understand each segment's role in the overall narrative
+2. Plan the timing of visual elements based on transcript timestamps
+
+Respond in the SAME LANGUAGE as the transcript.
+Respond ONLY with valid JSON — no markdown, no explanation.`;
+
+  const userMsg = `## Full Transcript (with timestamps)
+${fullTranscript}
+
+## Segments to analyze
+${segmentList}
+
+## Task
+Return a JSON object with:
+1. "summary": A 1-2 sentence summary of what this video is about
+2. "segments": An array (same order as input) where each element has:
+   - "context": What was discussed before this moment that gives it meaning (1-2 sentences)
+   - "keyMessage": The core concept or takeaway of this specific segment (1 sentence)
+   - "narrativeRole": One of: "introduction", "explanation", "example", "comparison", "summary", "transition", "detail", "conclusion"
+   - "timingPlan": Array of visual elements with timing: [{"text": "visible text", "timestamp": seconds_when_professor_says_it, "type": "title|subtitle|item|metric|icon"}]
+     → timestamp = the ABSOLUTE second in the video when this concept is mentioned
+     → text = what should appear on screen (concise, readable)
+     → Each element should represent a meaningful concept from the transcript at that moment
+     → Scale with segment duration: ~1 element per 2-3 seconds of content
+       (e.g. 5s segment → 2-3 elements, 10s segment → 4-5 elements, 15s+ → 5-7 elements)
+     → Spread elements across the ENTIRE segment duration — don't cluster them all at the start
+     → Look for: key terms, examples, numbers, comparisons, cause-effect, steps, tools mentioned
+
+Example response:
+{"summary":"Video sobre cómo funciona Git","segments":[{"context":"Después de explicar control de versiones","keyMessage":"Git rastrea cambios","narrativeRole":"explanation","timingPlan":[{"text":"Control de versiones","timestamp":12.5,"type":"title"},{"text":"Rastrea cambios en archivos","timestamp":15.2,"type":"subtitle"}]}]}`;
+
+  const llmStart = Date.now();
+  sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, raw) => {
+    const llmMs = Date.now() - llmStart;
+    if (err) {
+      console.error('[generate/context] LLM error after ' + llmMs + 'ms:', err.message);
+      return res.status(500).json({ error: 'Context analysis failed: ' + err.message });
+    }
+
+    console.log('[generate/context] LLM responded in ' + llmMs + 'ms (' + (raw || '').length + ' chars)');
+
+    // Parse JSON from response (strip markdown fences if present)
+    let parsed;
+    try {
+      let jsonStr = raw.trim();
+      const jsonMatch = jsonStr.match(/```(?:json)?\s*\n([\s\S]*?)```/);
+      if (jsonMatch) jsonStr = jsonMatch[1].trim();
+      parsed = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      console.error('[generate/context] Failed to parse context JSON:', parseErr.message);
+      // Return a usable fallback instead of failing the whole batch
+      parsed = { summary: '', segments: segments.map(function() { return { context: '', keyMessage: '', narrativeRole: '' }; }) };
+    }
+
+    // Validate timing plans for each segment
+    const validatedSegments = (parsed.segments || []).map(function(seg, i) {
+      const s = segments[i];
+      if (seg.timingPlan && seg.timingPlan.length > 0 && s) {
+        const plan = buildTimingPlan(null, s.startTime || 0, s.endTime || 0, seg.timingPlan);
+        const validated = validateTimingPlan(plan);
+        if (validated.conflicts.length > 0) {
+          console.log('[generate/context] Timing adjustments for segment ' + (i + 1) + ': ' + validated.conflicts.join('; '));
+        }
+        seg.validatedTiming = validated;
+        seg.timingPrompt = timingPlanToPrompt(validated);
+      }
+      return seg;
+    });
+
+    res.json({
+      summary: parsed.summary || '',
+      segments: validatedSegments,
+      llmMs: llmMs,
+    });
   });
 });
 
