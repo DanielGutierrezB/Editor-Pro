@@ -22,7 +22,6 @@
     var loadTranscriptText, onTranscriptChange;
     var readTranscriptFromProjectFile, readCaptionsFromProjectFile;
     var srtSegmentsToSttResult, renderTranscriptFromSegments, bindCollapsibles;
-    var MP_ANTICIPATION_SECS;
     var _getTranscriptFolders, parseTranscriptJson, _buildTranscriptCache;
 
     function _initRefs() {
@@ -80,7 +79,6 @@
         srtSegmentsToSttResult   = global._epSrtSegmentsToSttResult;
         renderTranscriptFromSegments = global._epRenderTranscriptFromSegments;
         bindCollapsibles         = global._epBindCollapsibles;
-        MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0.35;
         _getTranscriptFolders    = global._epGetTranscriptFolders;
         parseTranscriptJson      = global._epParseTranscriptJson;
         _buildTranscriptCache    = global._epBuildTranscriptCache;
@@ -152,9 +150,6 @@
     var ST2_SECS_PER_WORD = 0.25;
     // Minimum on-screen duration for any element (avoids flash appearances).
     var ST2_MIN_DURATION_SECS = 6.0;  // Hard rule: ningún supertext dura menos de 6s (duración natural del MOGRT)
-
-    // Motion Pro: ligero adelanto respecto al audio (demasiado = el gráfico “va por delante” del profesor).
-    var MP_ANTICIPATION_SECS = 0.35;
 
     // Sanitize CSInterface paths (Windows returns file:///C:/... which breaks fs/path)
     function _sanitizeExtPath(raw) {
@@ -1010,9 +1005,12 @@
                 _st2BatchRunning = false;
                 _st2BatchSetCancelBtn(false);
                 hideElement("st2-batch-progress");
+                hideElement("st2-results");
+                hideElement("st2-batch-nav");
                 enableBtn("btn-st2-batch-create");
                 enableBtn("btn-st2-batch-analyze");
                 _st2BatchRenderCards();
+                showElement("st2-batch-panel");
                 showToast(totalInserted + " gráficos creados en " + current + " secuencias", "success");
                 return;
             }
@@ -1364,8 +1362,9 @@
         var summary = document.getElementById("st2-summary");
         summary.innerHTML = escSupertextHtml(result.summary || state.supertexts2.length + " momentos clave identificados");
 
-        var list = document.getElementById("st2-list");
-        list.innerHTML = "";
+        // clearContainer clones the node to drop the click/change handlers
+        // attached below; otherwise re-renders stack delegated listeners.
+        var list = clearContainer(document.getElementById("st2-list"));
 
         if (state.supertexts2.length > 0) {
             var typeCounts = {};
@@ -2378,20 +2377,6 @@
     }
 
 
-    function normalizeSupertextNewlines(str) {
-        if (str === undefined || str === null) return "";
-        var s = String(str);
-        s = s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n");
-        return s;
-    }
-
-    function normalizeSt2Fields(st) {
-        if (!st) return st;
-        if (st.text != null) st.text = normalizeSupertextNewlines(st.text);
-        if (st.reason != null) st.reason = normalizeSupertextNewlines(st.reason);
-        return st;
-    }
-
     function _st2ExtractTranscriptEnd(timedTranscript) {
         if (!timedTranscript) return 0;
         var matches = timedTranscript.match(/\[\d+\.?\d*s\s*-\s*(\d+\.?\d*)s\]/g);
@@ -2427,13 +2412,6 @@
         return filtered;
     }
 
-    /** Texto de supertexto en HTML: escapa y muestra saltos de línea (no el literal \\n). */
-    function escSupertextHtml(str) {
-        if (str === undefined || str === null) return "";
-        var s = normalizeSupertextNewlines(str);
-        return s.split(/\r?\n/).map(function(line) { return esc(line); }).join("<br>");
-    }
-
     // ═════════════════════════════════════════════════════════════
     // TAB NAVIGATION
     // ═════════════════════════════════════════════════════════════
@@ -2457,10 +2435,15 @@
                 });
 
                 // Toggle current
+                var st2Card = document.querySelector('.st2-tool-card');
                 if (!isOpen && body) {
                     body.classList.remove('hidden');
                     if (arrow) arrow.textContent = '\u25be';
+                    if (st2Card) st2Card.classList.add('st2-expanded');
                     _st2ResizeOpenStep();
+                } else {
+                    // All closed — collapse expanded
+                    if (st2Card) st2Card.classList.remove('st2-expanded');
                 }
             });
         });
@@ -2468,7 +2451,7 @@
         // Resize on window resize
         window.addEventListener('resize', _st2ResizeOpenStep);
 
-        // Recalculate layout when tool card body is shown (no auto-fullscreen)
+        // Auto-expand when tool card body becomes visible; collapse when hidden
         var st2Card = document.querySelector('.st2-tool-card');
         var st2Body = st2Card ? st2Card.querySelector('.tool-card-body') : null;
         if (st2Body) {
@@ -2477,10 +2460,14 @@
                     if (m.attributeName === 'class') {
                         var isVisible = !st2Body.classList.contains('hidden');
                         if (isVisible) {
-                            // Recalc layout when section opens (normal or fullscreen)
+                            // Check if any step is open
+                            var hasOpen = st2Body.querySelector('[id^="st2-step-body-"]:not(.hidden)');
+                            if (hasOpen && st2Card) st2Card.classList.add('st2-expanded');
                             setTimeout(_st2ResizeOpenStep, 50);
                             setTimeout(_st2ResizeOpenStep, 200);
                             setTimeout(_st2ResizeOpenStep, 500);
+                        } else {
+                            if (st2Card) st2Card.classList.remove('st2-expanded');
                         }
                     }
                 });
@@ -3163,7 +3150,7 @@
         batchNavPrev: st2BatchNavPrev,
         batchNavNext: st2BatchNavNext,
         batchNavBack: st2BatchNavBack,
-        isBatchActive: function() { return _st2BatchCurrentNav >= 0; },
+        isBatchActive: function() { return _st2BatchRunning || _st2BatchCurrentNav >= 0; },
         ST2_ANTICIPATION_SECS: ST2_ANTICIPATION_SECS,
         ST2_READING_BUFFER_SECS: ST2_READING_BUFFER_SECS,
         ST2_MIN_DURATION_SECS: ST2_MIN_DURATION_SECS,

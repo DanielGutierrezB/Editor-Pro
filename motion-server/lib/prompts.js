@@ -62,13 +62,59 @@ function buildSystemPrompt(type) {
  * Build the `const C = {...}` TSX code block using a custom palette or defaults.
  * Returns the exact code string for the template.
  */
-function _buildPaletteCode(customPalette) {
+function _parseHex(hex) {
+  if (!hex || typeof hex !== 'string') return null;
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return null;
+  return { r: parseInt(h.substr(0,2),16), g: parseInt(h.substr(2,2),16), b: parseInt(h.substr(4,2),16) };
+}
+
+function _isGreenish(hex) {
+  const c = _parseHex(hex);
+  if (!c) return false;
+  return c.g > 150 && c.g > c.r * 1.3 && c.g > c.b * 1.3;
+}
+
+function _isBluish(hex) {
+  const c = _parseHex(hex);
+  if (!c) return false;
+  return c.b > 120 && c.b > c.r * 1.2 && c.b > c.g * 1.2;
+}
+
+function _chromaSafe(hex, chromaIsBlue) {
+  if (chromaIsBlue && _isBluish(hex)) return '#fb923c';
+  if (!chromaIsBlue && _isGreenish(hex)) return '#a78bfa';
+  return hex;
+}
+
+function _buildPaletteCode(customPalette, bgMode) {
   const p = customPalette ? (validatePalette(customPalette) || DEFAULT_PALETTE) : DEFAULT_PALETTE;
+  let bg = p.bg, card = p.card, text = p.text, dim = p.dim, border = p.border, glow = p.glow;
+
+  if (bgMode === 'light') {
+    bg = '#f8f9fa'; card = '#ffffff'; text = '#1a1d23';
+    dim = 'rgba(0,0,0,0.55)'; border = 'rgba(0,0,0,0.08)'; glow = 'rgba(10,233,141,0.06)';
+  } else if (bgMode === 'chroma') {
+    const hasGreen = _isGreenish(p.accent) || _isGreenish(p.green);
+    const chromaIsBlue = hasGreen;
+    bg = chromaIsBlue ? '#0000FF' : '#00FF00';
+    card = 'rgba(0,0,0,0.65)';
+    return `const C = {\n`
+      + `  bg:'${bg}', card:'${card}', accent:'${_chromaSafe(p.accent, chromaIsBlue)}', green:'${_chromaSafe(p.green, chromaIsBlue)}',\n`
+      + `  orange:'${_chromaSafe(p.orange, chromaIsBlue)}', purple:'${_chromaSafe(p.purple, chromaIsBlue)}', red:'${_chromaSafe(p.red, chromaIsBlue)}', text:'${text}',\n`
+      + `  dim:'${dim}', border:'${border}',\n`
+      + `  glow:'${glow}',\n`
+      + `};`;
+  } else if (bgMode === 'alpha') {
+    bg = 'transparent';
+    card = 'rgba(0,0,0,0.65)';
+  }
+
   return `const C = {\n`
-    + `  bg:'${p.bg}', card:'${p.card}', accent:'${p.accent}', green:'${p.green}',\n`
-    + `  orange:'${p.orange}', purple:'${p.purple}', red:'${p.red}', text:'${p.text}',\n`
-    + `  dim:'${p.dim}', border:'${p.border}',\n`
-    + `  glow:'${p.glow}',\n`
+    + `  bg:'${bg}', card:'${card}', accent:'${p.accent}', green:'${p.green}',\n`
+    + `  orange:'${p.orange}', purple:'${p.purple}', red:'${p.red}', text:'${text}',\n`
+    + `  dim:'${dim}', border:'${border}',\n`
+    + `  glow:'${glow}',\n`
     + `};`;
 }
 
@@ -702,7 +748,7 @@ Describe the ideal visual layout for this motion graphic. Be specific about:
   return { systemMsg, userMsg };
 }
 
-function getGenerationPrompt({ transcriptSegment, type, description, durationFrames, compositionId, brandfetchKey, visualDescription, customPalette, paletteCategory }) {
+function getGenerationPrompt({ transcriptSegment, type, description, durationFrames, compositionId, brandfetchKey, visualDescription, customPalette, paletteCategory, bgMode }) {
   const systemMsg = buildSystemPrompt(type);
 
   const typeGuide = TYPE_INSTRUCTIONS[type] || TYPE_INSTRUCTIONS.title;
@@ -752,7 +798,7 @@ import {AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring, Sequ
 // import { TransitionSeries, linearTiming } from '@remotion/transitions';
 // import { fade } from '@remotion/transitions/fade';
 
-${_buildPaletteCode(customPalette)}
+${_buildPaletteCode(customPalette, bgMode)}
 
 const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({children,style}) => (
   <div style={{position:'absolute',left:160,top:180,right:160,bottom:160,display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',...style}}>{children}</div>
@@ -893,11 +939,31 @@ Output the COMPLETE TSX file. No explanations before or after the code.`;
   return { systemMsg, userMsg };
 }
 
-function getFeedbackPrompt({ currentTsx, feedback, compositionId, type, description }) {
+function getFeedbackPrompt({ currentTsx, feedback, compositionId, type, description, transcriptSegment, customPalette, paletteCategory, bgMode }) {
   const systemMsg = buildSystemPrompt(type);
 
   const typeGuide = TYPE_INSTRUCTIONS[type] || TYPE_INSTRUCTIONS.title;
   const compName = _componentName(compositionId);
+
+  const transcriptBlock = transcriptSegment
+    ? `\n## Transcript (what the professor says during this clip — use for timing and content)
+${transcriptSegment}\n`
+    : '';
+
+  // Build the correct palette code for the current bgMode so the LLM uses it
+  const paletteCode = _buildPaletteCode(customPalette, bgMode);
+
+  let bgNote = '';
+  if (bgMode === 'light') {
+    bgNote = '\n**LIGHT MODE**: Background is light/white. Text must be dark. Ensure high contrast.';
+  } else if (bgMode === 'chroma') {
+    const p = customPalette ? (validatePalette(customPalette) || DEFAULT_PALETTE) : DEFAULT_PALETTE;
+    const hasGreen = _isGreenish(p.accent) || _isGreenish(p.green);
+    const chromaColor = hasGreen ? 'blue (#0000FF)' : 'green (#00FF00)';
+    bgNote = `\n**CHROMA KEY MODE**: Background is solid ${chromaColor}. DO NOT use ${hasGreen ? 'blue' : 'green'} colors in any visual element.`;
+  } else if (bgMode === 'alpha') {
+    bgNote = '\n**ALPHA/TRANSPARENT MODE**: Background is transparent. Video renders with alpha channel (ProRes 4444). Cards float over the video.';
+  }
 
   const userMsg = `The user wants SPECIFIC CHANGES to this Remotion composition. Read their feedback carefully and apply exactly what they ask.
 
@@ -906,6 +972,11 @@ ${feedback}
 
 ## Animation Type: ${type}
 ${description ? 'Description: ' + description : ''}
+${transcriptBlock}
+## MANDATORY Color Palette (replace the C object in the code with this one)
+\`\`\`ts
+${paletteCode}
+\`\`\`${bgNote}
 
 ## Type Rules (maintain these unless feedback contradicts)
 ${typeGuide}
@@ -917,15 +988,17 @@ ${currentTsx}
 
 ## Mandatory after modifications
 1. **APPLY THE FEEDBACK FIRST** — everything else is secondary to what the user asked
-2. Export as \`${compName}\`
-3. Keep the template structure: imports, C palette, Safe, E, Fd components inline
-4. The AbsoluteFill MUST have fontFamily:"'DM Sans',sans-serif"
-5. ALL text must use fontFamily:"'DM Sans',sans-serif" — corporate font
-6. ALL content inside <Safe> — nothing outside safe zone
-7. Background: solid C.bg only. NO audio. Colors from C only.
-8. E component uses Easing.bezier(0.16, 1, 0.3, 1) with clamping — keep as defined in template
-9. Keep same timing/duration unless feedback changes it
-10. Frame 0 = start of clip. Sections are RELATIVE to frame 0, not absolute timeline time
+2. **USE THE PALETTE ABOVE** — replace the C object with the one provided
+3. Export as \`${compName}\`
+4. Keep the template structure: imports, C palette, Safe, E, Fd components inline
+5. The AbsoluteFill MUST have fontFamily:"'DM Sans',sans-serif"
+6. ALL text must use fontFamily:"'DM Sans',sans-serif" — corporate font
+7. ALL content inside <Safe> — nothing outside safe zone
+8. Background: solid C.bg only. NO audio. Colors from C only.
+9. E component uses Easing.bezier(0.16, 1, 0.3, 1) with clamping — keep as defined in template
+10. Keep same timing/duration unless feedback changes it
+11. Frame 0 = start of clip. Sections are RELATIVE to frame 0, not absolute timeline time
+12. **Sync visual elements to the transcript timing** — each section should correspond to what the professor is saying at that moment
 
 Output the COMPLETE modified TSX file. No explanations.`;
 

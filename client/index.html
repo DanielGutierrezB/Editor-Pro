@@ -1168,6 +1168,13 @@
                                 <button id="btn-mp-save-preset" class="btn btn-sm btn-ghost" title="Guardar paleta actual como preset" style="font-size:10px; padding:2px 6px;">💾</button>
                                 <button id="btn-mp-delete-preset" class="btn btn-sm btn-ghost" title="Borrar preset seleccionado" style="font-size:10px; padding:2px 6px; display:none;">🗑</button>
                             </div>
+                            <!-- Background mode toggle -->
+                            <div style="display:flex; gap:2px; margin-bottom:4px;">
+                                <button class="btn btn-sm mp-bg-mode-btn" data-bg-mode="dark" style="flex:1; font-size:9px; padding:2px 6px; background:var(--accent); color:var(--bg-primary); border-radius:3px;" title="Fondo oscuro">🌑 Dark</button>
+                                <button class="btn btn-sm mp-bg-mode-btn" data-bg-mode="light" style="flex:1; font-size:9px; padding:2px 6px; opacity:0.5; border-radius:3px;" title="Fondo claro">☀️ Light</button>
+                                <button class="btn btn-sm mp-bg-mode-btn" data-bg-mode="chroma" style="flex:1; font-size:9px; padding:2px 6px; opacity:0.5; border-radius:3px;" title="Fondo chroma key (verde/azul)">🟢 Chroma</button>
+                                <button class="btn btn-sm mp-bg-mode-btn" data-bg-mode="alpha" style="flex:1; font-size:9px; padding:2px 6px; opacity:0.5; border-radius:3px;" title="Fondo transparente (ProRes 4444 con alpha)">🔲 Alpha</button>
+                            </div>
                             <div id="mp-style-preview" style="display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
                                 <div class="mp-swatch" data-color-key="bg" style="width:20px; height:20px; border-radius:3px; background:#1a1d23; border:1px solid rgba(255,255,255,0.15); cursor:pointer;" title="Background"></div>
                                 <div class="mp-swatch" data-color-key="card" style="width:20px; height:20px; border-radius:3px; background:#2d323a; border:1px solid rgba(255,255,255,0.15); cursor:pointer;" title="Card"></div>
@@ -1202,6 +1209,10 @@
                             <label style="display:flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); cursor:pointer; margin-top:6px;">
                                 <input type="checkbox" id="mp-markers-only" style="margin:0;" checked>
                                 <span>Solo en marcadores de la secuencia</span>
+                            </label>
+                            <label id="mp-single-motion-label" style="display:flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); cursor:pointer; margin-top:4px; padding-left:18px;">
+                                <input type="checkbox" id="mp-single-motion" style="margin:0;">
+                                <span>Crear un solo motion por marcador</span>
                             </label>
                         </div>
                         <div id="mp-analyze-progress" class="progress-bar hidden">

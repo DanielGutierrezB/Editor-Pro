@@ -507,6 +507,71 @@
         if (resetBtn) resetBtn.style.display = "none";
     }
 
+    function _initBgModeToggle() {
+        var btns = document.querySelectorAll(".mp-bg-mode-btn");
+        if (!btns.length) return;
+
+        // Restore saved mode
+        var savedMode = "dark";
+        try { savedMode = localStorage.getItem("mp-bg-mode") || "dark"; } catch(_e) {}
+        if (motionPro) motionPro.bgMode = savedMode;
+
+        function _updateBgBtns(activeMode) {
+            btns.forEach(function(b) {
+                var mode = b.getAttribute("data-bg-mode");
+                if (mode === activeMode) {
+                    b.style.opacity = "1";
+                    b.style.background = "var(--accent)";
+                    b.style.color = "var(--bg-primary)";
+                } else {
+                    b.style.opacity = "0.5";
+                    b.style.background = "";
+                    b.style.color = "";
+                }
+            });
+        }
+        _updateBgBtns(savedMode);
+
+        btns.forEach(function(btn) {
+            btn.addEventListener("click", function() {
+                var mode = btn.getAttribute("data-bg-mode");
+                if (motionPro) motionPro.bgMode = mode;
+                try { localStorage.setItem("mp-bg-mode", mode); } catch(_e) {}
+                _updateBgBtns(mode);
+                showToast("Modo fondo: " + mode, "info");
+            });
+        });
+    }
+
+    function _initSingleMotionToggle() {
+        var markersOnlyCb = document.getElementById("mp-markers-only");
+        var singleMotionCb = document.getElementById("mp-single-motion");
+        var singleLabel = document.getElementById("mp-single-motion-label");
+        if (!markersOnlyCb || !singleLabel) return;
+
+        // Restore saved checkbox states
+        try {
+            var savedMarkers = localStorage.getItem("mp-markers-only");
+            if (savedMarkers !== null) markersOnlyCb.checked = savedMarkers === "true";
+            var savedSingle = localStorage.getItem("mp-single-motion");
+            if (savedSingle !== null && singleMotionCb) singleMotionCb.checked = savedSingle === "true";
+        } catch(_e) {}
+
+        function updateVisibility() {
+            singleLabel.style.display = markersOnlyCb.checked ? "flex" : "none";
+        }
+        updateVisibility();
+        markersOnlyCb.addEventListener("change", function() {
+            updateVisibility();
+            try { localStorage.setItem("mp-markers-only", markersOnlyCb.checked); } catch(_e) {}
+        });
+        if (singleMotionCb) {
+            singleMotionCb.addEventListener("change", function() {
+                try { localStorage.setItem("mp-single-motion", singleMotionCb.checked); } catch(_e) {}
+            });
+        }
+    }
+
     function mpInit() {
         _initRefs();
         mpUpdateServerUI();
@@ -518,6 +583,8 @@
         _initPresets();
         _initHistory();
         _initRegenPalette();
+        _initSingleMotionToggle();
+        _initBgModeToggle();
 
         // On init, restart server to ensure clean state
         if (motionPro) {
@@ -1048,6 +1115,19 @@
         return prefix || "mp";
     }
 
+    /** Extract HH-MM-SS timestamp from a compositionId (last 8 chars: HH-MM-SS) or generate current time */
+    function _mpExtractTimeId(compositionId) {
+        if (compositionId) {
+            var m = compositionId.match(/(\d{2}-\d{2}-\d{2})$/);
+            if (m) return m[1];
+        }
+        var now = new Date();
+        var hh = String(now.getHours()); if (hh.length < 2) hh = "0" + hh;
+        var mm = String(now.getMinutes()); if (mm.length < 2) mm = "0" + mm;
+        var ss = String(now.getSeconds()); if (ss.length < 2) ss = "0" + ss;
+        return hh + "-" + mm + "-" + ss;
+    }
+
     // ─── Brandfetch Logo API ──────────────────────────────────────
 
     var _mpBrandfetchKey = "";
@@ -1277,9 +1357,21 @@
                 if (_markersDone) return;
                 _markersDone = true;
                 clearTimeout(_markersTimeout);
+
+                var singleMotionCb = document.getElementById("mp-single-motion");
+                var singleMotionMode = singleMotionCb && singleMotionCb.checked;
+
                 try {
                     var data = JSON.parse(res);
                     if (data.markers && data.markers.length > 0) {
+                        // --- Single Motion Mode: skip AI analysis, create 1 proposal per marker ---
+                        if (singleMotionMode) {
+                            if (window.EPLogger) EPLogger.log("motion-pro", "single-motion-mode", data.markers.length + " markers → single motion each");
+                            showToast(data.markers.length + " marcadores → un motion cada uno", "info");
+                            _mpSingleMotionFromMarkers(data.markers, timedTranscript);
+                            return;
+                        }
+
                         var markerText = '\n\nGENERAR MOTIONS SOLO EN ESTOS RANGOS DE TIEMPO (marcadores del editor):\n';
                         data.markers.forEach(function(m, i) {
                             var mStart = parseFloat(m.startSeconds);
@@ -1462,6 +1554,164 @@
             showToast(proposals.length + " momentos identificados para motions", "success");
         });
         } // end _mpRunAnalysis
+
+        // ── Single Motion Mode: one motion per marker, AI picks the best type + description ──
+        function _mpSingleMotionFromMarkers(markers, timedTranscript) {
+            var seqPrefix = _mpBuildSeqPrefix();
+            var proposals = [];
+
+            // Extract transcript lines to build segment text per marker
+            var transcriptLines = timedTranscript.split('\n');
+
+            for (var mi = 0; mi < markers.length; mi++) {
+                var m = markers[mi];
+                var mStart = parseFloat(m.startSeconds);
+                var mEnd = parseFloat(m.endSeconds);
+                if (Math.abs(mEnd - mStart) < 0.1) {
+                    mStart = Math.max(0, mStart - 5);
+                    mEnd = mEnd + 5;
+                }
+
+                // Extract transcript segment within marker range
+                var segLines = [];
+                for (var li = 0; li < transcriptLines.length; li++) {
+                    var line = transcriptLines[li];
+                    var timeMatch = line.match(/\[(\d+\.?\d*)s/);
+                    if (timeMatch) {
+                        var lineTime = parseFloat(timeMatch[1]);
+                        if (lineTime >= mStart && lineTime <= mEnd) segLines.push(line);
+                    }
+                }
+                var segment = segLines.join('\n') || ('Marcador de ' + mStart.toFixed(1) + 's a ' + mEnd.toFixed(1) + 's');
+
+                var clipNum = String(mi + 1).length < 2 ? "0" + (mi + 1) : String(mi + 1);
+                proposals.push({
+                    id: clipNum + "-motion-" + seqPrefix,
+                    startTime: mStart,
+                    endTime: mEnd,
+                    type: "reveal",
+                    description: (m.name || "Motion completo") + " — cubre todo el marcador como una sola composición con secciones internas",
+                    priority: "alta",
+                    selected: true,
+                    transcriptSegment: segment,
+                    group: "",
+                    singleMotion: true
+                });
+            }
+
+            // Now run AI analysis per marker to get a better type + description
+            var aiConfig = {
+                provider: state.settings.aiProvider,
+                model: 'anthropic/claude-sonnet-4',
+                apiKey: aiAnalyzer.getActiveKey()
+            };
+
+            var pending = proposals.length;
+            var completed = 0;
+
+            if (pending === 0) {
+                _mpSingleMotionFinish(proposals, seqPrefix);
+                return;
+            }
+
+            // For each marker, ask AI what type + description fits best (fast, parallel)
+            proposals.forEach(function(prop, idx) {
+                var durationSecs = (prop.endTime - prop.startTime).toFixed(1);
+                var estSections = durationSecs <= 8 ? 1 : durationSecs <= 15 ? 2 : durationSecs <= 20 ? 3 : Math.min(6, Math.ceil(durationSecs / 7));
+
+                var singlePrompt = 'Eres el director creativo de motion graphics para un curso educativo. Diseñas UNA composición unificada que cubre todo este segmento.\n\n' +
+                    'TRANSCRIPCIÓN [' + prop.startTime.toFixed(1) + 's - ' + prop.endTime.toFixed(1) + 's] (' + durationSecs + ' segundos):\n' +
+                    prop.transcriptSegment + '\n\n' +
+                    'DURACIÓN: ' + durationSecs + 's → necesita ~' + estSections + ' secciones visuales (cada sección = una "diapositiva" que aparece, se muestra, y desaparece con fade).\n\n' +
+                    'Tu respuesta debe ser un BRIEF VISUAL EXHAUSTIVO para el diseñador que va a implementar el TSX. Responde SOLO con JSON válido:\n' +
+                    '{\n' +
+                    '  "type": "<tipo principal>",\n' +
+                    '  "description": "<brief visual completo — ver instrucciones abajo>"\n' +
+                    '}\n\n' +
+                    'TIPOS DISPONIBLES:\n' +
+                    '- reveal: Revelación progresiva de un concepto (ideal cuando hay una narrativa que se construye)\n' +
+                    '- steps: Proceso paso a paso\n' +
+                    '- cards: Conceptos en tarjetas\n' +
+                    '- comparison: Dos cosas lado a lado\n' +
+                    '- timeline: Evolución cronológica\n' +
+                    '- diagram: Conexiones entre conceptos\n' +
+                    '- list: Enumeración de items\n' +
+                    '- icons: Conceptos con iconos\n' +
+                    '- metrics: Números/datos destacados\n' +
+                    '- chart: Gráficos/barras\n' +
+                    '- title: Título hero\n' +
+                    '- callout: Frase clave destacada\n' +
+                    '- funnel: Pipeline/embudo\n' +
+                    '- beforeafter: Antes vs después\n\n' +
+                    'LA DESCRIPCIÓN DEBE INCLUIR (esto es lo que lee el diseñador):\n' +
+                    '1. NARRATIVA VISUAL: ¿Qué historia cuenta esta composición de principio a fin?\n' +
+                    '2. SECCIONES (' + estSections + '): Para cada sección describir:\n' +
+                    '   - Qué se muestra (título, elementos, datos)\n' +
+                    '   - Layout (centrado, split, grid, horizontal, vertical)\n' +
+                    '   - Elementos específicos (cards, iconos, números grandes, barras, flechas)\n' +
+                    '   - Textos EXACTOS extraídos de la transcripción (corregir typos)\n' +
+                    '3. JERARQUÍA TIPOGRÁFICA: Qué es grande/hero, qué es secundario, qué es complementario\n' +
+                    '4. FLUJO DE ANIMACIÓN: Cómo progresa la narrativa entre secciones (build-up, reveal, conclusión)\n\n' +
+                    'EJEMPLO DE BUENA DESCRIPCIÓN:\n' +
+                    '"Composición de 4 secciones que explica el flujo de Git. Sección 1: Título hero \\"Control de Versiones con Git\\" centrado con ícono de Git, subtítulo \\"Tu máquina del tiempo para código\\". Sección 2: 3 cards horizontales mostrando los estados de archivos (Modified → Staged → Committed) con flechas entre ellas y etiquetas descriptivas. Sección 3: Diagrama vertical del flujo Working Directory → Staging Area → Repository con comandos git add y git commit como labels en las flechas. Sección 4: Split layout — izquierda muestra \\"Sin Git\\" (ícono de carpeta con ✗) vs derecha \\"Con Git\\" (ícono de timeline con ✓), cerrando con callout \\"Cada cambio queda registrado\\"."\n\n' +
+                    'NO escribas descripciones vagas como "Mostrar los conceptos principales". Sé ESPECÍFICO con layouts, textos y elementos.';
+
+                var systemMsg = 'Eres un director creativo de motion graphics educativos con 10 años de experiencia. Tu trabajo: crear briefs visuales tan detallados que un diseñador junior pueda implementarlos sin preguntas. Respondes SOLO JSON válido, sin markdown ni explicaciones fuera del JSON.';
+
+                aiAnalyzer._send(systemMsg, singlePrompt, function(result) {
+                    completed++;
+                    try {
+                        var parsed = (typeof result === "string") ? JSON.parse(result) : result;
+                        // Handle markdown-wrapped JSON
+                        if (typeof result === "string" && !parsed.type) {
+                            var jsonMatch = result.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+                            if (jsonMatch) parsed = JSON.parse(jsonMatch[1].trim());
+                        }
+                        if (parsed.type) {
+                            prop.type = parsed.type.toLowerCase();
+                            prop.id = (String(idx + 1).length < 2 ? "0" + (idx + 1) : String(idx + 1)) + "-" + prop.type + "-" + seqPrefix;
+                        }
+                        if (parsed.description) prop.description = parsed.description;
+                    } catch(e) {
+                        console.warn("[Motion-Pro] Single motion AI parse error for marker " + (idx + 1) + ":", e.message);
+                    }
+
+                    mpSetProgress("mp-analyze", 15 + Math.round((completed / pending) * 80), "Analizando marcador " + completed + "/" + pending + "…");
+
+                    if (completed >= pending) {
+                        _mpSingleMotionFinish(proposals, seqPrefix);
+                    }
+                });
+            });
+        }
+
+        function _mpSingleMotionFinish(proposals, seqPrefix) {
+            mpClearMotionAnalysisHeartbeat();
+            state.mpAnalyzing = false;
+            mpSetMotionAnalyzeButtonMode(false);
+            hideElement("mp-analyze-progress");
+            refreshMPHeaderProgressVisibility();
+
+            var analysisTime = ((Date.now() - _mpTimers.analysisStart) / 1000).toFixed(1);
+            motionPro.proposals = proposals;
+            motionPro.saveState();
+            mpShowStep(2);
+            try {
+                mpRenderProposals();
+            } catch(renderErr) {
+                if (window.EPLogger) EPLogger.error("motion-pro", "render-proposals-crash", renderErr.message);
+                showToast("ERROR rendering proposals: " + renderErr.message, "error");
+            }
+            var step2Body = document.getElementById("mp-step-body-2");
+            if (step2Body) {
+                step2Body.classList.remove("hidden");
+                var step2Arrow = step2Body.previousElementSibling ? step2Body.previousElementSibling.querySelector(".rec-step-arrow") : null;
+                if (step2Arrow) step2Arrow.textContent = "▾";
+            }
+            var hint = document.getElementById("mp-step-hint-1");
+            if (hint) hint.textContent = proposals.length + " motions (" + analysisTime + "s)";
+            showToast(proposals.length + " motions únicos generados desde marcadores", "success");
+        }
     }
 
     // ─── Proposals rendering ──────────────────────────────────────
@@ -1606,15 +1856,10 @@
 
                 var typeInfo = MotionPro.TYPES[p.type] || { label: p.type, color: "#818cf8" };
                 var priorityClass = p.priority === "alta" ? "mp-priority-high" : p.priority === "baja" ? "mp-priority-low" : "mp-priority-med";
-                var hasVisual = !!(p.visualProposal && p.visualProposal.description);
-
                 var card = document.createElement("div");
-                card.className = "mp-proposal-card mp-grouped-card" + (hasVisual ? " mp-has-visual" : "");
+                card.className = "mp-proposal-card mp-grouped-card";
                 card.setAttribute("data-mp-idx", origIdx);
                 card.setAttribute("data-mp-group", grpName);
-
-                // Visual proposal UI removed — using template-based generation
-                var visualHtml = '';
 
                 card.innerHTML =
                     '<label class="mp-proposal-check">' +
@@ -1629,7 +1874,6 @@
                             '<span class="' + priorityClass + '">' + esc(p.priority) + '</span>' +
                         '</div>' +
                         '<div class="mp-proposal-desc">' + esc(p.description) + '</div>' +
-                        visualHtml +
                     '</div>';
 
                 // Hide generated items from selection
@@ -1648,9 +1892,7 @@
                     var infoEl = card.querySelector(".mp-proposal-info");
                     if (infoEl) {
                         infoEl.style.cursor = "pointer";
-                        infoEl.addEventListener("click", function(e) {
-                            // Don't trigger playhead if clicking on visual proposal buttons/textarea
-                            if (e.target.closest(".mp-visual-proposal")) return;
+                        infoEl.addEventListener("click", function() {
                             document.querySelectorAll(".mp-proposal-card.mp-card-active").forEach(function(c) {
                                 c.classList.remove("mp-card-active");
                             });
@@ -1658,8 +1900,6 @@
                             mpMovePlayhead(startTime);
                         });
                     }
-
-                    // Visual proposal buttons removed — using template-based generation
                 })(origIdx, p.startTime);
 
                 list.appendChild(card);
@@ -1699,41 +1939,6 @@
         var textEl = btn.querySelector(".btn-analyze-text");
         if (!textEl) return;
         textEl.textContent = "🎬 Generar Seleccionados";
-    }
-
-    /** Run visual proposal for a single proposal by index, then re-render */
-    function _mpProposeOne(idx) {
-        var proposal = motionPro.proposals[idx];
-        if (!proposal) return;
-        if (!motionPro.serverRunning) {
-            showToast("Inicia el servidor Motion-Pro primero", "error");
-            return;
-        }
-        var aiConfig = {
-            provider: state.settings.aiProvider,
-            model: state.settings.aiModel,
-            apiKey: aiAnalyzer.getActiveKey()
-        };
-        var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
-
-        // Update UI: show spinner on the card
-        var card = document.querySelector(".mp-proposal-card[data-mp-idx='" + idx + "']");
-        var visualArea = card && card.querySelector(".mp-visual-proposal");
-        if (visualArea) {
-            visualArea.innerHTML = '<span class="mp-visual-proposing">💭 Generando propuesta visual…</span>';
-        }
-
-        motionPro.proposeVisual(proposal, segment, aiConfig, function(err, result) {
-            if (err) {
-                showToast("Error generando propuesta visual: " + err.message, "error");
-                mpRenderProposals();
-                return;
-            }
-            motionPro.saveState();
-            mpRenderProposals();
-            mpUpdateGenerateButton();
-            showToast("Propuesta visual generada para Clip " + (idx + 1), "success");
-        });
     }
 
     function mpToggleSelectAll() {
@@ -1926,9 +2131,15 @@
     }
 
     function _runGenerationPipeline(selected, outputDir) {
-        // Ensure custom palette is synced to motionPro before generation
-        if (state.customPalette && motionPro) {
-            motionPro.customPalette = state.customPalette;
+        // Ensure palette state is fully synced to motionPro before generation
+        // (covers all paths into the pipeline regardless of prior init order)
+        if (motionPro) {
+            if (state.customPalette) motionPro.customPalette = state.customPalette;
+            if (state.paletteCategory) motionPro.paletteCategory = state.paletteCategory;
+            try {
+                var savedBgMode = localStorage.getItem("mp-bg-mode");
+                if (savedBgMode) motionPro.bgMode = savedBgMode;
+            } catch(_e) {}
         }
 
         var aiConfig = {
@@ -2063,7 +2274,29 @@
 
             var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
 
+            // Show per-card progress — persist state so re-renders pick it up
+            if (!window._mpGenCardState) window._mpGenCardState = {};
+            window._mpGenCardState[proposal.id] = { pct: 5, msg: "En cola…" };
+            var _genCardProgress = function(pct, msg) {
+                window._mpGenCardState[proposal.id] = { pct: pct, msg: msg };
+                // Update header progress with elapsed time
+                var _fe3 = window._epFormatElapsed || function(s) { return Math.round(s) + "s"; };
+                var _el = (Date.now() - _mpTimers.generateStart) / 1000;
+                mpSetProgress("mp-generate", Math.max(Math.round((done / total) * 100), Math.round(pct / total)),
+                    done + "/" + total + " completados — " + msg + " (" + _fe3(_el) + ")");
+                var _gc = document.querySelector('.mp-gen-progress[data-motion-id="' + proposal.id + '"]');
+                if (!_gc) return;
+                _gc.classList.remove("hidden");
+                var _gf = _gc.querySelector(".mp-gen-fill");
+                var _gt = _gc.querySelector(".mp-gen-text");
+                if (_gf) _gf.style.width = pct + "%";
+                if (_gt) _gt.textContent = msg;
+                if (pct >= 100) delete window._mpGenCardState[proposal.id];
+            };
+            _genCardProgress(5, "En cola…");
+
             // Full pipeline: template fill → render video (MP4) → place in timeline
+            // generateMotion creates a placeholder motion — re-render after brief delay so card appears
             motionPro.generateMotion(proposal, segment, aiConfig, function(err, result) {
                 done++;
                 activeWorkers--;
@@ -2083,6 +2316,7 @@
                         activeWorkers++;
                         setTimeout(function() {
                             _mpTimers.itemStarts[proposal.id] = Date.now();
+                            _genCardProgress(5, "Reintentando…");
                             motionPro.generateMotion(proposal, segment, aiConfig, function(err2, result2) {
                                 done++;
                                 activeWorkers--;
@@ -2090,18 +2324,20 @@
                                     errors.push({ id: proposal.id, error: err2.message });
                                     if (window.EPLogger) EPLogger.error("motion-pro", "generate-item", proposal.id + ": " + err2.message + " (retry failed)");
                                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
+                                    _genCardProgress(100, "Error");
                                     launchWorker();
                                 } else {
                                     if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result2.motionId || "?") + " (retry success)");
                                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando video " + done + "/" + total + " en timeline...");
                                     mpPlaceMotionInTimeline(result2.motionId, function() {
+                                        _genCardProgress(100, "✓ Completado");
                                         proposal.generated = true;
                                         motionPro.saveState();
                                         mpRenderControlPanel();
                                         launchWorker();
                                     });
                                 }
-                            }, outputDir);
+                            }, outputDir, _genCardProgress);
                         }, 3000);
                         return;
                     }
@@ -2112,18 +2348,23 @@
                         showToast("⏱ Timeout en " + proposal.id + " — saltando al siguiente", "warning");
                     }
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
+                    _genCardProgress(100, "Error");
                     launchWorker();
                 } else {
                     if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result.motionId || "?"));
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando video " + done + "/" + total + " en timeline...");
                     mpPlaceMotionInTimeline(result.motionId, function() {
+                        _genCardProgress(100, "✓ Completado");
                         proposal.generated = true;
                         motionPro.saveState();
                         mpRenderControlPanel();
                         launchWorker();
                     });
                 }
-            }, outputDir);
+            }, outputDir, _genCardProgress);
+
+            // Placeholder motion was created synchronously — re-render so card appears with progress
+            setTimeout(function() { mpRenderControlPanel(); }, 100);
         }
 
         // Launch initial batch of workers
@@ -2193,16 +2434,17 @@
         var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
         var mpDuration = v.mediaDurationSec || Math.max(0.1, motion.endTime - mpStart);
         var mediaPath = mpNormalizeMediaPath(v.mp4Path);
-        var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1);
+        var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId);
 
         var isNewVersion = v.version > 1 && motion.placedInTimeline && motion.baseTrackIndex >= 0;
 
         if (isNewVersion) {
+            var versionTrackOffset = v.version - 1; // v2 → +1, v3 → +2, v4 → +3
             var payload = {
                 mp4Path: mediaPath,
                 startTimeSecs: mpStart,
                 durationSecs: mpDuration,
-                newTrackIndex: motion.baseTrackIndex + 1,
+                newTrackIndex: motion.baseTrackIndex + versionTrackOffset,
                 clipName: clipName + "_v" + v.version,
                 labelColor: _mpLabelColorForType(motion.type)
             };
@@ -2260,277 +2502,6 @@
         }
     }
 
-    function mpPlacePreviewInTimeline(motionId, callback) {
-        var motion = motionPro._findMotion(motionId);
-        if (!motion) { if (callback) callback(); return; }
-        var v = motionPro.getActiveVersion(motionId);
-        if (!v || !v.pngPath) { if (callback) callback(); return; }
-        if (window.EPLogger) EPLogger.log("motion-pro", "timeline-place-preview", motionId + " v" + v.version + " at " + motion.startTime.toFixed(1) + "s");
-
-        var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
-        var mpDuration = Math.max(0.1, motion.endTime - mpStart);
-        var mediaPath = mpNormalizeMediaPath(v.pngPath);
-        var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1);
-
-        // Version > 1 (feedback/regen): place on track ABOVE the original clip
-        // Always baseTrackIndex + 1 — if the track doesn't exist, replaceMotionOnTrack creates it
-        var isNewVersion = v.version > 1 && motion.placedInTimeline && motion.baseTrackIndex >= 0;
-
-        if (isNewVersion) {
-            var payload = {
-                mp4Path: mediaPath,
-                startTimeSecs: mpStart,
-                durationSecs: mpDuration,
-                newTrackIndex: motion.baseTrackIndex + 1,
-                clipName: clipName + "_v" + v.version,
-                labelColor: _mpLabelColorForType(motion.type)
-            };
-
-            var tmpPath = _writeTempJson(payload, "mp_preview_v" + v.version);
-            if (!tmpPath) { if (callback) callback(); return; }
-
-            csInterface.evalScript('replaceMotionOnTrack("' + mpEscapePathForEvalScript(tmpPath) + '")', function(res) {
-                try {
-                    var result = typeof res === "string" ? JSON.parse(res) : res;
-                    if (result && result.error) {
-                        console.warn("[Motion-Pro] PlacePreview v" + v.version + " error:", result.error);
-                        showToast("Preview no colocado: " + result.error, "error");
-                    } else {
-                        mpMovePlayhead(mpStart);
-                    }
-                } catch(e) {
-                    console.warn("[Motion-Pro] PlacePreview parse error:", e.message);
-                }
-                if (callback) callback();
-            });
-        } else {
-            // First version: use importAndPlaceMotions (creates/reuses Motion-Pro track)
-            var payload2 = {
-                clips: [{
-                    mp4Path: mediaPath,
-                    startTimeSecs: mpStart,
-                    durationSecs: mpDuration,
-                    clipName: clipName,
-                    labelColor: _mpLabelColorForType(motion.type)
-                }]
-            };
-
-            var tmpPath2 = _writeTempJson(payload2, "mp_preview");
-            if (!tmpPath2) { if (callback) callback(); return; }
-
-            csInterface.evalScript('importAndPlaceMotions("' + mpEscapePathForEvalScript(tmpPath2) + '")', function(res) {
-                if (res === undefined || res === null || res === "undefined" || res === "null" || res === "EvalScript error." || (typeof res === "string" && res.trim() === "")) {
-                    console.warn("[Motion-Pro] PlacePreview: evalScript returned empty or error:", res);
-                    if (callback) callback();
-                    return;
-                }
-                try {
-                    var result = typeof res === "string" ? JSON.parse(res) : res;
-                    if (result.error) {
-                        console.warn("[Motion-Pro] PlacePreview error:", result.error);
-                        showToast("Preview no colocado: " + result.error, "error");
-                    } else {
-                        motion.placedInTimeline = true;
-                        motion.baseTrackIndex = result.trackIndex != null ? result.trackIndex : -1;
-                        mpMovePlayhead(mpStart);
-                    }
-                } catch(e) {
-                    console.warn("[Motion-Pro] PlacePreview parse error:", e.message);
-                }
-                if (callback) callback();
-            });
-        }
-    }
-
-    // ─── Animate: render video + replace PNG in timeline ──────────
-
-    function mpAnimateSingle(motionId, callback) {
-        var motion = motionPro._findMotion(motionId);
-        if (!motion) { if (callback) callback(new Error("Motion not found")); return; }
-        var v = motionPro.getActiveVersion(motionId);
-        if (!v || v.status !== "preview") { if (callback) callback(new Error("Not in preview state")); return; }
-
-        // Step 1: Find the PNG clip in Premiere to get its duration
-        var clipName = _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0];
-
-        csInterface.evalScript('getClipInfoByName("' + mpEscapePathForEvalScript(clipName) + '")', function(clipRes) {
-            var clipInfo;
-            try { clipInfo = JSON.parse(clipRes); } catch(e) { clipInfo = { error: "Parse error" }; }
-
-            var fps = 30;
-            var durationFrames;
-
-            if (clipInfo.found && clipInfo.durationSecs > 0) {
-                durationFrames = Math.round(clipInfo.durationSecs * fps);
-            } else {
-                // Fallback: use proposal time range
-                var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
-                durationFrames = Math.round((motion.endTime - mpStart) * fps);
-            }
-
-            if (durationFrames < 30) durationFrames = 30; // Min 1 second
-
-            // Step 2: Animate (render video with duration override)
-            var aiConfig = {
-                provider: state.settings.aiProvider,
-                model: state.settings.aiModel,
-                apiKey: aiAnalyzer.getActiveKey()
-            };
-
-            motionPro.animateMotion(motionId, durationFrames, aiConfig, function(err, result) {
-                if (err) { if (callback) callback(err); return; }
-
-                // Step 3: Replace PNG with video in timeline
-                // v is the preview version (mediaDurationSec is always null for previews)
-                // Use the rendered result's duration, fallback to durationFrames/fps
-                var animDurationSecs = (result.mp4Path && motionPro.getActiveVersion(motionId) && typeof motionPro.getActiveVersion(motionId).mediaDurationSec === "number")
-                    ? motionPro.getActiveVersion(motionId).mediaDurationSec
-                    : (durationFrames / fps);
-                var payload = {
-                    mp4Path: mpNormalizeMediaPath(result.mp4Path),
-                    targetClipName: clipName,
-                    clipName: clipName + "_Anim",
-                    labelColor: _mpLabelColorForType(motion.type),
-                    durationSecs: animDurationSecs
-                };
-
-                var tmpPath = _writeTempJson(payload, "mp_animate");
-                if (!tmpPath) { if (callback) callback(); return; }
-
-                csInterface.evalScript('importAndPlaceAbove("' + mpEscapePathForEvalScript(tmpPath) + '")', function(placeRes) {
-                    try {
-                        var placeResult = JSON.parse(placeRes);
-                        if (placeResult.error) {
-                            console.warn("[Motion-Pro] Animate place error:", placeResult.error);
-                            showToast("Error al colocar animación: " + placeResult.error, "error");
-                        } else {
-                            motion.placedInTimeline = true;
-                            showToast("🎬 " + motionId + " animado (v" + result.version + ")", "success");
-                        }
-                    } catch(e) {
-                        console.warn("[Motion-Pro] Animate place parse error:", e.message);
-                    }
-                    motionPro.saveState();
-                    mpRenderControlPanel();
-                    if (callback) callback();
-                });
-            }, _mpOutputDir || undefined);
-        });
-    }
-
-    function mpAnimateAll(callback) {
-        var previews = [];
-        for (var i = 0; i < motionPro.motions.length; i++) {
-            var v = motionPro.getActiveVersion(motionPro.motions[i].id);
-            if (v && v.status === "preview") {
-                previews.push(motionPro.motions[i].id);
-            }
-        }
-        if (previews.length === 0) {
-            showToast("No hay previews para animar", "info");
-            if (callback) callback();
-            return;
-        }
-
-        var total = previews.length;
-        var done = 0;
-        var errors = [];
-
-        showToast("🎬 Animando " + total + " motions...", "info");
-
-        function next() {
-            if (done >= total) {
-                state.mpGenerating = false;
-                hideElement("mp-generate-progress");
-                refreshMPHeaderProgressVisibility();
-                if (errors.length > 0) {
-                    showToast("⚠️ " + (total - errors.length) + "/" + total + " animados, " + errors.length + " errores", "error");
-                } else {
-                    showToast("✅ " + total + " motions animados", "success");
-                }
-                mpRenderControlPanel();
-                if (callback) callback();
-                return;
-            }
-
-            var motionId = previews[done];
-            mpSetProgress("mp-generate", Math.round((done / total) * 100), "Animando " + (done + 1) + "/" + total + ": " + motionId);
-
-            mpAnimateSingle(motionId, function(err) {
-                done++;
-                if (err) errors.push({ id: motionId, error: err.message });
-                next();
-            });
-        }
-
-        state.mpGenerating = true;
-        showElement("mp-generate-progress");
-        next();
-    }
-
-    function mpPlaceSingleInTimeline(motionId, callback) {
-        var motion = motionPro._findMotion(motionId);
-        if (!motion) { if (callback) callback(); return; }
-        var v = motionPro.getActiveVersion(motionId);
-        if (!v || !v.mp4Path) { if (callback) callback(); return; }
-        if (window.EPLogger) EPLogger.log("motion-pro", "timeline-place", motionId + " at " + motion.startTime.toFixed(1) + "s");
-
-        var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
-        var mpDuration = mpComputeClipDurationSecs(motion, v);
-        var mediaPath = mpNormalizeMediaPath(v.mp4Path);
-
-        var payload = {
-            clips: [{
-                mp4Path: mediaPath,
-                startTimeSecs: mpStart,
-                durationSecs: mpDuration,
-                clipName: _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1),
-                labelColor: _mpLabelColorForType(motion.type)
-            }]
-        };
-
-        var tmpPath = _writeTempJson(payload, "mp_place");
-        if (!tmpPath) { if (callback) callback(); return; }
-
-        csInterface.evalScript('importAndPlaceMotions("' + mpEscapePathForEvalScript(tmpPath) + '")', function(res) {
-            if (res === undefined || res === null || res === "undefined" || res === "null" || res === "EvalScript error." || (typeof res === "string" && res.trim() === "")) {
-                console.warn("[Motion-Pro] Place: evalScript returned empty or error:", res);
-                showToast("Motion-Pro: Premiere no respondió al colocar el clip. Activa la secuencia correcta y recarga el panel (Cmd+R en el panel).", "error");
-                if (callback) callback();
-                return;
-            }
-            try {
-                var result = typeof res === "string" ? JSON.parse(res) : res;
-                if (result.error) {
-                    console.warn("[Motion-Pro] Place error:", result.error);
-                    showToast("Motion-Pro: no se colocó en timeline — " + result.error, "error");
-                } else {
-                    var errList = result.errors && result.errors.length ? result.errors.join("; ") : "";
-                    var ins = result.inserted;
-                    var okInsert = errList ? false : (typeof ins === "number" ? ins >= 1 : true);
-                    if (!okInsert) {
-                        var msg = errList || (typeof ins === "number" && ins < 1 ? "Ningún clip insertado (¿archivo no visible para Premiere?)" : "Colocación incompleta");
-                        console.warn("[Motion-Pro] Place failed:", msg, result);
-                        showToast("Motion-Pro: " + msg, "error");
-                    } else {
-                        motion.placedInTimeline = true;
-                        motion.baseTrackIndex = result.trackIndex != null ? result.trackIndex : -1;
-                        // Lleva el playhead al inicio del motion (si no, parece “vacío” al estar el clip más adelante o arriba del todo en pistas)
-                        mpMovePlayhead(mpStart);
-                        var vn = result.videoTrackNumber;
-                        if (typeof vn === "number" && vn > 0) {
-                            console.log("[Motion-Pro] Clip en pista de video V" + vn + " (~" + Math.round(mpStart) + "s)");
-                        }
-                    }
-                }
-            } catch(e) {
-                console.warn("[Motion-Pro] Place parse error:", e.message, res);
-                showToast("Motion-Pro: respuesta inválida al colocar (¿ExtendScript?). " + e.message, "error");
-            }
-            if (callback) callback();
-        });
-    }
-
     function mpReplaceInTimeline(motionId, version) {
         var motion = motionPro._findMotion(motionId);
         if (!motion) return;
@@ -2543,7 +2514,7 @@
             durationSecs: mpComputeClipDurationSecs(motion, v),
             oldTrackIndex: motion.baseTrackIndex,
             newTrackIndex: motion.baseTrackIndex + (v.version - 1),
-            clipName: _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1),
+            clipName: _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId),
             labelColor: _mpLabelColorForType(motion.type),
             oldClipPattern: _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0]
         };
@@ -2704,18 +2675,9 @@
         });
 
         // Expand All / Collapse All toolbar
-        // Count how many are in preview state
-        var previewCount = 0;
-        motions.forEach(function(m) {
-            var av = motionPro.getActiveVersion(m.id);
-            if (av && av.status === "preview") previewCount++;
-        });
-
         var toolbar = document.createElement('div');
         toolbar.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;';
-        toolbar.innerHTML = (previewCount > 0 ?
-                            '<button class="btn btn-sm btn-success" id="btn-mp-animate-all" title="Renderizar video de todos los previews">🎬 Animar Todos (' + previewCount + ')</button>' : '') +
-                            '<button class="btn btn-sm btn-ghost" id="btn-mp-expand-all">Desplegar todos</button>' +
+        toolbar.innerHTML = '<button class="btn btn-sm btn-ghost" id="btn-mp-expand-all">Desplegar todos</button>' +
                             '<button class="btn btn-sm btn-ghost" id="btn-mp-collapse-all">Replegar todos</button>';
         list.appendChild(toolbar);
 
@@ -2795,6 +2757,17 @@
                     statusBadge +
                 '</div>' +
                 previewThumbHtml +
+                (function() {
+                    var _gs = window._mpGenCardState && window._mpGenCardState[m.id];
+                    if (_gs) {
+                        return '<div class="mp-gen-progress" data-motion-id="' + m.id + '">' +
+                            '<div class="progress-track"><div class="progress-fill mp-gen-fill" style="width:' + _gs.pct + '%"></div></div>' +
+                            '<span class="progress-text mp-gen-text">' + esc(_gs.msg) + '</span></div>';
+                    }
+                    return '<div class="mp-gen-progress hidden" data-motion-id="' + m.id + '">' +
+                        '<div class="progress-track"><div class="progress-fill mp-gen-fill" style="width:0%"></div></div>' +
+                        '<span class="progress-text mp-gen-text">Esperando…</span></div>';
+                })() +
                 '<div class="mp-motion-desc">' + esc(m.description) + '</div>' +
                 '<div class="mp-motion-controls">' +
                     '<div class="mp-version-row">' +
@@ -2802,8 +2775,6 @@
                         '<select class="mp-version-select select-input" data-motion-id="' + m.id + '">' + versionOptions + '</select>' +
                     '</div>' +
                     '<div class="mp-action-row">' +
-                        (activeV && activeV.status === "preview" ?
-                            '<button class="btn btn-sm btn-success mp-btn-animate" data-motion-id="' + m.id + '" title="Renderizar video y colocar en timeline">🎬 Animar</button>' : '') +
                         '<button class="btn btn-sm btn-ghost mp-btn-studio" data-motion-id="' + m.id + '" title="Abrir en Remotion Studio">🖥 Remotion</button>' +
                         '<button class="btn btn-sm btn-ghost mp-btn-regen" data-motion-id="' + m.id + '" title="Regenerar del todo">🔄 Regenerar</button>' +
                     '</div>' +
@@ -2846,27 +2817,6 @@
                     if (v && v.mp4Path) mpReplaceInTimeline(motionId, v);
                     motionPro.saveState();
                     mpRenderControlPanel();
-                });
-
-                // Animate (render video from preview)
-                var animateBtn = card.querySelector(".mp-btn-animate");
-                if (animateBtn) animateBtn.addEventListener("click", function() {
-                    if (!motionPro.serverRunning) { showToast("Inicia el servidor primero", "error"); return; }
-                    if (state.mpGenerating) { showToast("Espera a que termine el proceso actual", "info"); return; }
-                    state.mpGenerating = true;
-                    animateBtn.disabled = true;
-                    animateBtn.textContent = "🎬 Animando...";
-                    if (window.EPLogger) EPLogger.log("motion-pro", "animate-single", motionId);
-
-                    mpAnimateSingle(motionId, function(err) {
-                        state.mpGenerating = false;
-                        if (err) {
-                            showToast("Error al animar: " + err.message, "error");
-                            if (window.EPLogger) EPLogger.error("motion-pro", "animate-error", motionId + ": " + err.message);
-                        }
-                        motionPro.saveState();
-                        mpRenderControlPanel();
-                    });
                 });
 
                 // Remotion Studio
@@ -3044,6 +2994,12 @@
 
                     var aiConfig = { provider: state.settings.aiProvider, model: state.settings.aiModel, apiKey: aiAnalyzer.getActiveKey() };
 
+                    // Ensure motion has transcript for feedback context
+                    var mot = motionPro._findMotion(motionId);
+                    if (mot && !mot.transcriptSegment) {
+                        mot.transcriptSegment = mpExtractSegment(mot.startTime, mot.endTime);
+                    }
+
                     motionPro.regenerateWithFeedback(motionId, savedFeedbackText, aiConfig, function(err, result) {
                         if (state.mpFeedbackActive) delete state.mpFeedbackActive[motionId];
                         if (err) {
@@ -3062,7 +3018,18 @@
                             motionPro.saveState();
                             _mpUpdateSingleCard(motionId);
                         }
-                    }, _mpOutputDir || undefined);
+                    }, _mpOutputDir || undefined, function(pct, msg) {
+                        // Live progress updates during feedback pipeline
+                        var _card = document.querySelector('.mp-motion-card[data-motion-id="' + motionId + '"]');
+                        if (!_card) return;
+                        var _prog = _card.querySelector('.mp-feedback-progress[data-motion-id="' + motionId + '"]');
+                        if (!_prog) return;
+                        _prog.classList.remove("hidden");
+                        var _fill = _prog.querySelector(".mp-fb-fill");
+                        var _txt = _prog.querySelector(".mp-fb-text");
+                        if (_fill) _fill.style.width = pct + "%";
+                        if (_txt) _txt.textContent = msg;
+                    });
                 });
             })(m.id, m.startTime);
         }
@@ -3070,17 +3037,6 @@
 
         // Bind toolbar buttons
         setTimeout(function() {
-            var animateAllBtn = document.getElementById('btn-mp-animate-all');
-            if (animateAllBtn) animateAllBtn.addEventListener('click', function() {
-                if (!motionPro.serverRunning) { showToast("Inicia el servidor primero", "error"); return; }
-                if (state.mpGenerating) { showToast("Espera a que termine el proceso actual", "info"); return; }
-                animateAllBtn.disabled = true;
-                animateAllBtn.textContent = "🎬 Animando...";
-                mpAnimateAll(function() {
-                    // Control panel re-rendered by mpAnimateAll
-                });
-            });
-
             var expandBtn = document.getElementById('btn-mp-expand-all');
             var collapseBtn = document.getElementById('btn-mp-collapse-all');
             if (expandBtn) expandBtn.addEventListener('click', function() {
@@ -3160,9 +3116,6 @@
         bindStepHeaders: mpBindStepHeaders,
         switchToSequence: mpSwitchToSequence,
         updateAnalyzeButton: mpUpdateAnalyzeButton,
-        animateSingle: mpAnimateSingle,
-        animateAll: mpAnimateAll,
-        placePreviewInTimeline: mpPlacePreviewInTimeline,
         placeMotionInTimeline: mpPlaceMotionInTimeline,
         getSessionName: function() { return _mpSessionName; },
         getOutputDir: function() { return _mpOutputDir; }

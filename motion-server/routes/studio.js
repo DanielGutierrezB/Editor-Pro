@@ -8,10 +8,15 @@ let studioUrl = null;
 // Sync session before opening studio
 router.get('/sync', (req, res) => {
   const sessionDir = req.query.sessionDir;
-  if (!sessionDir) return res.status(400).json({ error: 'Missing sessionDir' });
+  if (!sessionDir) {
+    console.error('[studio] /sync — missing sessionDir');
+    return res.status(400).json({ error: 'Missing sessionDir' });
+  }
 
+  console.log('[studio] Syncing session: ' + sessionDir);
   const manager = new RemotionManager(req.app.locals.renderProject);
   manager.syncFromSession(sessionDir);
+  console.log('[studio] Sync complete');
   res.json({ success: true, synced: sessionDir });
 });
 
@@ -27,12 +32,15 @@ router.get('/start', (req, res) => {
     return res.json({ url: studioUrl, status: 'already_running' });
   }
 
+  console.log('[studio] Starting Remotion Studio...');
   manager.startStudio((err, result) => {
     if (err) {
+      console.error('[studio] Start failed: ' + err.message);
       return res.status(500).json({ error: err.message });
     }
     studioUrl = result.url;
     studioProcess = result.pid;
+    console.log('[studio] Started at ' + result.url + ' (pid=' + result.pid + ')');
     res.json({ url: result.url, status: 'started', pid: result.pid });
   });
 });

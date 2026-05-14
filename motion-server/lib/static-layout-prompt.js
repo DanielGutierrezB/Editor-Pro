@@ -23,17 +23,71 @@ const DESIGN_SYSTEM = _loadDoc('DESIGN.md');
 
 // ── Palette helpers ──────────────────────────────────────────────────────────
 
-function _buildPaletteCode(customPalette) {
+// Chroma key colors
+const CHROMA_GREEN = '#00FF00';
+const CHROMA_BLUE = '#0000FF';
+
+function _parseHex(hex) {
+  if (!hex || typeof hex !== 'string') return null;
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return null;
+  return { r: parseInt(h.substr(0,2),16), g: parseInt(h.substr(2,2),16), b: parseInt(h.substr(4,2),16) };
+}
+
+function _isGreenish(hex) {
+  const c = _parseHex(hex);
+  if (!c) return false;
+  return c.g > 150 && c.g > c.r * 1.3 && c.g > c.b * 1.3;
+}
+
+function _isBluish(hex) {
+  const c = _parseHex(hex);
+  if (!c) return false;
+  return c.b > 120 && c.b > c.r * 1.2 && c.b > c.g * 1.2;
+}
+
+// Replace colors that would blend with the chroma background
+function _chromaSafe(hex, chromaIsBlue) {
+  if (chromaIsBlue && _isBluish(hex)) return '#fb923c'; // swap blue→orange
+  if (!chromaIsBlue && _isGreenish(hex)) return '#a78bfa'; // swap green→purple
+  return hex;
+}
+
+function _buildPaletteCode(customPalette, bgMode) {
   const p = customPalette ? (validatePalette(customPalette) || DEFAULT_PALETTE) : DEFAULT_PALETTE;
+  let bg = p.bg, card = p.card, text = p.text, dim = p.dim, border = p.border, glow = p.glow;
+
+  if (bgMode === 'light') {
+    bg = '#f8f9fa';
+    card = '#ffffff';
+    text = '#1a1d23';
+    dim = 'rgba(0,0,0,0.55)';
+    border = 'rgba(0,0,0,0.08)';
+    glow = 'rgba(10,233,141,0.06)';
+  } else if (bgMode === 'chroma') {
+    // Use green chroma by default; if accent/green are greenish, use blue
+    const hasGreen = _isGreenish(p.accent) || _isGreenish(p.green);
+    const chromaIsBlue = hasGreen;
+    bg = chromaIsBlue ? CHROMA_BLUE : CHROMA_GREEN;
+    card = 'rgba(0,0,0,0.65)';
+    // Swap any palette color that would blend with the chroma bg
+    return `const C = {
+  bg:'${bg}', card:'${card}', accent:'${_chromaSafe(p.accent, chromaIsBlue)}', green:'${_chromaSafe(p.green, chromaIsBlue)}',
+  orange:'${_chromaSafe(p.orange, chromaIsBlue)}', purple:'${_chromaSafe(p.purple, chromaIsBlue)}', red:'${_chromaSafe(p.red, chromaIsBlue)}', text:'${text}',
+  dim:'${dim}', border:'${border}',
+  glow:'${glow}',
+};`;
+  }
+
   return `const C = {
-  bg:'${p.bg}', card:'${p.card}', accent:'${p.accent}', green:'${p.green}',
-  orange:'${p.orange}', purple:'${p.purple}', red:'${p.red}', text:'${p.text}',
-  dim:'${p.dim}', border:'${p.border}',
-  glow:'${p.glow}',
+  bg:'${bg}', card:'${card}', accent:'${p.accent}', green:'${p.green}',
+  orange:'${p.orange}', purple:'${p.purple}', red:'${p.red}', text:'${text}',
+  dim:'${dim}', border:'${border}',
+  glow:'${glow}',
 };`;
 }
 
-function _paletteNote(customPalette, paletteCategory) {
+function _paletteNote(customPalette, paletteCategory, bgMode) {
   const parts = [];
   if (paletteCategory && paletteCategory !== 'auto') {
     const desc = getCategoryDescription(paletteCategory);
@@ -42,6 +96,15 @@ function _paletteNote(customPalette, paletteCategory) {
   if (customPalette) {
     const p = validatePalette(customPalette);
     if (p) parts.push(`Custom palette — bg: ${p.bg}, accent: ${p.accent}, card: ${p.card}. Use these colors.`);
+  }
+  if (bgMode === 'light') {
+    parts.push('LIGHT MODE: Background is white/light. Text must be dark (#1a1d23). Ensure high contrast for all text against light backgrounds.');
+  } else if (bgMode === 'chroma') {
+    const hasGreen = customPalette && (_isGreenish(customPalette.accent) || _isGreenish(customPalette.green));
+    const chromaColor = hasGreen ? 'blue (#0000FF)' : 'green (#00FF00)';
+    parts.push(`CHROMA KEY MODE: Background is solid ${chromaColor} for chroma keying. DO NOT use ${hasGreen ? 'blue' : 'green'} or similar colors in ANY visual element.`);
+  } else if (bgMode === 'alpha') {
+    parts.push('ALPHA/TRANSPARENT MODE: Background is transparent (C.bg = "transparent"). The video will be rendered with alpha channel (ProRes 4444). DO NOT add any full-screen background elements. Cards and content will float over the video in Premiere Pro. Use C.card for card backgrounds (semi-transparent dark). Text should be white (C.text) for readability over any video.');
   }
   return parts.length ? '\n## ACTIVE PALETTE\n' + parts.join('\n') : '';
 }
@@ -72,11 +135,11 @@ const LAYOUT_HINTS = {
 
 // ── Main prompt builder ──────────────────────────────────────────────────────
 
-function getStaticLayoutPrompt({ transcriptSegment, type, description, durationFrames, compositionId, customPalette, paletteCategory }) {
+function getStaticLayoutPrompt({ transcriptSegment, type, description, durationFrames, compositionId, customPalette, paletteCategory, bgMode }) {
   const compName = _componentName(compositionId);
   const layoutHint = LAYOUT_HINTS[type] || LAYOUT_HINTS.title;
   const durationSecs = (durationFrames / 30).toFixed(1);
-  const numSections = durationFrames <= 240 ? 1 : durationFrames <= 450 ? 2 : durationFrames <= 600 ? 3 : 4;
+  const numSections = durationFrames <= 240 ? 1 : durationFrames <= 450 ? 2 : durationFrames <= 600 ? 3 : Math.min(6, Math.ceil(durationFrames / 210));
 
   const systemMsg = `You are a motion graphics designer for educational videos. Your graphics appear OVER a professor's video. The viewer sees your graphic for a few seconds while listening.
 
@@ -130,7 +193,7 @@ import {AbsoluteFill, Img, staticFile} from 'remotion';
 // Import icons as needed:
 // import { Zap, ArrowRight, CheckCircle } from 'lucide-react';
 
-${_buildPaletteCode(customPalette)}
+${_buildPaletteCode(customPalette, bgMode)}
 
 const Safe:React.FC<{children:React.ReactNode;style?:React.CSSProperties}> = ({children,style}) => (
   <div style={{position:'absolute',left:160,top:180,right:160,bottom:160,
@@ -200,7 +263,7 @@ export const ${compName}:React.FC = () => (
   </AbsoluteFill>
 );
 \`\`\`
-${_paletteNote(customPalette, paletteCategory)}
+${_paletteNote(customPalette, paletteCategory, bgMode)}
 
 ## Composition Details
 - Export: ${compName}

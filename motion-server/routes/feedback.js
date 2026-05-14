@@ -31,7 +31,7 @@ function _logFeedback(opts) {
     const feedbackImgDir = path.join(logDir, 'feedback');
     let refImages = [];
     if (fs.existsSync(feedbackImgDir)) {
-      const baseId = opts.compositionId.replace(/-v\d+$/, '');
+      const baseId = opts.compositionId.replace(/[-_]v\d+[-\d]*$/, '');
       refImages = fs.readdirSync(feedbackImgDir)
         .filter(f => f.indexOf(baseId) === 0 && f.endsWith('.png'))
         .sort()
@@ -108,12 +108,19 @@ router.post('/', (req, res) => {
     sessionDir,
     type,
     description,
+    transcriptSegment,
+    customPalette,
+    paletteCategory,
+    bgMode,
   } = req.body;
 
   if (!compositionId || !feedback) {
+    console.error('[feedback] Missing compositionId or feedback');
     return res.status(400).json({ error: 'Missing compositionId or feedback' });
   }
 
+  console.log('[feedback] START compositionId=' + compositionId + ' provider=' + provider + ' model=' + model);
+  console.log('[feedback] Feedback text: ' + (feedback || '').substring(0, 100) + (feedback && feedback.length > 100 ? '...' : ''));
   const manager = new RemotionManager(req.app.locals.renderProject);
 
   // Read current TSX directly from session folder (single source of truth).
@@ -140,11 +147,15 @@ router.post('/', (req, res) => {
   }
 
   if (!currentTsx) {
+    console.error('[feedback] Composition not found: ' + compositionId + ' (session=' + (sessionDir || 'none') + ')');
     return res.status(404).json({ error: `Composition ${compositionId} not found in session or compositions dir` });
   }
 
-  const baseId = compositionId.replace(/[-_]v\d+$/, '');
-  const newCompositionId = (baseId + '-v' + (newVersion || 2)).replace(/_/g, '-');
+  const baseId = compositionId.replace(/[-_]v\d+[-\d]*$/, '');
+  const now = new Date();
+  const ts = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0') + '-' + String(now.getMilliseconds()).padStart(3, '0');
+  const newCompositionId = (baseId + '-v' + (newVersion || 2) + '-' + ts).replace(/_/g, '-');
+  console.log('[feedback] Found source TSX (' + currentTsx.length + ' chars) — new compositionId=' + newCompositionId);
 
   // Get duration: try .duration file from session first, then calculate from TSX
   var durationFrames = 300;
@@ -179,12 +190,21 @@ router.post('/', (req, res) => {
     compositionId: newCompositionId,
     type: type || 'title',
     description: description || '',
+    transcriptSegment: transcriptSegment || '',
+    customPalette: customPalette || null,
+    paletteCategory: paletteCategory || null,
+    bgMode: bgMode || 'dark',
   });
 
+  const llmStart = Date.now();
+  console.log('[feedback] Sending to LLM (' + provider + '/' + model + ')...');
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {
+    const llmMs = Date.now() - llmStart;
     if (err) {
+      console.error('[feedback] LLM error after ' + llmMs + 'ms: ' + err.message);
       return res.status(500).json({ error: 'LLM error: ' + err.message });
     }
+    console.log('[feedback] LLM responded in ' + llmMs + 'ms (' + (rawCode || '').length + ' chars)');
 
     let tsxCode = rawCode;
     const codeMatch = rawCode.match(/```(?:tsx?|jsx?|react)?\s*\n([\s\S]*?)```/);
@@ -206,6 +226,8 @@ router.post('/', (req, res) => {
         model: model || '',
         provider: provider || '',
       });
+      const totalMs = Date.now() - llmStart;
+      console.log('[feedback] OK ' + compositionId + ' -> ' + newCompositionId + ' llmMs=' + llmMs + ' totalMs=' + totalMs);
       res.json({
         compositionId: newCompositionId,
         tsxPath,
@@ -213,6 +235,7 @@ router.post('/', (req, res) => {
         status: 'generated',
       });
     } catch (writeErr) {
+      console.error('[feedback] Write error for ' + newCompositionId + ': ' + writeErr.message);
       res.status(500).json({ error: 'Write error: ' + writeErr.message });
     }
   });

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Motion Pro — Pipeline Logging Map v1.12.19</title>
+<style>
+  :root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #e6edf3; --dim: #8b949e; --green: #3fb950; --blue: #58a6ff; --orange: #d29922; --red: #f85149; --purple: #bc8cff; --cyan: #39d2c0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; }
+  h1 { color: var(--blue); font-size: 24px; margin-bottom: 6px; }
+  .subtitle { color: var(--dim); margin-bottom: 24px; font-size: 14px; }
+  h2 { color: var(--cyan); font-size: 18px; margin: 28px 0 12px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  h3 { color: var(--orange); font-size: 15px; margin: 16px 0 8px; }
+  .pipeline { display: flex; flex-direction: column; gap: 2px; margin: 12px 0 20px; }
+  .step { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; position: relative; }
+  .step::before { content: ''; position: absolute; left: 24px; top: -2px; width: 2px; height: 2px; background: var(--border); }
+  .step-num { display: inline-block; background: var(--blue); color: var(--bg); font-weight: 700; font-size: 12px; width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 50%; margin-right: 8px; }
+  .step-title { font-weight: 600; font-size: 14px; }
+  .step-file { color: var(--dim); font-size: 12px; font-family: 'SF Mono', monospace; margin-left: 8px; }
+  .logs { margin-top: 8px; padding: 8px 12px; background: #0d1117; border-radius: 6px; font-family: 'SF Mono', Consolas, monospace; font-size: 12px; line-height: 1.8; }
+  .log { color: var(--dim); }
+  .log .prefix { font-weight: 600; }
+  .log.ok .prefix { color: var(--green); }
+  .log.info .prefix { color: var(--blue); }
+  .log.warn .prefix { color: var(--orange); }
+  .log.err .prefix { color: var(--red); }
+  .log.client .prefix { color: var(--purple); }
+  .arrow { text-align: center; color: var(--dim); font-size: 18px; line-height: 1; }
+  .flow-group { border-left: 3px solid var(--border); margin-left: 10px; padding-left: 16px; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; font-weight: 600; margin-left: 6px; }
+  .tag-server { background: var(--blue); color: var(--bg); }
+  .tag-client { background: var(--purple); color: var(--bg); }
+  .tag-lib { background: var(--cyan); color: var(--bg); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th { text-align: left; color: var(--blue); padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 6px 10px; border-bottom: 1px solid #21262d; }
+  td code { color: var(--cyan); font-family: 'SF Mono', monospace; font-size: 12px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .summary-box { background: var(--card); border: 1px solid var(--green); border-radius: 8px; padding: 16px; margin: 16px 0; }
+  .summary-box h3 { color: var(--green); margin-top: 0; }
+</style>
+</head>
+<body>
+
+<h1>🎬 Motion Pro — Pipeline Logging Map</h1>
+<p class="subtitle">v1.12.19 — Cada paso del pipeline tiene logs con timing, IDs y contexto de error</p>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> Client (CEP / motion-pro.js)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div> Server Route</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--cyan)"></div> Server Lib</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> OK / Success</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div> Error</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> Warning</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>🔄 Flujo 1: Generación Completa (Generate → Render → Timeline)</h2>
+<p style="color:var(--dim);font-size:13px;margin-bottom:12px;">Cuando el usuario da click en "🎬 Generar Seleccionados"</p>
+
+<div class="pipeline">
+
+  <div class="step">
+    <span class="step-num">1</span>
+    <span class="step-title">Health Check</span>
+    <span class="tag tag-client">CLIENT</span>
+    <span class="step-file">motion-pro.js</span>
+    <div class="logs">
+      <div class="log info"><span class="prefix">[Motion-Pro]</span> generateMotion START id=xxx type=title v1</div>
+      <div class="log ok"><span class="prefix">[Motion-Pro]</span> Health check OK — sending to LLM...</div>
+      <div class="log err"><span class="prefix">[Motion-Pro]</span> Health check failed for xxx <i>(si falla)</i></div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="step">
+    <span class="step-num">2</span>
+    <span class="step-title">POST /api/generate/template → LLM genera TSX</span>
+    <span class="tag tag-server">SERVER</span>
+    <span class="step-file">routes/generate.js</span>
+    <div class="logs">
+      <div class="log info"><span class="prefix">[generate/static-layout]</span> provider=openrouter model=claude-sonnet type=title</div>
+      <div class="log info"><span class="prefix">[generate/static-layout]</span> Sending to LLM — compositionId=xxx frames=210...</div>
+      <div class="log info"><span class="prefix">[llm]</span> sendLLM provider=openrouter model=claude-sonnet promptChars=8542</div>
+      <div class="log ok"><span class="prefix">[generate/static-layout]</span> LLM responded in 4523ms (3200 chars)</div>
+      <div class="log info"><span class="prefix">[generate/static-layout]</span> Anim wrapper injected, writing composition...</div>
+      <div class="log ok"><span class="prefix">[RemotionManager]</span> Wrote xxx (210 frames) → /path/to/file.tsx</div>
+      <div class="log ok"><span class="prefix">[generate/static-layout]</span> OK compositionId=xxx frames=210 llmMs=4523 totalMs=4580</div>
+      <div class="log err"><span class="prefix">[generate/static-layout]</span> LLM error after 30000ms: timeout <i>(si falla)</i></div>
+      <div class="log err"><span class="prefix">[generate/static-layout]</span> Syntax error in xxx: ... <i>(si TSX inválido)</i></div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="step">
+    <span class="step-num">3</span>
+    <span class="step-title">Client recibe compositionId</span>
+    <span class="tag tag-client">CLIENT</span>
+    <span class="step-file">motion-pro.js</span>
+    <div class="logs">
+      <div class="log ok"><span class="prefix">[Motion-Pro]</span> TSX generated for xxx compositionId=xxx-v1-14-30-45 llmMs=4523</div>
+      <div class="log info"><span class="prefix">[Motion-Pro]</span> Enqueuing render for xxx-v1-14-30-45...</div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="step">
+    <span class="step-num">4</span>
+    <span class="step-title">POST /api/render → Enqueue render job</span>
+    <span class="tag tag-server">SERVER</span>
+    <span class="step-file">routes/render.js</span>
+    <div class="logs">
+      <div class="log info"><span class="prefix">[render]</span> Enqueue video render: compositionId=xxx-v1-14-30-45</div>
+      <div class="log info"><span class="prefix">[RenderQueue]</span> Enqueued job abc123 for xxx-v1-14-30-45 (queue length: 1)</div>
+      <div class="log ok"><span class="prefix">[render]</span> Enqueued jobId=abc123 status=pending</div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="step">
+    <span class="step-num">5</span>
+    <span class="step-title">Render Queue ejecuta → Remotion render</span>
+    <span class="tag tag-server">SERVER</span>
+    <span class="step-file">routes/render.js + lib/render-queue.js</span>
+    <div class="logs">
+      <div class="log info"><span class="prefix">[RenderQueue]</span> Starting render for job abc123 (xxx-v1-14-30-45)</div>
+      <div class="log info"><span class="prefix">[render]</span> Syncing session: /path/to/session</div>
+      <div class="log info"><span class="prefix">[render/video]</span> START compositionId=xxx-v1-14-30-45</div>
+      <div class="log info"><span class="prefix">[render/video]</span> Rendering via Remotion (ProRes)...</div>
+      <div class="log ok"><span class="prefix">[render/video]</span> Remotion done in 12400ms — output: /path/to/video.mp4</div>
+      <div class="log info"><span class="prefix">[render/video]</span> Running ffmpeg faststart...</div>
+      <div class="log ok"><span class="prefix">[render/faststart]</span> Re-encoded with all-intra keyframes: video.mp4</div>
+      <div class="log ok"><span class="prefix">[render/video]</span> OK compositionId=xxx duration=7.03s totalMs=18200</div>
+      <div class="log ok"><span class="prefix">[RenderQueue]</span> Job abc123 complete: /path/to/video.mp4</div>
+      <div class="log err"><span class="prefix">[render/video]</span> Remotion render failed after 25000ms: ... <i>(si falla)</i></div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="step">
+    <span class="step-num">6</span>
+    <span class="step-title">Client recibe MP4 → Place in Timeline</span>
+    <span class="tag tag-client">CLIENT</span>
+    <span class="step-file">motion-pro.js</span>
+    <div class="logs">
+      <div class="log ok"><span class="prefix">[Motion-Pro]</span> Render complete for xxx mp4=/path/video.mp4 renderMs=18200 totalMs=22700</div>
+      <div class="log ok"><span class="prefix">[Motion-Pro]</span> render-ok xxx renderMs=18200 totalMs=22700 <i>(EPLogger)</i></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>💬 Flujo 2: Feedback (Regenerar con correcciones)</h2>
+<p style="color:var(--dim);font-size:13px;margin-bottom:12px;">Cuando el usuario escribe feedback y da click en "Enviar"</p>
+
+<div class="pipeline">
+
+  <div class="step">
+    <span class="step-num">1</span>
+    <span class="step-title">POST /api/feedback → LLM modifica TSX</span>
+    <span class="tag tag-server">SERVER</span>
+    <span class="step-file">routes/feedback.js</span>
+    <div class="logs">
+      <div class="log info"><span class="prefix">[feedback]</span> START compositionId=xxx-v1 provider=openrouter model=claude-sonnet</div>
+      <div class="log info"><span class="prefix">[feedback]</span> Feedback text: hacer el texto más grande y centrar los elem...</div>
+      <div class="log ok"><span class="prefix">[feedback]</span> Found source TSX (3200 chars) — new compositionId=xxx-v2-14-35-12</div>
+      <div class="log info"><span class="prefix">[feedback]</span> Sending to LLM (openrouter/claude-sonnet)...</div>
+      <div class="log info"><span class="prefix">[llm]</span> sendLLM provider=openrouter model=claude-sonnet promptChars=12000</div>
+      <div class="log ok"><span class="prefix">[feedback]</span> LLM responded in 5200ms (3800 chars)</div>
+      <div class="log ok"><span class="prefix">[feedback]</span> OK xxx-v1 -> xxx-v2-14-35-12 llmMs=5200 totalMs=5280</div>
+      <div class="log err"><span class="prefix">[feedback]</span> Composition not found: xxx-v1 (session=/path) <i>(si falla)</i></div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="step">
+    <span class="step-num">2</span>
+    <span class="step-title">Render + Timeline (mismo flujo que pasos 4-6 arriba)</span>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>📸 Flujo 3: Preview (Still PNG)</h2>
+<p style="color:var(--dim);font-size:13px;margin-bottom:12px;">Genera una imagen estática para previsualizar la animación</p>
+
+<div class="pipeline">
+
+  <div class="step">
+    <span class="step-num">1</span>
+    <span class="step-title">POST /api/render/preview → Enqueue preview</span>
+    <span class="tag tag-server">SERVER</span>
+    <span class="step-file">routes/render.js</span>
+    <div class="logs">
+      <div class="log info"><span class="prefix">[render]</span> Enqueue preview: compositionId=xxx frame=0</div>
+      <div class="log ok"><span class="prefix">[render]</span> Enqueued preview jobId=def456 status=pending</div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="step">
+    <span class="step-num">2</span>
+    <span class="step-title">Render Queue → Remotion still</span>
+    <span class="tag tag-server">SERVER</span>
+    <div class="logs">
+      <div class="log info"><span class="prefix">[render/preview]</span> START compositionId=xxx frame=0</div>
+      <div class="log info"><span class="prefix">[render/preview]</span> Rendering still via Remotion...</div>
+      <div class="log ok"><span class="prefix">[render/preview]</span> OK compositionId=xxx pngSize=245000 renderMs=3200</div>
+      <div class="log err"><span class="prefix">[render/preview]</span> Remotion still failed after 8000ms: ... <i>(si falla)</i></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>🎯 Flujo 4: Propose (Descripción visual)</h2>
+<p style="color:var(--dim);font-size:13px;margin-bottom:12px;">LLM describe visualmente cómo debería verse la animación</p>
+
+<div class="pipeline">
+  <div class="step">
+    <span class="step-num">1</span>
+    <span class="step-title">POST /api/generate/propose</span>
+    <span class="tag tag-server">SERVER</span>
+    <span class="step-file">routes/propose.js</span>
+    <div class="logs">
+      <div class="log info"><span class="prefix">[propose]</span> START id=xxx type=comparison provider=openrouter model=claude-sonnet</div>
+      <div class="log info"><span class="prefix">[propose]</span> Sending to LLM...</div>
+      <div class="log ok"><span class="prefix">[propose]</span> LLM responded in 3200ms (1500 chars)</div>
+      <div class="log ok"><span class="prefix">[propose]</span> OK id=xxx llmMs=3200</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>🎨 Flujo 5: Palette + Studio</h2>
+
+<div class="pipeline">
+  <div class="step">
+    <span class="step-title">POST /api/palette</span>
+    <span class="tag tag-server">SERVER</span>
+    <span class="step-file">server.js</span>
+    <div class="logs">
+      <div class="log info"><span class="prefix">[llm]</span> sendLLM provider=... model=... promptChars=... <i>(via sendLLMWithVision)</i></div>
+    </div>
+  </div>
+  <div class="arrow" style="margin:4px 0">·</div>
+  <div class="step">
+    <span class="step-title">GET /api/studio/start</span>
+    <span class="tag tag-server">SERVER</span>
+    <span class="step-file">routes/studio.js</span>
+    <div class="logs">
+      <div class="log info"><span class="prefix">[studio]</span> Syncing session: /path/to/session</div>
+      <div class="log info"><span class="prefix">[studio]</span> Starting Remotion Studio...</div>
+      <div class="log ok"><span class="prefix">[studio]</span> Started at http://localhost:3000 (pid=12345)</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<h2>🔧 Libs con logging propio</h2>
+
+<table>
+  <tr><th>Archivo</th><th>Prefix</th><th>Qué logea</th></tr>
+  <tr><td><code>lib/llm.js</code></td><td><code>[llm]</code></td><td>Provider/model resolution, auto-corrections, API errors, empty responses</td></tr>
+  <tr><td><code>lib/remotion-manager.js</code></td><td><code>[RemotionManager]</code></td><td>Composition writes, duration updates, sync, deregistrations, broken files, clean</td></tr>
+  <tr><td><code>lib/render-queue.js</code></td><td><code>[RenderQueue]</code></td><td>Enqueue, start, complete, error, job cleanup</td></tr>
+  <tr><td><code>lib/tsx-sanitizer.js</code></td><td><code>[TsxSanitizer]</code></td><td>Strip brandfetch, Trail, TransitionSeries; inject staticPreview; brand icon SVGs</td></tr>
+  <tr><td><code>lib/tsx-validator.js</code></td><td><code>[TsxValidator]</code></td><td>Import validation, auto-fix unterminated strings</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="summary-box">
+  <h3>📊 Resumen de cobertura</h3>
+  <table>
+    <tr><th>Archivo</th><th>Log statements</th><th>Status</th></tr>
+    <tr><td><code>client/js/motion-pro.js</code></td><td>32</td><td style="color:var(--green)">✅ Completo</td></tr>
+    <tr><td><code>routes/generate.js</code></td><td>18</td><td style="color:var(--green)">✅ Completo</td></tr>
+    <tr><td><code>routes/render.js</code></td><td>25</td><td style="color:var(--green)">✅ Completo</td></tr>
+    <tr><td><code>routes/feedback.js</code></td><td>11</td><td style="color:var(--green)">✅ Completo</td></tr>
+    <tr><td><code>routes/propose.js</code></td><td>7</td><td style="color:var(--green)">✅ Completo</td></tr>
+    <tr><td><code>routes/studio.js</code></td><td>5</td><td style="color:var(--green)">✅ Completo</td></tr>
+    <tr><td><code>lib/llm.js</code></td><td>11</td><td style="color:var(--green)">✅ Completo</td></tr>
+    <tr><td><code>lib/remotion-manager.js</code></td><td>12</td><td style="color:var(--green)">✅ Completo</td></tr>
+    <tr><td><code>lib/render-queue.js</code></td><td>5</td><td style="color:var(--green)">✅ Completo</td></tr>
+    <tr><td><code>lib/tsx-sanitizer.js</code></td><td>6</td><td style="color:var(--green)">✅ Completo</td></tr>
+    <tr><td><code>lib/tsx-validator.js</code></td><td>2</td><td style="color:var(--green)">✅ Completo</td></tr>
+  </table>
+  <p style="color:var(--dim);font-size:13px;margin-top:12px;"><b>Total:</b> 134 log statements across 11 files. Every step logs timing (ms), composition IDs, and error context.</p>
+</div>
+
+</body>
+</html>

@@ -29,6 +29,7 @@ RenderQueue.prototype.enqueue = function(opts) {
     outPath: opts.outPath || null,  // preview PNG output path
     frame: opts.frame != null ? opts.frame : null,  // preview frame number
     durationFrames: opts.durationFrames || null,  // override for "Animar" (match timeline clip)
+    bgMode: opts.bgMode || null,  // 'chroma' triggers ProRes 4444 alpha render
     status: 'queued',  // queued | rendering | complete | error
     result: null,
     error: null,

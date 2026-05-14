@@ -8,8 +8,10 @@ router.post('/', (req, res) => {
   const { proposal, transcriptSegment, provider, model, apiKey, customPalette, paletteCategory } = req.body;
 
   if (!proposal || !transcriptSegment) {
+    console.error('[propose] Missing proposal or transcriptSegment');
     return res.status(400).json({ error: 'Missing proposal or transcriptSegment' });
   }
+  console.log('[propose] START id=' + proposal.id + ' type=' + proposal.type + ' provider=' + provider + ' model=' + model);
 
   const durationSecs = (proposal.endTime || 0) - (proposal.startTime || 0);
   const durationFrames = Math.max(90, Math.round(durationSecs * 30) + 6);
@@ -23,12 +25,20 @@ router.post('/', (req, res) => {
     paletteCategory: paletteCategory || null,
   });
 
+  const llmStart = Date.now();
+  console.log('[propose] Sending to LLM...');
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawResponse) => {
-    if (err) return res.status(500).json({ error: 'LLM error: ' + err.message });
+    const llmMs = Date.now() - llmStart;
+    if (err) {
+      console.error('[propose] LLM error after ' + llmMs + 'ms: ' + err.message);
+      return res.status(500).json({ error: 'LLM error: ' + err.message });
+    }
 
     if (!rawResponse || rawResponse.trim().length === 0) {
+      console.error('[propose] LLM returned empty response after ' + llmMs + 'ms');
       return res.status(500).json({ error: 'LLM returned empty response' });
     }
+    console.log('[propose] LLM responded in ' + llmMs + 'ms (' + rawResponse.length + ' chars)');
 
     try {
       let jsonStr = rawResponse.trim();
@@ -43,6 +53,7 @@ router.post('/', (req, res) => {
 
       const parsed = JSON.parse(jsonStr);
 
+      console.log('[propose] OK id=' + proposal.id + ' llmMs=' + llmMs);
       res.json({
         proposalId: proposal.id,
         visualDescription: parsed.visualDescription || '',
@@ -51,6 +62,7 @@ router.post('/', (req, res) => {
         colorNotes: parsed.colorNotes || '',
       });
     } catch (e) {
+      console.error('[propose] Parse error: ' + e.message);
       res.status(500).json({ error: 'Failed to parse visual proposal: ' + e.message, raw: rawResponse.substring(0, 500) });
     }
   });
