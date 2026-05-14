@@ -2460,10 +2460,15 @@
                 });
 
                 // Toggle current
+                var st2Card = document.querySelector('.st2-tool-card');
                 if (!isOpen && body) {
                     body.classList.remove('hidden');
                     if (arrow) arrow.textContent = '\u25be';
+                    if (st2Card) st2Card.classList.add('st2-expanded');
                     _st2ResizeOpenStep();
+                } else {
+                    // All closed — collapse expanded
+                    if (st2Card) st2Card.classList.remove('st2-expanded');
                 }
             });
         });
@@ -2471,7 +2476,7 @@
         // Resize on window resize
         window.addEventListener('resize', _st2ResizeOpenStep);
 
-        // Recalculate layout when tool card body is shown (no auto-fullscreen)
+        // Auto-expand when tool card body becomes visible; collapse when hidden
         var st2Card = document.querySelector('.st2-tool-card');
         var st2Body = st2Card ? st2Card.querySelector('.tool-card-body') : null;
         if (st2Body) {
@@ -2480,10 +2485,14 @@
                     if (m.attributeName === 'class') {
                         var isVisible = !st2Body.classList.contains('hidden');
                         if (isVisible) {
-                            // Recalc layout when section opens (normal or fullscreen)
+                            // Check if any step is open
+                            var hasOpen = st2Body.querySelector('[id^="st2-step-body-"]:not(.hidden)');
+                            if (hasOpen && st2Card) st2Card.classList.add('st2-expanded');
                             setTimeout(_st2ResizeOpenStep, 50);
                             setTimeout(_st2ResizeOpenStep, 200);
                             setTimeout(_st2ResizeOpenStep, 500);
+                        } else {
+                            if (st2Card) st2Card.classList.remove('st2-expanded');
                         }
                     }
                 });

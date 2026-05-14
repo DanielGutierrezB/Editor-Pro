@@ -423,6 +423,9 @@
                 document.querySelectorAll(".toggle-icon").forEach(function(i) {
                     i.textContent = "▸";
                 });
+                // Collapse st2 expanded state when switching/closing tool cards
+                var st2Card = document.querySelector('.st2-tool-card');
+                if (st2Card) st2Card.classList.remove('st2-expanded');
 
                 if (wasHidden) {
                     body.classList.remove("hidden");
