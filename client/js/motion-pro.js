@@ -642,8 +642,9 @@
 
     // ─── Original full pipeline (kept for backward compat) ────────
 
-    MotionPro.prototype.generateMotion = function(proposal, transcriptSegment, aiConfig, callback, outputDir) {
+    MotionPro.prototype.generateMotion = function(proposal, transcriptSegment, aiConfig, callback, outputDir, onProgress) {
         var self = this;
+        var _progress = onProgress || function() {};
         var version = 1;
         var existingMotion = self._findMotion(proposal.id);
         if (existingMotion) {
@@ -655,6 +656,8 @@
             timedOut = true;
             callback(new Error("Motion-Pro pipeline timeout (" + Math.round(MP_PIPELINE_TIMEOUT_MS / 1000) + "s) for " + proposal.id));
         }, MP_PIPELINE_TIMEOUT_MS);
+
+        _progress(10, "Generando TSX…");
 
         var body = {
             proposal: {
@@ -687,6 +690,8 @@
             if (err) { clearTimeout(pipelineTimer); return callback(err); }
             if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
 
+            _progress(40, "TSX generado — iniciando render…");
+
             var renderBody = { compositionId: result.compositionId, sessionDir: outputDir || "" };
             if (outputDir) renderBody.outputDir = outputDir;
 
@@ -708,11 +713,23 @@
                     return callback(new Error("Server did not return jobId"));
                 }
 
+                _progress(50, "Renderizando video…");
+
+                // Progress ticker during render
+                var _genRenderPct = 50;
+                var _genRenderTicker = setInterval(function() {
+                    _genRenderPct = Math.min(_genRenderPct + 2, 90);
+                    _progress(_genRenderPct, "Renderizando video… " + _genRenderPct + "%");
+                }, 5000);
+
                 // Poll until render completes
                 self._pollRenderJob(renderResponse.jobId, function(pollErr, renderResult) {
+                    clearInterval(_genRenderTicker);
                     if (timedOut) return;
                     clearTimeout(pipelineTimer);
                     if (pollErr) return callback(pollErr);
+
+                    _progress(95, "Colocando en timeline…");
 
                     var versionData = {
                         version: version,

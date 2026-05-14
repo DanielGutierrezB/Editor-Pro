@@ -2259,6 +2259,18 @@
 
             var segment = proposal.transcriptSegment || mpExtractSegment(proposal.startTime, proposal.endTime);
 
+            // Show per-card progress
+            var _genCardProgress = function(pct, msg) {
+                var _gc = document.querySelector('.mp-gen-progress[data-motion-id="' + proposal.id + '"]');
+                if (!_gc) return;
+                _gc.classList.remove("hidden");
+                var _gf = _gc.querySelector(".mp-gen-fill");
+                var _gt = _gc.querySelector(".mp-gen-text");
+                if (_gf) _gf.style.width = pct + "%";
+                if (_gt) _gt.textContent = msg;
+            };
+            _genCardProgress(5, "En cola…");
+
             // Full pipeline: template fill → render video (MP4) → place in timeline
             motionPro.generateMotion(proposal, segment, aiConfig, function(err, result) {
                 done++;
@@ -2279,6 +2291,7 @@
                         activeWorkers++;
                         setTimeout(function() {
                             _mpTimers.itemStarts[proposal.id] = Date.now();
+                            _genCardProgress(5, "Reintentando…");
                             motionPro.generateMotion(proposal, segment, aiConfig, function(err2, result2) {
                                 done++;
                                 activeWorkers--;
@@ -2286,18 +2299,20 @@
                                     errors.push({ id: proposal.id, error: err2.message });
                                     if (window.EPLogger) EPLogger.error("motion-pro", "generate-item", proposal.id + ": " + err2.message + " (retry failed)");
                                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
+                                    _genCardProgress(100, "Error");
                                     launchWorker();
                                 } else {
                                     if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result2.motionId || "?") + " (retry success)");
                                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando video " + done + "/" + total + " en timeline...");
                                     mpPlaceMotionInTimeline(result2.motionId, function() {
+                                        _genCardProgress(100, "✓ Completado");
                                         proposal.generated = true;
                                         motionPro.saveState();
                                         mpRenderControlPanel();
                                         launchWorker();
                                     });
                                 }
-                            }, outputDir);
+                            }, outputDir, _genCardProgress);
                         }, 3000);
                         return;
                     }
@@ -2308,18 +2323,20 @@
                         showToast("⏱ Timeout en " + proposal.id + " — saltando al siguiente", "warning");
                     }
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Error en " + proposal.id + " — continuando...");
+                    _genCardProgress(100, "Error");
                     launchWorker();
                 } else {
                     if (window.EPLogger) EPLogger.log("motion-pro", "render-complete", proposal.id + " → " + (result.motionId || "?"));
                     mpSetProgress("mp-generate", Math.round((done / total) * 100), "Colocando video " + done + "/" + total + " en timeline...");
                     mpPlaceMotionInTimeline(result.motionId, function() {
+                        _genCardProgress(100, "✓ Completado");
                         proposal.generated = true;
                         motionPro.saveState();
                         mpRenderControlPanel();
                         launchWorker();
                     });
                 }
-            }, outputDir);
+            }, outputDir, _genCardProgress);
         }
 
         // Launch initial batch of workers
@@ -2993,6 +3010,10 @@
                     statusBadge +
                 '</div>' +
                 previewThumbHtml +
+                '<div class="mp-gen-progress hidden" data-motion-id="' + m.id + '">' +
+                    '<div class="progress-track"><div class="progress-fill mp-gen-fill" style="width:0%"></div></div>' +
+                    '<span class="progress-text mp-gen-text">Esperando…</span>' +
+                '</div>' +
                 '<div class="mp-motion-desc">' + esc(m.description) + '</div>' +
                 '<div class="mp-motion-controls">' +
                     '<div class="mp-version-row">' +
