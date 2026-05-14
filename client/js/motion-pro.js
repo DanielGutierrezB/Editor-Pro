@@ -761,10 +761,11 @@
         }); // end _healthCheckOrRestart before pipeline
     };
 
-    MotionPro.prototype.regenerateWithFeedback = function(motionId, feedback, aiConfig, callback, outputDir) {
+    MotionPro.prototype.regenerateWithFeedback = function(motionId, feedback, aiConfig, callback, outputDir, onProgress) {
         var self = this;
         var motion = self._findMotion(motionId);
         if (!motion) return callback(new Error("Motion not found: " + motionId));
+        var _progress = onProgress || function() {};
 
         var currentVersion = motion.versions[motion.versions.length - 1];
         var newVersion = motion.versions.length + 1;
@@ -774,6 +775,8 @@
             timedOut = true;
             callback(new Error("Feedback pipeline timeout (" + Math.round(MP_PIPELINE_TIMEOUT_MS / 1000) + "s) for " + motionId));
         }, MP_PIPELINE_TIMEOUT_MS);
+
+        _progress(15, "Enviando feedback al LLM…");
 
         var body = {
             compositionId: currentVersion.compositionId,
@@ -794,6 +797,8 @@
             if (err) { clearTimeout(pipelineTimer); return callback(err); }
             if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
 
+            _progress(40, "TSX generado — iniciando render…");
+
             // Render full video (MP4) instead of just a preview still
             var renderBody = {
                 compositionId: result.compositionId,
@@ -812,11 +817,23 @@
                     return callback(new Error("Server did not return jobId for feedback render"));
                 }
 
+                _progress(50, "Renderizando video…");
+
+                // Progress ticker during render poll
+                var _renderPct = 50;
+                var _renderTicker = setInterval(function() {
+                    _renderPct = Math.min(_renderPct + 2, 90);
+                    _progress(_renderPct, "Renderizando video… " + _renderPct + "%");
+                }, 5000);
+
                 // Poll until video render completes
                 self._pollRenderJob(renderResponse.jobId, function(pollErr, renderResult) {
+                    clearInterval(_renderTicker);
                     if (timedOut) return;
                     clearTimeout(pipelineTimer);
                     if (pollErr) return callback(pollErr);
+
+                    _progress(95, "Colocando en timeline…");
 
                     var versionData = {
                         version: newVersion,

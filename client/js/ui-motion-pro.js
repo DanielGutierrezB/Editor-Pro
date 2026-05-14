@@ -3264,7 +3264,18 @@
                             motionPro.saveState();
                             _mpUpdateSingleCard(motionId);
                         }
-                    }, _mpOutputDir || undefined);
+                    }, _mpOutputDir || undefined, function(pct, msg) {
+                        // Live progress updates during feedback pipeline
+                        var _card = document.querySelector('.mp-motion-card[data-motion-id="' + motionId + '"]');
+                        if (!_card) return;
+                        var _prog = _card.querySelector('.mp-feedback-progress[data-motion-id="' + motionId + '"]');
+                        if (!_prog) return;
+                        _prog.classList.remove("hidden");
+                        var _fill = _prog.querySelector(".mp-fb-fill");
+                        var _txt = _prog.querySelector(".mp-fb-text");
+                        if (_fill) _fill.style.width = pct + "%";
+                        if (_txt) _txt.textContent = msg;
+                    });
                 });
             })(m.id, m.startTime);
         }
