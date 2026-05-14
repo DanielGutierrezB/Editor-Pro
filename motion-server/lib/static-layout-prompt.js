@@ -53,17 +53,64 @@ function _chromaSafe(hex, chromaIsBlue) {
   return hex;
 }
 
+function _luminance(hex) {
+  const c = _parseHex(hex);
+  if (!c) return 1;
+  const [rs, gs, bs] = [c.r / 255, c.g / 255, c.b / 255].map(v =>
+    v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  );
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+function _contrastRatio(hex1, hex2) {
+  const l1 = _luminance(hex1), l2 = _luminance(hex2);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+
+function _darken(hex, amount) {
+  const c = _parseHex(hex);
+  if (!c) return hex;
+  return '#' + [c.r, c.g, c.b].map(v => Math.round(v * (1 - amount)).toString(16).padStart(2, '0')).join('');
+}
+
+function _ensureContrast(fg, bg, min) {
+  min = min || 4.5;
+  for (let i = 0; i < 10; i++) {
+    if (_contrastRatio(fg, bg) >= min) return fg;
+    fg = _darken(fg, 0.15);
+  }
+  return fg;
+}
+
+function _buildLightPalette(p) {
+  const lightBg = '#f8f9fa';
+  const accent = _ensureContrast(p.accent, lightBg, 4.5);
+  const green  = _ensureContrast(p.green, lightBg, 4.5);
+  const orange = _ensureContrast(p.orange, lightBg, 4.5);
+  const purple = _ensureContrast(p.purple, lightBg, 4.5);
+  const red    = _ensureContrast(p.red, lightBg, 4.5);
+  const ac = _parseHex(p.accent);
+  const cardTint = ac ? `rgba(${ac.r},${ac.g},${ac.b},0.06)` : 'rgba(0,0,0,0.03)';
+  const glowColor = ac ? `rgba(${ac.r},${ac.g},${ac.b},0.08)` : 'rgba(0,0,0,0.04)';
+  return {
+    bg: lightBg, card: cardTint, accent, green, orange, purple, red,
+    text: '#1a1d23', dim: 'rgba(0,0,0,0.55)',
+    border: 'rgba(0,0,0,0.10)', glow: glowColor,
+  };
+}
+
 function _buildPaletteCode(customPalette, bgMode) {
   const p = customPalette ? (validatePalette(customPalette) || DEFAULT_PALETTE) : DEFAULT_PALETTE;
   let bg = p.bg, card = p.card, text = p.text, dim = p.dim, border = p.border, glow = p.glow;
 
   if (bgMode === 'light') {
-    bg = '#f8f9fa';
-    card = '#ffffff';
-    text = '#1a1d23';
-    dim = 'rgba(0,0,0,0.55)';
-    border = 'rgba(0,0,0,0.08)';
-    glow = 'rgba(10,233,141,0.06)';
+    const lp = _buildLightPalette(p);
+    return `const C = {
+  bg:'${lp.bg}', card:'${lp.card}', accent:'${lp.accent}', green:'${lp.green}',
+  orange:'${lp.orange}', purple:'${lp.purple}', red:'${lp.red}', text:'${lp.text}',
+  dim:'${lp.dim}', border:'${lp.border}',
+  glow:'${lp.glow}',
+};`;
   } else if (bgMode === 'chroma') {
     // Use green chroma by default; if accent/green are greenish, use blue
     const hasGreen = _isGreenish(p.accent) || _isGreenish(p.green);
@@ -98,7 +145,12 @@ function _paletteNote(customPalette, paletteCategory, bgMode) {
     if (p) parts.push(`Custom palette — bg: ${p.bg}, accent: ${p.accent}, card: ${p.card}. Use these colors.`);
   }
   if (bgMode === 'light') {
-    parts.push('LIGHT MODE: Background is white/light. Text must be dark (#1a1d23). Ensure high contrast for all text against light backgrounds.');
+    parts.push(`LIGHT MODE ACTIVE — Design rules:
+- Background is LIGHT (#f8f9fa). Card backgrounds use a subtle accent tint (C.card).
+- ALL text MUST be dark (C.text = '#1a1d23') or use accent colors from C — NEVER white text.
+- For card/box backgrounds: use C.card or accent colors with low opacity (C.accent + '15').
+- Icons/decorative elements: use C.accent, C.green, C.orange (already contrast-adjusted).
+- NEVER use #fff, #ffffff, or any light color for text, titles, or labels.`);
   } else if (bgMode === 'chroma') {
     const hasGreen = customPalette && (_isGreenish(customPalette.accent) || _isGreenish(customPalette.green));
     const chromaColor = hasGreen ? 'blue (#0000FF)' : 'green (#00FF00)';
