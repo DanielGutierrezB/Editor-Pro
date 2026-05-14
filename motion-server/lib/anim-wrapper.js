@@ -39,9 +39,7 @@ const Section:React.FC<{from:number;dur:number;children:React.ReactNode}> = ({fr
   const frame = useCurrentFrame();
   const {durationInFrames: totalDur} = useVideoConfig();
   const localFrame = frame - from;
-  // Visible when localFrame is within [0, dur)
   if (localFrame < -10 || localFrame >= dur) return null;
-  // Fade in over 10 frames, fade out over 10 frames
   const fi = 10;
   const fo = 10;
   const fadeIn = interpolate(localFrame, [0, fi], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
@@ -59,27 +57,14 @@ const Section:React.FC<{from:number;dur:number;children:React.ReactNode}> = ({fr
 function injectAnimWrapper(tsxCode) {
   let code = tsxCode;
 
-  // Remove declare stubs
-  code = code.replace(/declare const Anim:.*?;\n?/g, '');
-  code = code.replace(/declare const Section:.*?;\n?/g, '');
+  // ── 1. Remove declare stubs (entire lines, including multi-line type declarations) ──
+  // These match: declare const Anim: React.FC<{...}>; (possibly spanning the whole line)
+  code = code.replace(/^declare\s+const\s+Anim\b[^\n]*\n?/gm, '');
+  code = code.replace(/^declare\s+const\s+Section\b[^\n]*\n?/gm, '');
 
-  // Ensure useCurrentFrame, useVideoConfig, interpolate, Easing are imported
+  // ── 2. Ensure required imports from 'remotion' ─────────────────────────────
   const neededImports = ['useCurrentFrame', 'useVideoConfig', 'interpolate', 'Easing'];
-  neededImports.forEach(imp => {
-    if (!code.includes(imp)) {
-      // Add to the remotion import line
-      code = code.replace(
-        /from\s+'remotion'\s*;/,
-        (match) => {
-          // Insert before the closing
-          return match.replace("from 'remotion';", `${imp}, ` + "} from 'remotion';").replace('{', '').replace(/,\s*\}/, '}');
-        }
-      );
-    }
-  });
-
-  // More robust: just ensure the import line has what we need
-  const importMatch = code.match(/import\s*\{([^}]+)\}\s*from\s*'remotion'/);
+  const importMatch = code.match(/import\s*\{([^}]+)\}\s*from\s*['"]remotion['"]/);
   if (importMatch) {
     const currentImports = importMatch[1].split(',').map(s => s.trim()).filter(Boolean);
     const missing = neededImports.filter(i => !currentImports.includes(i));
@@ -87,41 +72,43 @@ function injectAnimWrapper(tsxCode) {
       const newImports = [...currentImports, ...missing].join(', ');
       code = code.replace(importMatch[0], `import {${newImports}} from 'remotion'`);
     }
-  }
-
-  // Find insertion point — after the C palette definition and Safe component
-  const safeEnd = code.indexOf('</div>\n);');
-  let insertIdx = -1;
-
-  // Try to insert after Safe component
-  const safePattern = /const Safe:React\.FC.*?\n\);/s;
-  const safeMatch = code.match(safePattern);
-  if (safeMatch) {
-    insertIdx = code.indexOf(safeMatch[0]) + safeMatch[0].length;
-  }
-
-  if (insertIdx === -1) {
-    // Fallback: insert before the first const that isn't C or Safe
-    const lines = code.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].startsWith('// ═══') || lines[i].includes('YOUR LAYOUT')) {
-        insertIdx = code.indexOf(lines[i]);
-        break;
-      }
+  } else {
+    // No remotion import found — add one after the last import line
+    const lastImportIdx = code.lastIndexOf('import ');
+    if (lastImportIdx !== -1) {
+      const endOfLine = code.indexOf('\n', lastImportIdx);
+      code = code.slice(0, endOfLine + 1)
+        + `import {${neededImports.join(', ')}} from 'remotion';\n`
+        + code.slice(endOfLine + 1);
     }
   }
 
+  // ── 3. Find insertion point — right before the first user layout const or export ──
+  let insertIdx = -1;
+
+  // Try: before any "// ═══" marker
+  const markerIdx = code.indexOf('// ═══');
+  if (markerIdx !== -1) insertIdx = markerIdx;
+
+  // Try: before "const Layout" or any user-defined component
   if (insertIdx === -1) {
-    // Last resort: insert before export
+    const layoutMatch = code.match(/^const Layout\d*/m);
+    if (layoutMatch) insertIdx = code.indexOf(layoutMatch[0]);
+  }
+
+  // Try: before "export const"
+  if (insertIdx === -1) {
     const exportIdx = code.indexOf('export const');
     if (exportIdx !== -1) insertIdx = exportIdx;
   }
 
+  // ── 4. Insert Anim and Section implementations ─────────────────────────────
   if (insertIdx !== -1) {
-    code = code.slice(0, insertIdx) + '\n' + ANIM_COMPONENT + '\n' + SECTION_COMPONENT + '\n' + code.slice(insertIdx);
+    code = code.slice(0, insertIdx) + ANIM_COMPONENT + '\n' + SECTION_COMPONENT + '\n' + code.slice(insertIdx);
   } else {
-    // Really last resort — prepend after imports
-    code = code + '\n' + ANIM_COMPONENT + '\n' + SECTION_COMPONENT;
+    // Append before last line as fallback
+    const lastNewline = code.lastIndexOf('\n');
+    code = code.slice(0, lastNewline) + '\n' + ANIM_COMPONENT + '\n' + SECTION_COMPONENT + '\n' + code.slice(lastNewline);
   }
 
   return code;
