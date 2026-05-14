@@ -115,9 +115,12 @@ router.post('/', (req, res) => {
   } = req.body;
 
   if (!compositionId || !feedback) {
+    console.error('[feedback] Missing compositionId or feedback');
     return res.status(400).json({ error: 'Missing compositionId or feedback' });
   }
 
+  console.log('[feedback] START compositionId=' + compositionId + ' provider=' + provider + ' model=' + model);
+  console.log('[feedback] Feedback text: ' + (feedback || '').substring(0, 100) + (feedback && feedback.length > 100 ? '...' : ''));
   const manager = new RemotionManager(req.app.locals.renderProject);
 
   // Read current TSX directly from session folder (single source of truth).
@@ -144,8 +147,10 @@ router.post('/', (req, res) => {
   }
 
   if (!currentTsx) {
+    console.error('[feedback] Composition not found: ' + compositionId + ' (session=' + (sessionDir || 'none') + ')');
     return res.status(404).json({ error: `Composition ${compositionId} not found in session or compositions dir` });
   }
+  console.log('[feedback] Found source TSX (' + currentTsx.length + ' chars) — new compositionId=' + newCompositionId);
 
   const baseId = compositionId.replace(/[-_]v\d+[-\d]*$/, '');
   const now = new Date();
@@ -191,10 +196,15 @@ router.post('/', (req, res) => {
     bgMode: bgMode || 'dark',
   });
 
+  const llmStart = Date.now();
+  console.log('[feedback] Sending to LLM (' + provider + '/' + model + ')...');
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {
+    const llmMs = Date.now() - llmStart;
     if (err) {
+      console.error('[feedback] LLM error after ' + llmMs + 'ms: ' + err.message);
       return res.status(500).json({ error: 'LLM error: ' + err.message });
     }
+    console.log('[feedback] LLM responded in ' + llmMs + 'ms (' + (rawCode || '').length + ' chars)');
 
     let tsxCode = rawCode;
     const codeMatch = rawCode.match(/```(?:tsx?|jsx?|react)?\s*\n([\s\S]*?)```/);
@@ -216,6 +226,8 @@ router.post('/', (req, res) => {
         model: model || '',
         provider: provider || '',
       });
+      const totalMs = Date.now() - llmStart;
+      console.log('[feedback] OK ' + compositionId + ' -> ' + newCompositionId + ' llmMs=' + llmMs + ' totalMs=' + totalMs);
       res.json({
         compositionId: newCompositionId,
         tsxPath,
@@ -223,6 +235,7 @@ router.post('/', (req, res) => {
         status: 'generated',
       });
     } catch (writeErr) {
+      console.error('[feedback] Write error for ' + newCompositionId + ': ' + writeErr.message);
       res.status(500).json({ error: 'Write error: ' + writeErr.message });
     }
   });

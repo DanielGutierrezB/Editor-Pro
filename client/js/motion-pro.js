@@ -707,18 +707,34 @@
             bgMode: self.bgMode || "dark"
         };
 
+        var _pipelineStart = Date.now();
+        console.log("[Motion-Pro] generateMotion START id=" + proposal.id + " type=" + proposal.type + " v" + version);
+        if (window.EPLogger) EPLogger.log("motion-pro", "pipeline-start", proposal.id + " type=" + proposal.type + " v" + version);
+
         // Health check before starting the pipeline
         self._healthCheckOrRestart(function(healthOk) {
             if (!healthOk) {
+                console.error("[Motion-Pro] Health check failed for " + proposal.id);
                 clearTimeout(pipelineTimer);
                 return callback(new Error("Motion-Pro server not responding after restart attempt"));
             }
+            console.log("[Motion-Pro] Health check OK — sending to LLM...");
 
         self._post("/api/generate/template", body, function(err, result) {
             if (timedOut) return;
-            if (err) { clearTimeout(pipelineTimer); return callback(err); }
-            if (result.error) { clearTimeout(pipelineTimer); return callback(new Error(result.error)); }
+            if (err) {
+                console.error("[Motion-Pro] LLM generation failed for " + proposal.id + ": " + err.message);
+                if (window.EPLogger) EPLogger.error("motion-pro", "generate-llm-fail", proposal.id + ": " + err.message);
+                clearTimeout(pipelineTimer); return callback(err);
+            }
+            if (result.error) {
+                console.error("[Motion-Pro] LLM returned error for " + proposal.id + ": " + result.error);
+                clearTimeout(pipelineTimer); return callback(new Error(result.error));
+            }
 
+            var _llmMs = Date.now() - _pipelineStart;
+            console.log("[Motion-Pro] TSX generated for " + proposal.id + " compositionId=" + result.compositionId + " llmMs=" + _llmMs);
+            if (window.EPLogger) EPLogger.log("motion-pro", "generate-tsx-ok", proposal.id + " -> " + result.compositionId + " in " + _llmMs + "ms");
             _progress(40, "TSX generado — iniciando render…");
 
             var renderBody = { compositionId: result.compositionId, sessionDir: outputDir || "" };
@@ -727,20 +743,30 @@
             // Health check before render (the server may have died during generate)
             self._healthCheckOrRestart(function(renderHealthOk) {
                 if (!renderHealthOk) {
+                    console.error("[Motion-Pro] Health check before render failed for " + proposal.id);
                     clearTimeout(pipelineTimer);
                     return callback(new Error("Motion-Pro server not responding before render"));
                 }
 
             // Start async render — returns jobId immediately
+            console.log("[Motion-Pro] Enqueuing render for " + result.compositionId + "...");
             self._post("/api/render", renderBody, function(renderErr, renderResponse) {
                 if (timedOut) return;
-                if (renderErr) { clearTimeout(pipelineTimer); return callback(renderErr); }
-                if (renderResponse.error) { clearTimeout(pipelineTimer); return callback(new Error(renderResponse.error)); }
+                if (renderErr) {
+                    console.error("[Motion-Pro] Render enqueue failed: " + renderErr.message);
+                    clearTimeout(pipelineTimer); return callback(renderErr);
+                }
+                if (renderResponse.error) {
+                    console.error("[Motion-Pro] Render enqueue error: " + renderResponse.error);
+                    clearTimeout(pipelineTimer); return callback(new Error(renderResponse.error));
+                }
 
                 if (!renderResponse.jobId) {
+                    console.error("[Motion-Pro] No jobId returned for " + result.compositionId);
                     clearTimeout(pipelineTimer);
                     return callback(new Error("Server did not return jobId"));
                 }
+                console.log("[Motion-Pro] Render enqueued jobId=" + renderResponse.jobId + " — polling...");
 
                 _progress(50, "Renderizando video…");
 
@@ -756,8 +782,16 @@
                     clearInterval(_genRenderTicker);
                     if (timedOut) return;
                     clearTimeout(pipelineTimer);
-                    if (pollErr) return callback(pollErr);
+                    if (pollErr) {
+                        console.error("[Motion-Pro] Render poll failed for " + proposal.id + ": " + pollErr.message);
+                        if (window.EPLogger) EPLogger.error("motion-pro", "render-poll-fail", proposal.id + ": " + pollErr.message);
+                        return callback(pollErr);
+                    }
 
+                    var _renderMs = Date.now() - _pipelineStart - _llmMs;
+                    var _totalMs = Date.now() - _pipelineStart;
+                    console.log("[Motion-Pro] Render complete for " + proposal.id + " mp4=" + (renderResult.mp4Path || "?") + " renderMs=" + _renderMs + " totalMs=" + _totalMs);
+                    if (window.EPLogger) EPLogger.log("motion-pro", "render-ok", proposal.id + " renderMs=" + _renderMs + " totalMs=" + _totalMs);
                     _progress(95, "Colocando en timeline…");
 
                     var versionData = {

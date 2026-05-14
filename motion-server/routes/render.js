@@ -67,9 +67,11 @@ function faststartMp4InPlace(filePath, callback) {
       if (!err && fs.existsSync(tmp)) {
         try { fs.unlinkSync(filePath); } catch(_e) {}
         try { fs.renameSync(tmp, filePath); } catch(_e) {}
+        console.log('[render/faststart] Re-encoded with all-intra keyframes: ' + path.basename(filePath));
         return done();
       }
       // Fallback: try copy-only faststart if re-encode fails
+      console.warn('[render/faststart] Re-encode failed, trying copy-only faststart...');
       execFile(
         'ffmpeg',
         ['-y', '-i', filePath, '-c', 'copy', '-movflags', '+faststart', tmp],
@@ -78,6 +80,9 @@ function faststartMp4InPlace(filePath, callback) {
           if (!err2 && fs.existsSync(tmp)) {
             try { fs.unlinkSync(filePath); } catch(_e) {}
             try { fs.renameSync(tmp, filePath); } catch(_e) {}
+            console.log('[render/faststart] Copy-only faststart applied: ' + path.basename(filePath));
+          } else {
+            console.warn('[render/faststart] Both faststart methods failed for: ' + path.basename(filePath));
           }
           try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_e3) {}
           done();
@@ -95,29 +100,40 @@ function _ensureRenderFn(app) {
   _renderFnConfigured = true;
 
   renderQueue.setRenderFn(function(job, done) {
+    const renderStart = Date.now();
     const manager = new RemotionManager(app.locals.renderProject);
 
     // Sync session before render to ensure Root.tsx has the right compositions
-    if (job.sessionDir) manager.syncFromSession(job.sessionDir);
+    if (job.sessionDir) {
+      console.log('[render] Syncing session: ' + job.sessionDir);
+      manager.syncFromSession(job.sessionDir);
+    }
 
     // ── Preview still (PNG) ──────────────────────────────────────
     if (job.type === 'preview') {
+      console.log('[render/preview] START compositionId=' + job.compositionId + ' frame=' + (job.frame || 0));
       const tsx = manager.getCompositionTsx(job.compositionId);
       if (!tsx) {
+        console.error('[render/preview] Composition not found: ' + job.compositionId);
         manager.cleanCompositions();
         return done(new Error('Composition ' + job.compositionId + ' not found'));
       }
 
+      console.log('[render/preview] Rendering still via Remotion...');
       manager.renderStill(job.compositionId, job.outPath, job.frame, function(err, result) {
         // Clean ephemeral compositions — queue is serial, safe to clean now
         manager.cleanCompositions();
 
-        if (err) return done(err);
+        if (err) {
+          console.error('[render/preview] Remotion still failed after ' + (Date.now() - renderStart) + 'ms: ' + err.message);
+          return done(err);
+        }
 
         // Read PNG and encode as base64
         try {
           var imgData = fs.readFileSync(result.pngPath);
           var b64 = 'data:image/png;base64,' + imgData.toString('base64');
+          console.log('[render/preview] OK compositionId=' + result.compositionId + ' pngSize=' + imgData.length + ' renderMs=' + (Date.now() - renderStart));
           done(null, {
             compositionId: result.compositionId,
             pngPath: result.pngPath,
@@ -126,6 +142,7 @@ function _ensureRenderFn(app) {
             status: 'preview',
           });
         } catch(readErr) {
+          console.error('[render/preview] Failed to read PNG: ' + readErr.message);
           done(new Error('Failed to read preview PNG: ' + readErr.message));
         }
       });
@@ -136,17 +153,22 @@ function _ensureRenderFn(app) {
     // If durationFrames override is set (e.g., "Animar" matching timeline clip length),
     // update the composition registration in Root.tsx before rendering
     if (job.durationFrames && job.durationFrames > 0) {
+      console.log('[render/video] Duration override: ' + job.durationFrames + ' frames for ' + job.compositionId);
       manager.updateCompositionDuration(job.compositionId, job.durationFrames);
     }
 
+    console.log('[render/video] START compositionId=' + job.compositionId);
     const tsx = manager.getCompositionTsx(job.compositionId);
     if (!tsx) {
+      console.error('[render/video] Composition not found: ' + job.compositionId);
       manager.cleanCompositions();
       return done(new Error('Composition ' + job.compositionId + ' not found'));
     }
 
+    console.log('[render/video] Rendering via Remotion (ProRes)...');
     manager.render(job.compositionId, function(err, result) {
       if (err) {
+        console.error('[render/video] Remotion render failed after ' + (Date.now() - renderStart) + 'ms: ' + String(err.message).substring(0, 300));
         manager.cleanCompositions();
         return done(err);
       }
@@ -154,11 +176,14 @@ function _ensureRenderFn(app) {
       // Post-process: faststart (async) + probe duration
       var mp4 = result.mp4Path;
       var doFaststart = mp4 && mp4.endsWith('.mp4');
+      console.log('[render/video] Remotion done in ' + (Date.now() - renderStart) + 'ms — output: ' + mp4);
 
       function finish() {
         var mediaDurationSec = probeVideoDurationSec(mp4);
         // Session is the single source of truth — clean ephemeral compositions dir
         manager.cleanCompositions();
+        var totalMs = Date.now() - renderStart;
+        console.log('[render/video] OK compositionId=' + result.compositionId + ' duration=' + (mediaDurationSec ? mediaDurationSec.toFixed(2) + 's' : '?') + ' totalMs=' + totalMs);
         done(null, {
           compositionId: result.compositionId,
           mp4Path: mp4,
@@ -168,6 +193,7 @@ function _ensureRenderFn(app) {
       }
 
       if (doFaststart) {
+        console.log('[render/video] Running ffmpeg faststart...');
         faststartMp4InPlace(mp4, finish);
       } else {
         finish();
@@ -182,11 +208,13 @@ router.post('/', (req, res) => {
   const { compositionId, outputDir, sessionDir, durationFrames } = req.body;
 
   if (!compositionId) {
+    console.error('[render] POST / — missing compositionId');
     return res.status(400).json({ error: 'Missing compositionId' });
   }
 
   _ensureRenderFn(req.app);
 
+  console.log('[render] Enqueue video render: compositionId=' + compositionId + (durationFrames ? ' durationFrames=' + durationFrames : ''));
   // Don't sync/validate here — the render function handles syncFromSession when the job executes.
   // This avoids double-sync which could cause race conditions if compositions change between enqueue and render.
   const job = renderQueue.enqueue({
@@ -197,6 +225,7 @@ router.post('/', (req, res) => {
     durationFrames: durationFrames ? parseInt(durationFrames, 10) : null,
   });
 
+  console.log('[render] Enqueued jobId=' + job.id + ' status=' + job.status);
   res.json({
     jobId: job.id,
     compositionId: compositionId,
@@ -235,8 +264,12 @@ router.get('/status/:jobId', (req, res) => {
 // This eliminates Root.tsx race conditions when CONCURRENCY > 1 on the client.
 router.post('/preview', (req, res) => {
   const { compositionId, sessionDir, frame, outputDir } = req.body;
-  if (!compositionId) return res.status(400).json({ error: 'Missing compositionId' });
+  if (!compositionId) {
+    console.error('[render] POST /preview — missing compositionId');
+    return res.status(400).json({ error: 'Missing compositionId' });
+  }
 
+  console.log('[render] Enqueue preview: compositionId=' + compositionId + ' frame=' + (frame || 0));
   _ensureRenderFn(req.app);
 
   // Determine output path for the PNG
@@ -265,6 +298,7 @@ router.post('/preview', (req, res) => {
     frame: previewFrame,
   });
 
+  console.log('[render] Enqueued preview jobId=' + job.id + ' status=' + job.status);
   // Return jobId immediately — client polls /api/render/status/:jobId
   res.json({
     jobId: job.id,

@@ -91,7 +91,13 @@ function sendLLM({ provider, model, apiKey, systemMsg, userMsg }, callback) {
   const p = resolved.provider;
   const m = resolved.model;
   const cfg = PROVIDERS[p];
-  if (!cfg) return callback(new Error('Unknown provider: ' + p));
+  if (!cfg) {
+    console.error('[llm] Unknown provider: ' + p);
+    return callback(new Error('Unknown provider: ' + p));
+  }
+
+  const promptLen = (systemMsg || '').length + (userMsg || '').length;
+  console.log('[llm] sendLLM provider=' + p + ' model=' + m + ' promptChars=' + promptLen);
 
   if (p === 'ollama') {
     return _sendOllama(cfg, m, systemMsg, userMsg, callback);
