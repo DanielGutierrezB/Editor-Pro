@@ -1010,9 +1010,12 @@
                 _st2BatchRunning = false;
                 _st2BatchSetCancelBtn(false);
                 hideElement("st2-batch-progress");
+                hideElement("st2-results");
+                hideElement("st2-batch-nav");
                 enableBtn("btn-st2-batch-create");
                 enableBtn("btn-st2-batch-analyze");
                 _st2BatchRenderCards();
+                showElement("st2-batch-panel");
                 showToast(totalInserted + " gráficos creados en " + current + " secuencias", "success");
                 return;
             }
@@ -3163,7 +3166,7 @@
         batchNavPrev: st2BatchNavPrev,
         batchNavNext: st2BatchNavNext,
         batchNavBack: st2BatchNavBack,
-        isBatchActive: function() { return _st2BatchCurrentNav >= 0; },
+        isBatchActive: function() { return _st2BatchRunning || _st2BatchCurrentNav >= 0; },
         ST2_ANTICIPATION_SECS: ST2_ANTICIPATION_SECS,
         ST2_READING_BUFFER_SECS: ST2_READING_BUFFER_SECS,
         ST2_MIN_DURATION_SECS: ST2_MIN_DURATION_SECS,
