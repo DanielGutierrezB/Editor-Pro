@@ -149,7 +149,7 @@ router.post('/', (req, res) => {
 
   const baseId = compositionId.replace(/[-_]v\d+[-\d]*$/, '');
   const now = new Date();
-  const ts = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
+  const ts = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0') + '-' + String(now.getMilliseconds()).padStart(3, '0');
   const newCompositionId = (baseId + '-v' + (newVersion || 2) + '-' + ts).replace(/_/g, '-');
 
   // Get duration: try .duration file from session first, then calculate from TSX

@@ -2337,7 +2337,6 @@
             // Full pipeline: template fill → render video (MP4) → place in timeline
             // generateMotion creates a placeholder motion — re-render after brief delay so card appears
             motionPro.generateMotion(proposal, segment, aiConfig, function(err, result) {
-                mpRenderControlPanel();
                 done++;
                 activeWorkers--;
 

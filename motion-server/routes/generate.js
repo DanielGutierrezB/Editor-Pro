@@ -6,13 +6,14 @@ const { getGenerationPrompt } = require('../lib/prompts');
 const { getStaticLayoutPrompt } = require('../lib/static-layout-prompt');
 const { injectAnimWrapper } = require('../lib/anim-wrapper');
 
-/** HH-MM-SS timestamp for unique file IDs */
+/** HH-MM-SS-mmm timestamp for unique file IDs (ms prevents same-second collisions) */
 function _timeStamp() {
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
-  return hh + '-' + mm + '-' + ss;
+  const ms = String(now.getMilliseconds()).padStart(3, '0');
+  return hh + '-' + mm + '-' + ss + '-' + ms;
 }
 
 router.post('/', (req, res) => {

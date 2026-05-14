@@ -310,7 +310,7 @@
             });
         });
         req.on("error", function(err) { safeCallback(err); });
-        req.setTimeout(120000, function() { req.destroy(); safeCallback(new Error("Request timeout 120s")); }); // 2 min (template gen only)
+        req.setTimeout(180000, function() { req.destroy(); safeCallback(new Error("Request timeout 180s")); }); // 3 min (LLM calls can be slow)
         req.write(data);
         req.end();
     };
@@ -512,6 +512,13 @@
                     frame: lastFrame
                 };
 
+                // Health check before render (server may have died during LLM call)
+                self._healthCheckOrRestart(function(renderHealthOk) {
+                    if (!renderHealthOk) {
+                        clearTimeout(pipelineTimer);
+                        return callback(new Error("Motion-Pro server not responding before preview render"));
+                    }
+
                 self._post("/api/render/preview", previewBody, function(enqueueErr, enqueueResult) {
                     if (timedOut) return;
                     if (enqueueErr) { clearTimeout(pipelineTimer); return callback(enqueueErr); }
@@ -574,6 +581,7 @@
                         });
                     });
                 });
+                }); // end _healthCheckOrRestart before preview render
             });
         });
     };
@@ -764,7 +772,19 @@
                     };
 
                     if (existingMotion) {
-                        existingMotion.versions.push(versionData);
+                        // Replace placeholder 'generating' version instead of pushing a second one
+                        var placeholderIdx = -1;
+                        for (var vi = 0; vi < existingMotion.versions.length; vi++) {
+                            if (existingMotion.versions[vi].status === 'generating' && existingMotion.versions[vi].version === version) {
+                                placeholderIdx = vi;
+                                break;
+                            }
+                        }
+                        if (placeholderIdx >= 0) {
+                            existingMotion.versions[placeholderIdx] = versionData;
+                        } else {
+                            existingMotion.versions.push(versionData);
+                        }
                         existingMotion.activeVersion = version;
                         if (!existingMotion.transcriptSegment && transcriptSegment) {
                             existingMotion.transcriptSegment = transcriptSegment;
