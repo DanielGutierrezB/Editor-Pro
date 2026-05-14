@@ -1,50 +1,54 @@
 /**
- * Animation Wrapper v2 — injects Anim and Section components into LLM-generated layouts.
+ * Animation Wrapper v3 — Anim + Section components for LLM-generated layouts.
  *
- * Key fix: Section now uses Remotion's <Sequence> which properly resets
- * useCurrentFrame() to local time. This means Anim delays work correctly
- * in ALL sections, not just the first one.
- *
- * v1 bug: Anim used global frame, so delay=0 in Section 2 (from=148)
- * would calculate frame-0 = 148, making the animation instant (already done).
+ * v3 improvements:
+ * - Anim: 24-frame entrance (0.8s) with spring-like Bezier for smoother feel
+ * - Section: uses Remotion's Sequence for proper local frame context
+ * - SectionFade: 15-frame fade in, 15-frame fade out (0.5s each)
+ * - Reduced movement distances for subtler, more professional motion
  */
 
 const ANIM_COMPONENT = `
-// ─── Animation Engine (auto-injected, do not modify) ───────────────────────
+// ─── Animation Engine (auto-injected) ──────────────────────────────────────
 const Anim:React.FC<{type?:string;delay?:number;children:React.ReactNode;style?:React.CSSProperties}> = ({type='fade-up',delay=0,children,style}) => {
   const frame = useCurrentFrame();
   const f = Math.max(0, frame - delay);
-  const p = interpolate(f, [0, 18], [0, 1], {
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
+  // 24 frames = 0.8s entrance with smooth deceleration
+  const p = interpolate(f, [0, 24], [0, 1], {
+    easing: Easing.bezier(0.25, 1, 0.5, 1),
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
 
   let transform = '';
   switch(type) {
-    case 'fade-up':    transform = \`translateY(\${interpolate(p,[0,1],[60,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)\`; break;
-    case 'fade-down':  transform = \`translateY(\${interpolate(p,[0,1],[-60,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)\`; break;
-    case 'fade-left':  transform = \`translateX(\${interpolate(p,[0,1],[80,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)\`; break;
-    case 'fade-right': transform = \`translateX(\${interpolate(p,[0,1],[-80,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)\`; break;
-    case 'pop':        transform = \`scale(\${interpolate(p,[0,1],[0.7,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})})\`; break;
+    case 'fade-up':    transform = \`translateY(\${interpolate(p,[0,1],[40,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)\`; break;
+    case 'fade-down':  transform = \`translateY(\${interpolate(p,[0,1],[-40,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)\`; break;
+    case 'fade-left':  transform = \`translateX(\${interpolate(p,[0,1],[60,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)\`; break;
+    case 'fade-right': transform = \`translateX(\${interpolate(p,[0,1],[-60,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)\`; break;
+    case 'pop':        transform = \`scale(\${interpolate(p,[0,1],[0.85,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})})\`; break;
     case 'fade':       transform = ''; break;
-    default:           transform = \`translateY(\${interpolate(p,[0,1],[60,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)\`; break;
+    default:           transform = \`translateY(\${interpolate(p,[0,1],[40,0],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}px)\`; break;
   }
   return <div style={{opacity:p, transform: transform || undefined, ...style}}>{children}</div>;
 };
 `;
 
-// Section now uses Remotion's Sequence which resets useCurrentFrame() to local time.
-// This ensures Anim delays work correctly in every section.
-// Fade in/out is handled by a wrapper div with opacity interpolation.
 const SECTION_COMPONENT = `
-// ─── Section Engine (auto-injected, do not modify) ─────────────────────────
+// ─── Section Engine (auto-injected) ────────────────────────────────────────
 const SectionFade:React.FC<{dur:number;children:React.ReactNode}> = ({dur,children}) => {
   const frame = useCurrentFrame();
-  const fi = 12;
-  const fo = 12;
+  // 15 frames (0.5s) fade in, 15 frames fade out — smooth section transitions
+  const fi = 15;
+  const fo = 15;
   const endStart = Math.max(fi + 1, dur - fo);
-  const fadeIn = interpolate(frame, [0, fi], [0, 1], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
-  const fadeOut = interpolate(frame, [endStart, dur], [1, 0], {extrapolateLeft:'clamp', extrapolateRight:'clamp'});
+  const fadeIn = interpolate(frame, [0, fi], [0, 1], {
+    easing: Easing.bezier(0.25, 1, 0.5, 1),
+    extrapolateLeft:'clamp', extrapolateRight:'clamp',
+  });
+  const fadeOut = interpolate(frame, [endStart, dur], [1, 0], {
+    easing: Easing.bezier(0.5, 0, 0.75, 0),
+    extrapolateLeft:'clamp', extrapolateRight:'clamp',
+  });
   const opacity = Math.min(fadeIn, fadeOut);
   return <div style={{position:'absolute',inset:0,opacity}}>{children}</div>;
 };
@@ -58,7 +62,6 @@ const Section:React.FC<{from:number;dur:number;children:React.ReactNode}> = ({fr
 
 /**
  * Inject Anim and Section implementations into LLM-generated TSX code.
- * Replaces the `declare const` stubs and ensures necessary imports are present.
  */
 function injectAnimWrapper(tsxCode) {
   let code = tsxCode;
