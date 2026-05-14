@@ -108,6 +108,7 @@ router.post('/', (req, res) => {
     sessionDir,
     type,
     description,
+    transcriptSegment,
   } = req.body;
 
   if (!compositionId || !feedback) {
@@ -181,6 +182,7 @@ router.post('/', (req, res) => {
     compositionId: newCompositionId,
     type: type || 'title',
     description: description || '',
+    transcriptSegment: transcriptSegment || '',
   });
 
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {

@@ -543,6 +543,9 @@
                         if (existingMotion) {
                             existingMotion.versions.push(versionData);
                             existingMotion.activeVersion = version;
+                            if (!existingMotion.transcriptSegment && transcriptSegment) {
+                                existingMotion.transcriptSegment = transcriptSegment;
+                            }
                         } else {
                             var motion = {
                                 id: proposal.id,
@@ -551,6 +554,7 @@
                                 type: proposal.type,
                                 description: proposal.description,
                                 group: proposal.group || '',
+                                transcriptSegment: transcriptSegment || '',
                                 baseTrackIndex: -1,
                                 versions: [versionData],
                                 activeVersion: version,
@@ -724,6 +728,9 @@
                     if (existingMotion) {
                         existingMotion.versions.push(versionData);
                         existingMotion.activeVersion = version;
+                        if (!existingMotion.transcriptSegment && transcriptSegment) {
+                            existingMotion.transcriptSegment = transcriptSegment;
+                        }
                     } else {
                         var motion = {
                             id: proposal.id,
@@ -732,6 +739,7 @@
                             type: proposal.type,
                             description: proposal.description,
                             group: proposal.group || '',
+                            transcriptSegment: transcriptSegment || '',
                             baseTrackIndex: -1,
                             versions: [versionData],
                             activeVersion: version,
@@ -777,7 +785,8 @@
             outputDir: outputDir || "",
             sessionDir: outputDir || "",
             type: motion.type || "title",
-            description: motion.description || ""
+            description: motion.description || "",
+            transcriptSegment: motion.transcriptSegment || ""
         };
 
         self._post("/api/feedback", body, function(err, result) {

@@ -3240,6 +3240,12 @@
 
                     var aiConfig = { provider: state.settings.aiProvider, model: state.settings.aiModel, apiKey: aiAnalyzer.getActiveKey() };
 
+                    // Ensure motion has transcript for feedback context
+                    var mot = motionPro._findMotion(motionId);
+                    if (mot && !mot.transcriptSegment) {
+                        mot.transcriptSegment = mpExtractSegment(mot.startTime, mot.endTime);
+                    }
+
                     motionPro.regenerateWithFeedback(motionId, savedFeedbackText, aiConfig, function(err, result) {
                         if (state.mpFeedbackActive) delete state.mpFeedbackActive[motionId];
                         if (err) {

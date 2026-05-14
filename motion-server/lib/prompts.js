@@ -893,11 +893,16 @@ Output the COMPLETE TSX file. No explanations before or after the code.`;
   return { systemMsg, userMsg };
 }
 
-function getFeedbackPrompt({ currentTsx, feedback, compositionId, type, description }) {
+function getFeedbackPrompt({ currentTsx, feedback, compositionId, type, description, transcriptSegment }) {
   const systemMsg = buildSystemPrompt(type);
 
   const typeGuide = TYPE_INSTRUCTIONS[type] || TYPE_INSTRUCTIONS.title;
   const compName = _componentName(compositionId);
+
+  const transcriptBlock = transcriptSegment
+    ? `\n## Transcript (what the professor says during this clip — use for timing and content)
+${transcriptSegment}\n`
+    : '';
 
   const userMsg = `The user wants SPECIFIC CHANGES to this Remotion composition. Read their feedback carefully and apply exactly what they ask.
 
@@ -906,7 +911,7 @@ ${feedback}
 
 ## Animation Type: ${type}
 ${description ? 'Description: ' + description : ''}
-
+${transcriptBlock}
 ## Type Rules (maintain these unless feedback contradicts)
 ${typeGuide}
 
@@ -926,6 +931,7 @@ ${currentTsx}
 8. E component uses Easing.bezier(0.16, 1, 0.3, 1) with clamping — keep as defined in template
 9. Keep same timing/duration unless feedback changes it
 10. Frame 0 = start of clip. Sections are RELATIVE to frame 0, not absolute timeline time
+11. **Sync visual elements to the transcript timing** — each section should correspond to what the professor is saying at that moment
 
 Output the COMPLETE modified TSX file. No explanations.`;
 
