@@ -153,7 +153,7 @@ function _buildContextBlock(contextSummary, segmentContext) {
 
 // ── Main prompt builder ──────────────────────────────────────────────────────
 
-function getStaticLayoutPrompt({ transcriptSegment, type, description, durationFrames, compositionId, customPalette, paletteCategory, bgMode, contextSummary, segmentContext }) {
+function getStaticLayoutPrompt({ transcriptSegment, type, description, durationFrames, compositionId, customPalette, paletteCategory, bgMode, contextSummary, segmentContext, timingPrompt }) {
   const compName = _componentName(compositionId);
   const layoutHint = LAYOUT_HINTS[type] || LAYOUT_HINTS.title;
   const durationSecs = (durationFrames / 30).toFixed(1);
@@ -293,7 +293,7 @@ ${_buildContextBlock(contextSummary, segmentContext)}
 
 ## Transcript (this specific segment)
 ${transcriptSegment}
-
+${timingPrompt ? '\n' + timingPrompt + '\n' : ''}
 ## YOUR TASK
 1. Read the transcript. Extract the KEY MESSAGE (1-2 sentences max)
 2. Design ${numSections} section(s) that present this message clearly

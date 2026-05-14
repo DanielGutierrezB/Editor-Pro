@@ -498,10 +498,11 @@
         if (contextData) {
             if (contextData.summary) body.contextSummary = contextData.summary;
             if (contextData.segmentContext) body.segmentContext = contextData.segmentContext;
+            if (contextData.timingPrompt) body.timingPrompt = contextData.timingPrompt;
         }
 
         var _pipelineStart = Date.now();
-        console.log("[Motion-Pro] generateMotion START id=" + proposal.id + " type=" + proposal.type + " v" + version);
+        console.log("[Motion-Pro] generateMotion START id=" + proposal.id + " type=" + proposal.type + " v" + version + " bgMode=" + (self.bgMode || "dark"));
         if (window.EPLogger) EPLogger.log("motion-pro", "pipeline-start", proposal.id + " type=" + proposal.type + " v" + version);
 
         // Health check before starting the pipeline

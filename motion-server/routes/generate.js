@@ -5,6 +5,7 @@ const RemotionManager = require('../lib/remotion-manager');
 const { getGenerationPrompt } = require('../lib/prompts');
 const { getStaticLayoutPrompt } = require('../lib/static-layout-prompt');
 const { injectAnimWrapper } = require('../lib/anim-wrapper');
+const { validateTimingPlan, buildTimingPlan, timingPlanToPrompt } = require('../lib/timing-validator');
 
 /** HH-MM-SS-mmm timestamp for unique file IDs (ms prevents same-second collisions) */
 function _timeStamp() {
@@ -106,7 +107,7 @@ router.post('/', (req, res) => {
 // The Anim wrapper handles all motion automatically.
 // ──────────────────────────────────────────────────────────────────────────────
 router.post('/template', (req, res) => {
-  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, paletteCategory, bgMode, contextSummary, segmentContext } = req.body;
+  const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, paletteCategory, bgMode, contextSummary, segmentContext, timingPrompt } = req.body;
   if (customPalette) console.log('[generate/static-layout] Custom palette:', customPalette.bg, customPalette.accent);
   console.log('[generate/static-layout] provider=' + provider + ' model=' + model + ' type=' + (proposal && proposal.type) + ' bgMode=' + bgMode);
 
@@ -130,6 +131,7 @@ router.post('/template', (req, res) => {
     bgMode: bgMode || 'dark',
     contextSummary: contextSummary || null,
     segmentContext: segmentContext || null,
+    timingPrompt: timingPrompt || null,
   });
 
   const llmStart = Date.now();
@@ -201,17 +203,19 @@ router.post('/context', (req, res) => {
   console.log('[generate/context] Analyzing ' + segments.length + ' segments from transcript (' + fullTranscript.length + ' chars)');
 
   const segmentList = segments.map(function(s, i) {
-    return 'Segment ' + (i + 1) + ' [' + (s.startTime || 0).toFixed(1) + 's - ' + (s.endTime || 0).toFixed(1) + 's]: type=' + (s.type || '?') + ', description="' + (s.description || '') + '"';
+    return 'Segment ' + (i + 1) + ' [' + (s.startTime || 0).toFixed(1) + 's - ' + (s.endTime || 0).toFixed(1) + 's] (' + ((s.endTime || 0) - (s.startTime || 0)).toFixed(1) + 's): type=' + (s.type || '?') + ', description="' + (s.description || '') + '"';
   }).join('\n');
 
   const systemMsg = `You are a video content analyst. You will receive a full transcript of an educational video and a list of segments where motion graphics will be placed.
 
-Your job: provide context that helps a motion graphics designer understand each segment's role in the overall narrative.
+Your job:
+1. Provide context that helps a motion graphics designer understand each segment's role in the overall narrative
+2. Plan the timing of visual elements based on transcript timestamps
 
 Respond in the SAME LANGUAGE as the transcript.
 Respond ONLY with valid JSON — no markdown, no explanation.`;
 
-  const userMsg = `## Full Transcript
+  const userMsg = `## Full Transcript (with timestamps)
 ${fullTranscript}
 
 ## Segments to analyze
@@ -224,9 +228,13 @@ Return a JSON object with:
    - "context": What was discussed before this moment that gives it meaning (1-2 sentences)
    - "keyMessage": The core concept or takeaway of this specific segment (1 sentence)
    - "narrativeRole": One of: "introduction", "explanation", "example", "comparison", "summary", "transition", "detail", "conclusion"
+   - "timingPlan": Array of visual elements with timing: [{"text": "visible text", "timestamp": seconds_when_professor_says_it, "type": "title|subtitle|item|metric|icon"}]
+     → timestamp = the ABSOLUTE second in the video when this concept is mentioned
+     → text = what should appear on screen (concise, readable)
+     → List 2-5 elements per segment, ordered by timestamp
 
 Example response:
-{"summary":"Video sobre cómo funciona Git internamente","segments":[{"context":"Viene de explicar qué es control de versiones","keyMessage":"Un repositorio es una carpeta rastreada por Git","narrativeRole":"explanation"}]}`;
+{"summary":"Video sobre cómo funciona Git","segments":[{"context":"Después de explicar control de versiones","keyMessage":"Git rastrea cambios","narrativeRole":"explanation","timingPlan":[{"text":"Control de versiones","timestamp":12.5,"type":"title"},{"text":"Rastrea cambios en archivos","timestamp":15.2,"type":"subtitle"}]}]}`;
 
   const llmStart = Date.now();
   sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, raw) => {
@@ -251,9 +259,24 @@ Example response:
       parsed = { summary: '', segments: segments.map(function() { return { context: '', keyMessage: '', narrativeRole: '' }; }) };
     }
 
+    // Validate timing plans for each segment
+    const validatedSegments = (parsed.segments || []).map(function(seg, i) {
+      const s = segments[i];
+      if (seg.timingPlan && seg.timingPlan.length > 0 && s) {
+        const plan = buildTimingPlan(null, s.startTime || 0, s.endTime || 0, seg.timingPlan);
+        const validated = validateTimingPlan(plan);
+        if (validated.conflicts.length > 0) {
+          console.log('[generate/context] Timing adjustments for segment ' + (i + 1) + ': ' + validated.conflicts.join('; '));
+        }
+        seg.validatedTiming = validated;
+        seg.timingPrompt = timingPlanToPrompt(validated);
+      }
+      return seg;
+    });
+
     res.json({
       summary: parsed.summary || '',
-      segments: parsed.segments || [],
+      segments: validatedSegments,
       llmMs: llmMs,
     });
   });

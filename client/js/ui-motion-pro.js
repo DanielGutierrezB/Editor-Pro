@@ -2302,9 +2302,11 @@
             // Build per-segment context data from context pass
             var _segCtxData = null;
             if (_contextResult) {
+                var _segInfo = (_contextResult.segments && _contextResult.segments[idx]) || null;
                 _segCtxData = {
                     summary: _contextResult.summary || "",
-                    segmentContext: (_contextResult.segments && _contextResult.segments[idx]) || null
+                    segmentContext: _segInfo,
+                    timingPrompt: (_segInfo && _segInfo.timingPrompt) || null
                 };
             }
 
