@@ -109,7 +109,7 @@ Available types:
 - <Anim type="pop" delay={20}>      — scales in (good for numbers, icons)
 - <Anim type="fade" delay={25}>     — simple opacity fade (good for backgrounds)
 
-Stagger delays by 5-8 frames between elements. All elements should be visible within 25 frames.
+Stagger delays by 8-12 frames between elements. All elements should be visible within 36 frames.
 
 ## SECTIONS
 
@@ -154,12 +154,12 @@ declare const Section: React.FC<{from:number; dur:number; children:React.ReactNo
 //         Key Concept Title
 //       </div>
 //     </Anim>
-//     <Anim type="fade-up" delay={8}>
+//     <Anim type="fade-up" delay={10}>
 //       <div style={{fontSize:28,color:C.text,textAlign:'center',marginTop:16,maxWidth:800}}>
 //         One sentence explaining the concept clearly
 //       </div>
 //     </Anim>
-//     <Anim type="fade-up" delay={16}>
+//     <Anim type="fade-up" delay={20}>
 //       <div style={{display:'flex',gap:24,marginTop:32}}>
 //         <div style={{background:C.card,borderRadius:12,padding:'16px 24px',fontSize:24,color:C.text}}>
 //           Detail 1
@@ -179,7 +179,7 @@ declare const Section: React.FC<{from:number; dur:number; children:React.ReactNo
 //     <Anim type="pop" delay={0}>
 //       <div style={{fontSize:64,fontWeight:700,color:C.accent,textAlign:'center'}}>Title</div>
 //     </Anim>
-//     <Anim type="fade-up" delay={8}>
+//     <Anim type="fade-up" delay={10}>
 //       <div style={{fontSize:28,color:C.text,textAlign:'center',marginTop:16}}>Explanation</div>
 //     </Anim>
 //   </Safe>
