@@ -19,7 +19,10 @@ class TsxSanitizer {
     tsxCode = this.stripBrandfetch(tsxCode);
     tsxCode = this.stripTrail(tsxCode);
     tsxCode = this.stripFadeTransitions(tsxCode);
-    tsxCode = this.injectStaticPreview(tsxCode);
+    // Static preview injection disabled — was wrapping useCurrentFrame() in a
+    // regular function which breaks hook semantics and prevents Sequence from
+    // properly resetting local frame time.
+    // tsxCode = this.injectStaticPreview(tsxCode);
     tsxCode = this.replaceBrandIcons(tsxCode);
     return tsxCode;
   }
