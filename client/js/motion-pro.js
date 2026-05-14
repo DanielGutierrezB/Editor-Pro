@@ -653,6 +653,24 @@
             version = existingMotion.versions.length + 1;
         }
 
+        // Create placeholder motion so UI can show the card during generation
+        if (!existingMotion) {
+            existingMotion = {
+                id: proposal.id,
+                startTime: proposal.startTime,
+                endTime: proposal.endTime,
+                type: proposal.type,
+                description: proposal.description,
+                group: proposal.group || '',
+                transcriptSegment: transcriptSegment || '',
+                baseTrackIndex: -1,
+                versions: [{ version: version, status: 'generating', createdAt: new Date().toISOString() }],
+                activeVersion: version,
+                placedInTimeline: false
+            };
+            self.motions.push(existingMotion);
+        }
+
         var timedOut = false;
         var pipelineTimer = setTimeout(function() {
             timedOut = true;

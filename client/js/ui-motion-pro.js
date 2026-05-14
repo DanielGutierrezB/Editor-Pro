@@ -2318,6 +2318,11 @@
             window._mpGenCardState[proposal.id] = { pct: 5, msg: "En cola…" };
             var _genCardProgress = function(pct, msg) {
                 window._mpGenCardState[proposal.id] = { pct: pct, msg: msg };
+                // Update header progress with elapsed time
+                var _fe3 = window._epFormatElapsed || function(s) { return Math.round(s) + "s"; };
+                var _el = (Date.now() - _mpTimers.generateStart) / 1000;
+                mpSetProgress("mp-generate", Math.max(Math.round((done / total) * 100), Math.round(pct / total)),
+                    done + "/" + total + " completados — " + msg + " (" + _fe3(_el) + ")");
                 var _gc = document.querySelector('.mp-gen-progress[data-motion-id="' + proposal.id + '"]');
                 if (!_gc) return;
                 _gc.classList.remove("hidden");
@@ -2330,7 +2335,9 @@
             _genCardProgress(5, "En cola…");
 
             // Full pipeline: template fill → render video (MP4) → place in timeline
+            // generateMotion creates a placeholder motion — re-render after brief delay so card appears
             motionPro.generateMotion(proposal, segment, aiConfig, function(err, result) {
+                mpRenderControlPanel();
                 done++;
                 activeWorkers--;
 
@@ -2395,6 +2402,9 @@
                     });
                 }
             }, outputDir, _genCardProgress);
+
+            // Placeholder motion was created synchronously — re-render so card appears with progress
+            setTimeout(function() { mpRenderControlPanel(); }, 100);
         }
 
         // Launch initial batch of workers
