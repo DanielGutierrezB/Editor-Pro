@@ -6,6 +6,15 @@ const { getGenerationPrompt } = require('../lib/prompts');
 const { getStaticLayoutPrompt } = require('../lib/static-layout-prompt');
 const { injectAnimWrapper } = require('../lib/anim-wrapper');
 
+/** HH-MM-SS timestamp for unique file IDs */
+function _timeStamp() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  return hh + '-' + mm + '-' + ss;
+}
+
 router.post('/', (req, res) => {
   const {
     proposal,
@@ -23,7 +32,7 @@ router.post('/', (req, res) => {
 
   const manager = new RemotionManager(req.app.locals.renderProject);
 
-  const compositionId = (proposal.id + '-v' + (proposal.version || 1)).replace(/_/g, '-');
+  const compositionId = (proposal.id + '-v' + (proposal.version || 1) + '-' + _timeStamp()).replace(/_/g, '-');
   const durationSecs = (proposal.endTime || 0) - (proposal.startTime || 0);
   // Add 6 buffer frames to prevent Premiere framerate mismatch seek errors
   const durationFrames = Math.max(90, Math.round(durationSecs * 30) + 6);
@@ -94,7 +103,7 @@ router.post('/template', (req, res) => {
     return res.status(400).json({ error: 'Missing proposal or transcriptSegment' });
   }
 
-  const compositionId = (proposal.id + '-v' + (proposal.version || 1)).replace(/_/g, '-');
+  const compositionId = (proposal.id + '-v' + (proposal.version || 1) + '-' + _timeStamp()).replace(/_/g, '-');
   const durationSecs = (proposal.endTime || 0) - (proposal.startTime || 0);
   const durationFrames = Math.max(90, Math.round(durationSecs * 30) + 6);
 

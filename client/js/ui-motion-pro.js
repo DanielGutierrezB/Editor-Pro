@@ -1048,6 +1048,19 @@
         return prefix || "mp";
     }
 
+    /** Extract HH-MM-SS timestamp from a compositionId (last 8 chars: HH-MM-SS) or generate current time */
+    function _mpExtractTimeId(compositionId) {
+        if (compositionId) {
+            var m = compositionId.match(/(\d{2}-\d{2}-\d{2})$/);
+            if (m) return m[1];
+        }
+        var now = new Date();
+        var hh = String(now.getHours()); if (hh.length < 2) hh = "0" + hh;
+        var mm = String(now.getMinutes()); if (mm.length < 2) mm = "0" + mm;
+        var ss = String(now.getSeconds()); if (ss.length < 2) ss = "0" + ss;
+        return hh + "-" + mm + "-" + ss;
+    }
+
     // ─── Brandfetch Logo API ──────────────────────────────────────
 
     var _mpBrandfetchKey = "";
@@ -2193,7 +2206,7 @@
         var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
         var mpDuration = v.mediaDurationSec || Math.max(0.1, motion.endTime - mpStart);
         var mediaPath = mpNormalizeMediaPath(v.mp4Path);
-        var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1);
+        var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId);
 
         var isNewVersion = v.version > 1 && motion.placedInTimeline && motion.baseTrackIndex >= 0;
 
@@ -2270,7 +2283,7 @@
         var mpStart = Math.max(0, motion.startTime - MP_ANTICIPATION_SECS);
         var mpDuration = Math.max(0.1, motion.endTime - mpStart);
         var mediaPath = mpNormalizeMediaPath(v.pngPath);
-        var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1);
+        var clipName = _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId);
 
         // Version > 1 (feedback/regen): place on track ABOVE the original clip
         // Always baseTrackIndex + 1 — if the track doesn't exist, replaceMotionOnTrack creates it
@@ -2351,7 +2364,7 @@
         if (!v || v.status !== "preview") { if (callback) callback(new Error("Not in preview state")); return; }
 
         // Step 1: Find the PNG clip in Premiere to get its duration
-        var clipName = _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0];
+        var clipName = _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0] + "_" + _mpExtractTimeId(v.compositionId);
 
         csInterface.evalScript('getClipInfoByName("' + mpEscapePathForEvalScript(clipName) + '")', function(clipRes) {
             var clipInfo;
@@ -2484,7 +2497,7 @@
                 mp4Path: mediaPath,
                 startTimeSecs: mpStart,
                 durationSecs: mpDuration,
-                clipName: _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1),
+                clipName: _mpBuildSeqPrefix() + "_Clip" + motion.id.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId),
                 labelColor: _mpLabelColorForType(motion.type)
             }]
         };
@@ -2543,7 +2556,7 @@
             durationSecs: mpComputeClipDurationSecs(motion, v),
             oldTrackIndex: motion.baseTrackIndex,
             newTrackIndex: motion.baseTrackIndex + (v.version - 1),
-            clipName: _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1),
+            clipName: _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0] + "_" + (motion.type || "motion").charAt(0).toUpperCase() + (motion.type || "motion").slice(1) + "_" + _mpExtractTimeId(v.compositionId),
             labelColor: _mpLabelColorForType(motion.type),
             oldClipPattern: _mpBuildSeqPrefix() + "_Clip" + motionId.split("-")[0]
         };

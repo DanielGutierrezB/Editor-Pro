@@ -31,7 +31,7 @@ function _logFeedback(opts) {
     const feedbackImgDir = path.join(logDir, 'feedback');
     let refImages = [];
     if (fs.existsSync(feedbackImgDir)) {
-      const baseId = opts.compositionId.replace(/-v\d+$/, '');
+      const baseId = opts.compositionId.replace(/[-_]v\d+[-\d]*$/, '');
       refImages = fs.readdirSync(feedbackImgDir)
         .filter(f => f.indexOf(baseId) === 0 && f.endsWith('.png'))
         .sort()
@@ -143,8 +143,10 @@ router.post('/', (req, res) => {
     return res.status(404).json({ error: `Composition ${compositionId} not found in session or compositions dir` });
   }
 
-  const baseId = compositionId.replace(/[-_]v\d+$/, '');
-  const newCompositionId = (baseId + '-v' + (newVersion || 2)).replace(/_/g, '-');
+  const baseId = compositionId.replace(/[-_]v\d+[-\d]*$/, '');
+  const now = new Date();
+  const ts = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
+  const newCompositionId = (baseId + '-v' + (newVersion || 2) + '-' + ts).replace(/_/g, '-');
 
   // Get duration: try .duration file from session first, then calculate from TSX
   var durationFrames = 300;
