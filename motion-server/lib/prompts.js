@@ -33,8 +33,7 @@ const QUALITY_RULES = _loadDoc('quality-rules.md', '');
 const FULL_SYSTEM_PROMPT = [
   SYSTEM_PROMPT_DOC,
   AVAILABLE_PACKAGES ? '\n\n---\n\n# AVAILABLE PACKAGES (USE THESE)\n\n' + AVAILABLE_PACKAGES : '',
-  // DESIGN_SYSTEM removed — using template-based generation instead of free-form
-  '',
+  DESIGN_SYSTEM ? '\n\n---\n\n# DESIGN SYSTEM (YOUR VISUAL IDENTITY)\n\n' + DESIGN_SYSTEM : '',
   QUALITY_RULES ? '\n\n---\n\n# QUALITY RULES (MUST FOLLOW)\n\n' + QUALITY_RULES : '',
 ].join('');
 

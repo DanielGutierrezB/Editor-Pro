@@ -3,8 +3,9 @@ const router = express.Router();
 const { sendLLM } = require('../lib/llm');
 const RemotionManager = require('../lib/remotion-manager');
 const { getGenerationPrompt } = require('../lib/prompts');
-const TemplateManager = require('../lib/template-manager');
-const { getTemplateFillingPrompt } = require('../lib/template-prompt');
+// TemplateManager and template-prompt kept for potential fallback
+// const TemplateManager = require('../lib/template-manager');
+// const { getTemplateFillingPrompt } = require('../lib/template-prompt');
 
 router.post('/', (req, res) => {
   const {
@@ -80,11 +81,15 @@ router.post('/', (req, res) => {
 // When visualDescription is provided, falls back to free-form TSX generation guided
 // by the pre-approved visual layout description.
 // ──────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
+// Free-form generation — LLM generates full TSX directly, guided by design system
+// and quality rules. Palette colors are injected into the prompt.
+// ──────────────────────────────────────────────────────────────────────────────
 router.post('/template', (req, res) => {
   const { proposal, transcriptSegment, provider, model, apiKey, sessionDir, customPalette, paletteCategory } = req.body;
-  if (customPalette) console.log('[generate/template] Custom palette received:', customPalette.bg, customPalette.accent);
-  else console.log("[generate/template] No custom palette");
-  console.log("[generate/template] provider=" + provider + " model=" + model + " [template]");
+  if (customPalette) console.log('[generate/free-form] Custom palette received:', customPalette.bg, customPalette.accent);
+  else console.log('[generate/free-form] No custom palette');
+  console.log('[generate/free-form] provider=' + provider + ' model=' + model + ' type=' + (proposal && proposal.type));
 
   if (!proposal || !transcriptSegment) {
     return res.status(400).json({ error: 'Missing proposal or transcriptSegment' });
@@ -94,44 +99,38 @@ router.post('/template', (req, res) => {
   const durationSecs = (proposal.endTime || 0) - (proposal.startTime || 0);
   const durationFrames = Math.max(90, Math.round(durationSecs * 30) + 6);
 
-  // Always use template-based generation
-  const templateManager = new TemplateManager();
+  // Free-form: LLM generates complete TSX code with expressive animations
+  const { systemMsg, userMsg } = getGenerationPrompt({
+    transcriptSegment,
+    type: proposal.type,
+    description: proposal.description,
+    durationFrames,
+    compositionId,
+    brandfetchKey: '',
+    customPalette: customPalette || null,
+    paletteCategory: paletteCategory || null,
+  });
 
-  const { systemMsg, userMsg } = getTemplateFillingPrompt(
-    proposal.type, transcriptSegment, proposal.description, durationFrames
-  );
-
-  sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawResponse) => {
+  sendLLM({ provider, model, apiKey, systemMsg, userMsg }, (err, rawCode) => {
     if (err) return res.status(500).json({ error: 'LLM error: ' + err.message });
 
-    // Guard against empty LLM response
-    if (!rawResponse || rawResponse.trim().length === 0) {
-      console.error('[generate/template] LLM returned empty response. provider=' + provider + ' model=' + model);
-      return res.status(500).json({ error: 'LLM returned empty response — check API key and model' });
+    if (!rawCode || rawCode.trim().length === 0) {
+      console.error('[generate/free-form] LLM returned empty response. provider=' + provider + ' model=' + model);
+      return res.status(500).json({ error: 'LLM returned empty response \u2014 check API key and model' });
     }
 
+    let tsxCode = rawCode;
+    const codeMatch = rawCode.match(/```(?:tsx?|jsx?|react)?\s*\n([\s\S]*?)```/);
+    if (codeMatch) tsxCode = codeMatch[1].trim();
+
     try {
-      // Parse JSON from response (strip markdown if present)
-      let jsonStr = rawResponse.trim();
-      const jsonMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-      if (jsonMatch) jsonStr = jsonMatch[1].trim();
-
-      console.log('[generate/template] Parsing LLM response (' + jsonStr.length + ' chars)');
-      const contentValues = JSON.parse(jsonStr);
-
-      // Fill template with content values (apply custom palette if provided)
-      const tsxCode = templateManager.fillTemplate(
-        proposal.type, contentValues, compositionId, durationFrames, proposal.startTime, transcriptSegment, customPalette
-      );
-
-      // Write and register composition
       const manager = new RemotionManager(req.app.locals.renderProject);
       if (sessionDir) manager.syncFromSession(sessionDir);
       const result = manager.writeComposition(compositionId, tsxCode, durationFrames);
 
       if (result && result.syntaxError) {
         return res.status(500).json({
-          error: 'Template syntax error: ' + (result.errors || []).join('; '),
+          error: 'Syntax error in generated TSX: ' + (result.errors || []).join('; '),
           compositionId,
         });
       }
@@ -143,11 +142,10 @@ router.post('/template', (req, res) => {
         tsxPath: typeof result === 'string' ? result : (result && result.filePath) || '',
         durationFrames,
         status: 'generated',
-        method: 'template',
+        method: 'free-form',
       });
-    } catch (e) {
-      console.error('[generate/template] Template fill error:', e.message);
-      res.status(500).json({ error: 'Template fill error: ' + e.message });
+    } catch (writeErr) {
+      res.status(500).json({ error: 'Write error: ' + writeErr.message });
     }
   });
 });
