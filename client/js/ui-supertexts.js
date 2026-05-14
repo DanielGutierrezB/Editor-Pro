@@ -22,7 +22,6 @@
     var loadTranscriptText, onTranscriptChange;
     var readTranscriptFromProjectFile, readCaptionsFromProjectFile;
     var srtSegmentsToSttResult, renderTranscriptFromSegments, bindCollapsibles;
-    var MP_ANTICIPATION_SECS;
     var _getTranscriptFolders, parseTranscriptJson, _buildTranscriptCache;
 
     function _initRefs() {
@@ -80,7 +79,6 @@
         srtSegmentsToSttResult   = global._epSrtSegmentsToSttResult;
         renderTranscriptFromSegments = global._epRenderTranscriptFromSegments;
         bindCollapsibles         = global._epBindCollapsibles;
-        MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0.35;
         _getTranscriptFolders    = global._epGetTranscriptFolders;
         parseTranscriptJson      = global._epParseTranscriptJson;
         _buildTranscriptCache    = global._epBuildTranscriptCache;
@@ -152,9 +150,6 @@
     var ST2_SECS_PER_WORD = 0.25;
     // Minimum on-screen duration for any element (avoids flash appearances).
     var ST2_MIN_DURATION_SECS = 6.0;  // Hard rule: ningún supertext dura menos de 6s (duración natural del MOGRT)
-
-    // Motion Pro: ligero adelanto respecto al audio (demasiado = el gráfico “va por delante” del profesor).
-    var MP_ANTICIPATION_SECS = 0.35;
 
     // Sanitize CSInterface paths (Windows returns file:///C:/... which breaks fs/path)
     function _sanitizeExtPath(raw) {
@@ -1367,8 +1362,9 @@
         var summary = document.getElementById("st2-summary");
         summary.innerHTML = escSupertextHtml(result.summary || state.supertexts2.length + " momentos clave identificados");
 
-        var list = document.getElementById("st2-list");
-        list.innerHTML = "";
+        // clearContainer clones the node to drop the click/change handlers
+        // attached below; otherwise re-renders stack delegated listeners.
+        var list = clearContainer(document.getElementById("st2-list"));
 
         if (state.supertexts2.length > 0) {
             var typeCounts = {};
@@ -2381,20 +2377,6 @@
     }
 
 
-    function normalizeSupertextNewlines(str) {
-        if (str === undefined || str === null) return "";
-        var s = String(str);
-        s = s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n");
-        return s;
-    }
-
-    function normalizeSt2Fields(st) {
-        if (!st) return st;
-        if (st.text != null) st.text = normalizeSupertextNewlines(st.text);
-        if (st.reason != null) st.reason = normalizeSupertextNewlines(st.reason);
-        return st;
-    }
-
     function _st2ExtractTranscriptEnd(timedTranscript) {
         if (!timedTranscript) return 0;
         var matches = timedTranscript.match(/\[\d+\.?\d*s\s*-\s*(\d+\.?\d*)s\]/g);
@@ -2428,13 +2410,6 @@
             }
         }
         return filtered;
-    }
-
-    /** Texto de supertexto en HTML: escapa y muestra saltos de línea (no el literal \\n). */
-    function escSupertextHtml(str) {
-        if (str === undefined || str === null) return "";
-        var s = normalizeSupertextNewlines(str);
-        return s.split(/\r?\n/).map(function(line) { return esc(line); }).join("<br>");
     }
 
     // ═════════════════════════════════════════════════════════════

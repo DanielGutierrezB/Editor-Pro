@@ -666,17 +666,6 @@
     line-height: 1;
 }
 
-.mogrt-path-input {
-    flex: 1;
-    font-size: 10px;
-    padding: 5px 8px;
-    background: var(--bg-card);
-    color: var(--text-secondary);
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-}
-
 .mogrt-track-label {
     font-size: 10px;
     color: var(--text-secondary);
@@ -938,7 +927,6 @@
     border-color: rgba(99,102,241,0.5);
     color: var(--accent-bright);
 }
-/* (st2-ctrl-toolbar removed — replaced by dynamic st2-props-panel) */
 .st2-ctrl-list {
     flex: 1;
     min-height: 0;
