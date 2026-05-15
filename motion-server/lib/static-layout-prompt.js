@@ -364,7 +364,12 @@ ${timingPrompt ? '\n' + timingPrompt + '\n' : ''}
 6. Output ONLY the TSX code — no explanations
 
 Available logos (public/logos/): meta.svg, facebook.svg, instagram.svg, whatsapp.svg, google.svg, youtube.svg, tiktok.svg, linkedin.svg, twitter.svg, slack.svg, telegram.svg, github.svg, apple.svg, microsoft.svg, amazon.svg, netflix.svg, spotify.svg, pinterest.svg, snapchat.svg
-Use: <Img src={staticFile('logos/BRAND.svg')} style={{width:60,height:60}} />`;
+Use: <Img src={staticFile('logos/BRAND.svg')} style={{width:60,height:60}} />
+
+⚠️ LOGO RULE: ONLY use a logo if the brand is EXACTLY one from the list above.
+If the content mentions a brand NOT in the list (e.g. "Blue Bottle Coffee", "Figma", "Vercel"), do NOT use any logo.
+Use a relevant Lucide icon instead (e.g. <Coffee/>, <Globe/>, <ExternalLink/>).
+NEVER substitute one brand's logo for another brand. No logo is better than a wrong logo.`;
 
   return { systemMsg, userMsg };
 }
