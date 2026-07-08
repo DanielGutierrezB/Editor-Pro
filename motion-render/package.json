@@ -11,7 +11,7 @@
     "@fontsource/dm-sans": "^5.2.8",
     "@fontsource/ibm-plex-mono": "^5.0.0",
     "@fontsource/ibm-plex-sans": "^5.0.0",
-    "@remotion/cli": "^4.0.0",
+    "@remotion/cli": "^4.0.486",
     "@remotion/lottie": "4.0.443",
     "@remotion/motion-blur": "4.0.443",
     "@remotion/noise": "4.0.443",
