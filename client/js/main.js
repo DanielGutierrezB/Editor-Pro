@@ -483,51 +483,6 @@
     function toggleMOGRTConfig() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.toggleMOGRTConfig(); }
     function loadDefaultMOGRTs() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.loadDefaultMOGRTs(); }
     function loadMOGRTFolder() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.loadMOGRTFolder(); }
-    window.debugSelectedMOGRT = function() {
-        csInterface.evalScript("debugMOGRTProperties()", function(r) {
-            if (window.EPLogger) window.EPLogger.log("debug", "mogrt-inspect", r.substring(0, 3000));
-            alert(r.substring(0, 800));
-        });
-    };
-    window.debugAllMOGRTs = function() {
-        var mogrtPaths = {};
-        try {
-            var saved = localStorage.getItem("edupro_mogrt_paths");
-            if (saved) mogrtPaths = JSON.parse(saved);
-        } catch(e) {}
-        var pathsJson = JSON.stringify(mogrtPaths).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-        csInterface.evalScript('debugAllMOGRTs("' + pathsJson + '")', function(r) {
-            if (window.EPLogger) window.EPLogger.log("debug", "mogrt-all-inspect", r);
-            try {
-                var data = JSON.parse(r);
-                if (data.success && data.mogrts) {
-                    var summary = "=== MOGRT TEXT PROPERTIES ===\n\n";
-                    var types = ["title", "bullet", "definition", "highlight", "question"];
-                    for (var i = 0; i < types.length; i++) {
-                        var t = types[i];
-                        var m = data.mogrts[t];
-                        summary += t.toUpperCase() + ":\n";
-                        if (m.error) { summary += "  ERROR: " + m.error + "\n\n"; continue; }
-                        summary += "  Props: " + m.numProps + " | Text prop: index " + m.textPropIndex + " (" + (m.textPropName || "none") + ")\n";
-                        for (var pi = 0; pi < m.props.length; pi++) {
-                            var p = m.props[pi];
-                            summary += "  [" + p.index + "] " + p.displayName + " (" + p.valueType + ")";
-                            if (p.hasTextEditValue) summary += " ✅ textEditValue=\"" + (p.textEditValue || "") + "\"";
-                            else if (p.valueSnippet) summary += " = " + p.valueSnippet.substring(0, 60);
-                            summary += "\n";
-                        }
-                        summary += "\n";
-                    }
-                    console.log(summary);
-                    alert(summary);
-                } else {
-                    alert("Error: " + (data.error || r.substring(0, 500)));
-                }
-            } catch(e) {
-                alert(r.substring(0, 800));
-            }
-        });
-    };
     function st2BatchOpen() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchOpen(); }
     function st2BatchAnalyzeAll() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchAnalyzeAll(); }
     function st2BatchCreateAll() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.batchCreateAll(); }

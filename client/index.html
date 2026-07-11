@@ -21,9 +21,12 @@
                 <span id="seq-meta" class="layer-count"></span>
                 <span class="seq-dropdown-arrow">▾</span>
             </button>
-            <button id="btn-debug-mogrt" class="icon-btn hdr-btn" title="Debug del MOGRT seleccionado en la línea de tiempo" onclick="debugSelectedMOGRT()">🔍 <span class="hdr-btn-label">MOGRT</span></button>
-            <button id="btn-debug-all-mogrts" class="icon-btn hdr-btn" title="Inspeccionar TODOS los MOGRTs configurados" onclick="debugAllMOGRTs()">🔬 <span class="hdr-btn-label">MOGRTs</span></button>
-            <button id="btn-save-log" class="icon-btn hdr-btn" title="Guardar log en Descargas">💾 <span class="hdr-btn-label">Log</span></button>
+            <button id="btn-save-log" class="icon-btn hdr-btn" title="Guardar log en Descargas">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/>
+                </svg>
+                <span class="hdr-btn-label">Log</span>
+            </button>
             <button id="btn-reload" class="icon-btn hdr-btn" title="Recargar panel / verificar actualizaciones" onclick="checkAndReload()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
