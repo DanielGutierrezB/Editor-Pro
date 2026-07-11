@@ -379,13 +379,6 @@ html, body {
     box-shadow: 0 6px 20px rgba(251, 191, 36, 0.35), inset 0 1px 0 rgba(255,255,255,0.15);
 }
 
-.btn-analyze-reel {
-    background: linear-gradient(135deg, #ec4899, #8b5cf6);
-}
-.btn-analyze-reel:hover {
-    box-shadow: 0 6px 20px rgba(236, 72, 153, 0.35), inset 0 1px 0 rgba(255,255,255,0.15);
-}
-
 .btn-analyze-cancel {
     background: linear-gradient(135deg, #ef4444, #dc2626);
     box-shadow: 0 2px 12px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(255,255,255,0.1);

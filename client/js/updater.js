@@ -24,10 +24,6 @@
 
     // Directories (relative to extension root) that must never be overwritten
     var PRESERVED_PREFIXES = [
-        "motion-server/node_modules",
-        "motion-render/node_modules",
-        "motion-render/src/compositions",
-        "motion-render/out",
         "node_modules",
         "mogrts",
         ".env"
@@ -544,14 +540,6 @@
                     return;
                 }
                 _setBtn("✅", "¡Actualizado! Recargando...", "", true);
-                // Stop motion-server before reload if running
-                try {
-                    if (global._epMotionPro && typeof global._epMotionPro.stopServer === "function") {
-                        global._epMotionPro.stopServer(function() { location.reload(); });
-                        setTimeout(function() { location.reload(); }, 2000);
-                        return;
-                    }
-                } catch(_) {}
                 setTimeout(function() { location.reload(); }, 800);
             });
             return true;
@@ -598,15 +586,6 @@
                     }
 
                     _setBtn("✅", "¡Actualizado! Recargando...", "", true);
-
-                    // Stop motion-server before reload if running
-                    try {
-                        if (global._epMotionPro && typeof global._epMotionPro.stopServer === "function") {
-                            global._epMotionPro.stopServer(function() { location.reload(); });
-                            setTimeout(function() { location.reload(); }, 2000);
-                            return;
-                        }
-                    } catch(_) {}
                     setTimeout(function() { location.reload(); }, 800);
                 });
             });

@@ -14,6 +14,12 @@
     function _cs() { return global._epCSInterface; }
     function _parser() { return global.TranscriptParser; }
 
+    // Lazy folder creation: only create the Transcribe folder right before a real write.
+    function _ensureDir(dir) {
+        if (!fs || !dir) return;
+        try { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); } catch(_e) {}
+    }
+
     // ─── Transcript folder tracking ───────────────────────────────
 
     function _saveLastTranscriptFolder(filePath) {
@@ -250,7 +256,7 @@
                             if (fs.existsSync(jp)) {
                                 if (transcribeFolder) {
                                     var dest = path.join(transcribeFolder, baseName + ".json");
-                                    try { fs.copyFileSync(jp, dest); cache[sname] = dest; } catch(_ce) { cache[sname] = jp; }
+                                    try { _ensureDir(transcribeFolder); fs.copyFileSync(jp, dest); cache[sname] = dest; } catch(_ce) { cache[sname] = jp; }
                                 } else { cache[sname] = jp; }
                                 found = true; break;
                             }
@@ -258,7 +264,7 @@
                             if (fs.existsSync(sp)) {
                                 if (transcribeFolder) {
                                     var destS = path.join(transcribeFolder, baseName + ".srt");
-                                    try { fs.copyFileSync(sp, destS); cache[sname] = destS; } catch(_ce) { cache[sname] = sp; }
+                                    try { _ensureDir(transcribeFolder); fs.copyFileSync(sp, destS); cache[sname] = destS; } catch(_ce) { cache[sname] = sp; }
                                 } else { cache[sname] = sp; }
                                 found = true; break;
                             }
@@ -287,7 +293,7 @@
                                 var ext = bestMatch.toLowerCase().endsWith(".srt") ? ".srt" : ".json";
                                 if (transcribeFolder) {
                                     var destP = path.join(transcribeFolder, baseName + ext);
-                                    try { fs.copyFileSync(bestMatch, destP); cache[sname] = destP; } catch(_ce) { cache[sname] = bestMatch; }
+                                    try { _ensureDir(transcribeFolder); fs.copyFileSync(bestMatch, destP); cache[sname] = destP; } catch(_ce) { cache[sname] = bestMatch; }
                                 } else { cache[sname] = bestMatch; }
                             }
                         }
@@ -340,9 +346,6 @@
         if (infoEl) infoEl.textContent = "Sin transcripción cargada";
         if (global.EPUtils) global.EPUtils.hideElement("transcript-stats");
         clearRenderedTranscript();
-        if (global.EditorProUI && global.EditorProUI.motionPro && global.EditorProUI.motionPro.updateAnalyzeButton) {
-            global.EditorProUI.motionPro.updateAnalyzeButton();
-        }
     }
 
     function onTranscriptChange() {
@@ -390,10 +393,6 @@
             var dur = last.endTime || last.startTime || 0;
             var durEl = document.getElementById("transcript-duration");
             if (durEl) durEl.textContent = formatTimeFull(dur);
-        }
-
-        if (global.EditorProUI && global.EditorProUI.motionPro && global.EditorProUI.motionPro.updateAnalyzeButton) {
-            global.EditorProUI.motionPro.updateAnalyzeButton();
         }
     }
 
@@ -511,7 +510,7 @@
         if (!fs || !path || !st || !st.transcribeFolder || !seqName) return;
         try {
             var destPath = path.join(st.transcribeFolder, seqName + ".json");
-            if (sourcePath !== destPath) fs.copyFileSync(sourcePath, destPath);
+            if (sourcePath !== destPath) { _ensureDir(st.transcribeFolder); fs.copyFileSync(sourcePath, destPath); }
         } catch(e) {}
     }
 

@@ -25,7 +25,6 @@
         es2Highlights: [],
         es2Suggestions: [],
         es2Errors: [],
-        reelProposals: [],
         customDictionary: [],
         // Recording Notes
         audioPath: "",
@@ -45,13 +44,6 @@
         })(),
         lastWhisperResult: null,
         transcriptCache: {},
-        // Motion-Pro
-        mpAnalyzing: false,
-        mpGenerating: false,
-        mpGenerateCancelRequested: false,
-        // B-Roll
-        brAnalyzing: false,
-        brGenerating: false,
         settings: {
             aiProvider: "ollama",
             aiModel: "mistral-small3.1:latest",

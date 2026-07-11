@@ -17,9 +17,6 @@
     var fs, path, os;
     try { fs = require("fs"); path = require("path"); os = require("os"); } catch(e) {}
 
-    var motionPro = null;
-    var broll = null;
-
     // State is defined in state.js and exposed as window._epState before this script loads.
     var state = window._epState;
 
@@ -72,8 +69,6 @@
         aiAnalyzer = new AIAnalyzer();
         stt = new SpeechToText();
         recorder = new RecordingNotes();
-        motionPro = new MotionPro();
-        broll = new BRoll();
 
         stt.setPluginDir(extensionPath);
 
@@ -83,8 +78,6 @@
         window._epAiAnalyzer = aiAnalyzer;
         window._epStt = stt;
         window._epRecorder = recorder;
-        window._epMotionPro = motionPro;
-        window._epBroll = broll;
 
         // Initialize UI modules (capture shared references now that _ep* globals are set)
         if (window.EditorProUI && window.EditorProUI.spellcheck && window.EditorProUI.spellcheck.init) window.EditorProUI.spellcheck.init();
@@ -102,8 +95,6 @@
         updateAIStatus();
         refreshSequenceInfo();
         startSequencePolling();
-        mpInit();
-        brInit();
 
         // Initialize prompt editor
         if (window.PromptEditor && window.PromptEditor.init) window.PromptEditor.init();
@@ -272,13 +263,6 @@
         on("btn-es2-prompt-save", "click", function() { savePromptById("es2"); });
         on("btn-es2-prompt-reset", "click", function() { resetPromptById("es2"); });
 
-        // Reel Proposal
-        on("btn-reelproposal", "click", startReelProposal);
-        on("btn-rp-export", "click", exportReelProposals);
-        on("btn-rp-prompt-toggle", "click", function() { togglePromptEditorById("rp"); });
-        on("btn-rp-prompt-save", "click", function() { savePromptById("rp"); });
-        on("btn-rp-prompt-reset", "click", function() { resetPromptById("rp"); });
-
         // STT provider settings
         on("stt-provider-select", "change", function() {
             var prov = this.value;
@@ -331,48 +315,6 @@
         on("btn-ta-prompt-save", "click", function() { savePromptById("ta"); });
         on("btn-ta-prompt-reset", "click", function() { resetPromptById("ta"); });
 
-        // Motion-Pro
-        on("btn-mp-open-studio", "click", function() {
-            if (!motionPro || !motionPro.serverRunning) {
-                showToast("Inicia el servidor primero", "info");
-                return;
-            }
-            motionPro.startStudio(function(err, result) {
-                if (err) console.warn("[Motion-Pro] Studio error:", err.message);
-                var url = (result && result.url) || "http://localhost:3000";
-                try {
-                    var _openCmd = (process && process.platform === 'win32') ? 'start "" "' + url + '"' : 'open "' + url + '"';
-                    require("child_process").exec(_openCmd);
-                } catch(e) {}
-                var mpUI = window.EditorProUI && window.EditorProUI.motionPro;
-                var _mpSessionName = (mpUI && mpUI.getSessionName) ? mpUI.getSessionName() : "global";
-                showToast("Abriendo Remotion Studio (sesión: " + _mpSessionName + ")", "info");
-            }, (window.EditorProUI && window.EditorProUI.motionPro && window.EditorProUI.motionPro.getOutputDir) ? window.EditorProUI.motionPro.getOutputDir() : undefined);
-        });
-        on("btn-mp-docs", "click", function() {
-            try {
-                var _docsUrl = 'http://localhost:' + MotionPro.SERVER_PORT + '/docs/docs.html';
-                var _openDocsCmd = (process && process.platform === 'win32') ? 'start "" "' + _docsUrl + '"' : 'open "' + _docsUrl + '"';
-                require("child_process").exec(_openDocsCmd);
-            } catch(e) {}
-        });
-        on("btn-mp-server-toggle", "click", mpToggleServer);
-        on("btn-mp-brandfetch-save", "click", mpSaveBrandfetchKey);
-        mpLoadBrandfetchKey();
-        on("btn-mp-analyze", "click", mpStartAnalysis);
-        on("btn-mp-select-all", "click", mpToggleSelectAll);
-        on("btn-mp-generate", "click", mpStartGeneration);
-        on("btn-mp-generate-cancel", "click", mpCancelGeneration);
-        on("btn-mp-prompt-toggle", "click", function() { togglePromptEditorById("mp"); });
-        on("btn-mp-prompt-save", "click", function() { savePromptById("mp"); });
-        on("btn-mp-prompt-reset", "click", function() { resetPromptById("mp"); });
-
-        // Generation prompts panel
-        on("mp-gen-prompts-toggle", "click", mpToggleGenPromptsPanel);
-        on("btn-mp-gp-save", "click", mpSaveGenPrompts);
-        on("btn-mp-gp-reset", "click", mpResetGenPrompts);
-        mpBindGenPromptAccordions();
-
         bindCollapsibles();
     }
 
@@ -394,13 +336,10 @@
 
     function clearTranscript() {
         if (_TM()) _TM().clearTranscript();
-        // mpUpdateAnalyzeButton already called inside TranscriptManager.clearTranscript
     }
 
     function onTranscriptChange() {
         if (_TM()) _TM().onTranscriptChange();
-        mpUpdateAnalyzeButton();
-        brUpdateAnalyzeButton();
         if (window.EventBus) window.EventBus.emit("transcript-changed", {});
     }
 
@@ -605,11 +544,8 @@
     function es2BatchNavNext() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchNavNext(); }
     function es2BatchNavBack() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchNavBack(); }
     function renderES2Results(r) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.render(r); }
-    function renderReelResults(r) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.renderReelResults(r); }
     function startEditSuggestions2() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.start(); }
     function exportEditSuggestions2() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.exportData(); }
-    function startReelProposal() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.startReelProposal(); }
-    function exportReelProposals() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.exportReelProposals(); }
 
     // Recording delegates
     function startTranscription() { if (window.EditorProUI && window.EditorProUI.recording) window.EditorProUI.recording.startTranscription(); }
@@ -637,38 +573,13 @@
     function applySttResultToRecordingNotes(r, s) { if (window.EditorProUI && window.EditorProUI.recording) window.EditorProUI.recording.applySttResultToRecordingNotes(r, s); }
     function renderClickableTranscript(w, n) { if (window.EditorProUI && window.EditorProUI.recording && window.EditorProUI.recording.renderClickableTranscript) window.EditorProUI.recording.renderClickableTranscript(w, n); }
 
-    // Motion-Pro delegates
-    function mpInit() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.init(); }
-    function mpSwitchToSequence() { if (window.EditorProUI && window.EditorProUI.motionPro && window.EditorProUI.motionPro.switchToSequence) window.EditorProUI.motionPro.switchToSequence(); }
-
-    // B-Roll delegates
-    function brInit() { if (window.EditorProUI && window.EditorProUI.broll) window.EditorProUI.broll.init(); }
-    function brSwitchToSequence(n) { if (window.EditorProUI && window.EditorProUI.broll && window.EditorProUI.broll.switchToSequence) window.EditorProUI.broll.switchToSequence(n); }
-    function brUpdateAnalyzeButton() { if (window.EditorProUI && window.EditorProUI.broll) window.EditorProUI.broll.updateAnalyzeButton(); }
-    function mpUpdateAnalyzeButton() { if (window.EditorProUI && window.EditorProUI.motionPro && window.EditorProUI.motionPro.updateAnalyzeButton) window.EditorProUI.motionPro.updateAnalyzeButton(); }
-    function mpToggleServer() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.toggleServer(); }
-    function mpStartAnalysis() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.startAnalysis(); }
-    function mpToggleSelectAll() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.toggleSelectAll(); }
-    function mpStartGeneration() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.startGeneration(); }
-    function mpCancelGeneration() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.cancelGeneration(); }
-    function mpSaveBrandfetchKey() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.saveBrandfetchKey(); }
-    function mpLoadBrandfetchKey() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.loadBrandfetchKey(); }
-    function mpToggleGenPromptsPanel() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.toggleGenPromptsPanel(); }
-    function mpSaveGenPrompts() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.saveGenPrompts(); }
-    function mpResetGenPrompts() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.resetGenPrompts(); }
-    function mpBindGenPromptAccordions() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.bindGenPromptAccordions(); }
-
     // Progress delegates
     function setST2Progress(p, t) { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.setST2Progress(p, t); }
     function setES2Progress(p, t) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.setES2Progress(p, t); }
-    function setRPProgress(p, t) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.setRPProgress(p, t); }
 
     function refreshAllHeaderProgress() {
         if (window.EditorProUI && window.EditorProUI.recording) window.EditorProUI.recording.refreshSttHeaderProgressVisibility();
         if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.refreshES2HeaderProgressVisibility();
-        if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.refreshRPHeaderProgressVisibility();
-        if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.refreshHeaderProgressVisibility();
-        if (window.EditorProUI && window.EditorProUI.broll) window.EditorProUI.broll.refreshHeaderProgressVisibility();
     }
 
     // ─── Expose remaining bindings for UI modules ────────────────
@@ -703,16 +614,6 @@
     setTimeout(_checkForUpdates, 5000);
 
     function _cleanupBeforeReload(callback) {
-        var _called = false;
-        function _once() { if (_called) return; _called = true; callback(); }
-        try {
-            if (window._epMotionPro && typeof window._epMotionPro.stopServer === "function") {
-                console.log("[Editor-Pro] Stopping motion-server before reload...");
-                window._epMotionPro.stopServer(_once);
-                setTimeout(_once, 2000);
-                return;
-            }
-        } catch(_e) {}
         callback();
     }
 

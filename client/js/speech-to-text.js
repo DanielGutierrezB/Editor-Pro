@@ -932,6 +932,7 @@
         try {
             var srtContent = this.generateSRT(result, wordsPerLine || 8);
             var srtPath = path ? path.join(outputFolder, safeName + ".srt") : (outputFolder + "/" + safeName + ".srt");
+            try { if (outputFolder && !fs.existsSync(outputFolder)) fs.mkdirSync(outputFolder, { recursive: true }); } catch(_e) {}
             fs.writeFileSync(srtPath, srtContent, "utf8");
             paths.path = srtPath;
         } catch(e) {
