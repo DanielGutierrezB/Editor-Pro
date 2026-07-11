@@ -373,9 +373,10 @@
         var btn = document.getElementById("btn-reload");
         if (!btn) return;
         btn.innerHTML = _originalBtnHTML || btn.innerHTML;
-        btn.title = "Recargar panel (verifica updates)";
+        btn.title = "Recargar panel / verificar actualizaciones";
         btn.style.cssText = "";
         btn.disabled = false;
+        btn.removeAttribute("data-update");
     }
 
     // ─── Git repo detection ───────────────────────────────────────────────────
@@ -482,7 +483,7 @@
                                 }
                                 // Different version or couldn't compare — show update
                                 _log("Update available: " + remoteSha.substr(0, 7) + " (no local SHA, version mismatch)");
-                                _showUpdateBtn(remoteSha);
+                                _showUpdateBtn(remoteSha, remoteVer);
                                 if (callback) callback(true);
                             });
                             return;
@@ -514,15 +515,29 @@
 
     // ─── Show update button ─────────────────────────────────────────────────────
 
-    function _showUpdateBtn(remoteSha) {
+    function _showUpdateBtn(remoteSha, remoteVer) {
         _updateAvailable = true;
         var btn = document.getElementById("btn-reload");
-        if (btn) {
-            _originalBtnHTML = btn.innerHTML;
-            btn.style.cssText = "background:#0ae98d;color:#1a1d23;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;animation:pulse-update 1.5s infinite;white-space:nowrap;";
-            btn.innerHTML = "⬇";
-            btn.title = "Hay una actualización disponible — click para actualizar" + (_isGitRepo ? " (git pull)" : "");
-        }
+        if (!btn) return;
+        _originalBtnHTML = btn.innerHTML;
+        btn.setAttribute("data-update", "1");
+
+        var localVer = _readLocalVersion() || "?";
+        var _apply = function(rv) {
+            btn.style.cssText = "background:#0ae98d;color:#1a1d23;border:none;border-radius:6px;padding:0 9px;font-size:10px;font-weight:700;animation:pulse-update 1.5s infinite;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;";
+            var toTxt = rv ? ("v" + rv) : "actualizar";
+            btn.innerHTML = "⬇ v" + localVer + " → " + toTxt;
+            btn.title = "Actualización disponible: v" + localVer + (rv ? " → v" + rv : "") +
+                        " — click para actualizar" + (_isGitRepo ? " (git pull)" : "");
+        };
+
+        if (remoteVer) { _apply(remoteVer); return; }
+
+        // Fetch remote VERSION so the button can show "de cuál a cuál"
+        var versionUrl = "https://raw.githubusercontent.com/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/" + GITHUB_BRANCH + "/VERSION";
+        _httpsGetText(versionUrl, 5, function(vErr, vBody) {
+            _apply(vErr ? null : (vBody || "").trim());
+        });
     }
 
     // ─── Public: doUpdate ───────────────────────────────────────────────────────

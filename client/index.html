@@ -21,21 +21,22 @@
                 <span id="seq-meta" class="layer-count"></span>
                 <span class="seq-dropdown-arrow">▾</span>
             </button>
-            <span id="version-label" style="font-size:10px; color:#666; margin-right:6px; cursor:default;" title="Versión actual">v—</span>
-            <button id="btn-debug-mogrt" class="icon-btn" title="Debug MOGRT seleccionado" style="font-size:12px;padding:2px 4px;" onclick="debugSelectedMOGRT()">🔍</button>
-            <button id="btn-debug-all-mogrts" class="icon-btn" title="Inspeccionar TODOS los MOGRTs configurados" style="font-size:12px;padding:2px 4px;" onclick="debugAllMOGRTs()">🔬</button>
-            <button id="btn-save-log" class="icon-btn" title="Guardar log en Descargas" style="font-size:12px;padding:2px 4px;">💾</button>
-            <button id="btn-reload" class="icon-btn" title="Recargar panel (verifica updates)" onclick="checkAndReload()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button id="btn-debug-mogrt" class="icon-btn hdr-btn" title="Debug del MOGRT seleccionado en la línea de tiempo" onclick="debugSelectedMOGRT()">🔍 <span class="hdr-btn-label">MOGRT</span></button>
+            <button id="btn-debug-all-mogrts" class="icon-btn hdr-btn" title="Inspeccionar TODOS los MOGRTs configurados" onclick="debugAllMOGRTs()">🔬 <span class="hdr-btn-label">MOGRTs</span></button>
+            <button id="btn-save-log" class="icon-btn hdr-btn" title="Guardar log en Descargas">💾 <span class="hdr-btn-label">Log</span></button>
+            <button id="btn-reload" class="icon-btn hdr-btn" title="Recargar panel / verificar actualizaciones" onclick="checkAndReload()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
                     <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
                 </svg>
+                <span id="reload-version" class="hdr-btn-label">v—</span>
             </button>
-            <button id="btn-settings" class="icon-btn" title="Configuración IA">
-                <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+            <button id="btn-settings" class="icon-btn hdr-btn" title="Configuración IA">
+                <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
                     <path d="M6.2 1.5L6.7 3.2C7 3.3 7.2 3.4 7.5 3.6L9.2 3L10.4 5.2L8.9 6.5C8.95 6.8 8.97 7.1 8.95 7.4L10.4 8.7L9.2 10.9L7.5 10.3C7.2 10.5 7 10.6 6.7 10.7L6.2 12.4H3.8L3.3 10.7C3 10.6 2.8 10.5 2.5 10.3L0.8 10.9L-0.4 8.7L1.1 7.4C1.05 7.1 1.03 6.8 1.05 6.5L-0.4 5.2L0.8 3L2.5 3.6C2.8 3.4 3 3.3 3.3 3.2L3.8 1.5H6.2Z" transform="translate(2.5 1)" stroke="currentColor" stroke-width="1.1" fill="none"/>
                     <circle cx="7.5" cy="7.95" r="1.8" stroke="currentColor" stroke-width="1.1" fill="none"/>
                 </svg>
+                <span class="hdr-btn-label">Ajustes</span>
             </button>
         </div>
     </header>

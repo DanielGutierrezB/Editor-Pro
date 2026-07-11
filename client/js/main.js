@@ -602,10 +602,11 @@
             var versionFile = path.join(extensionPath, "VERSION");
             if (fs.existsSync(versionFile)) {
                 var ver = fs.readFileSync(versionFile, "utf8").trim();
-                var label = document.getElementById("version-label");
-                if (label) {
-                    label.textContent = "v" + ver;
-                    label.title = "Editor-Pro v" + ver;
+                var label = document.getElementById("reload-version");
+                if (label) label.textContent = "v" + ver;
+                var reloadBtn = document.getElementById("btn-reload");
+                if (reloadBtn && !reloadBtn.getAttribute("data-update")) {
+                    reloadBtn.title = "Editor-Pro v" + ver + " — recargar / verificar actualizaciones";
                 }
             }
         } catch(e) { console.warn("[Editor-Pro] _showVersion error:", e.message); }
