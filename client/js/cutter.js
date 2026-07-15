@@ -41,8 +41,6 @@
     // ─── DOM References ──────────────────────────────────────
 
     var dom = {
-        seqName:            document.getElementById("seq-name"),
-        markerCount:        document.getElementById("seq-meta"),
         btnAnalyze:         document.getElementById("btn-cutter-analyze"),
         analyzeProgress:    document.getElementById("cutter-progress"),
         analyzeProgressFill:document.getElementById("cutter-progress-fill"),
@@ -90,7 +88,6 @@
         selectAllCb:        document.getElementById("cutter-select-all-cb"),
         viewSection:        document.getElementById("cutter-view-section"),
         markerMgrToggle:    document.getElementById("marker-mgr-toggle"),
-        markerMgrBody:      document.getElementById("marker-mgr-body"),
         // Header progress
         cutterBody:         document.getElementById("cutter-body"),
         headerProgress:     document.getElementById("cutter-progress-header"),
@@ -258,6 +255,16 @@
                     });
                 }
             } else {
+                // A new IN while a previous IN is still open (no OUT between them):
+                // the previous IN would be silently dropped — warn about it.
+                if (currentIn !== null) {
+                    warnings.push({
+                        type: "orphan-in",
+                        time: currentIn.startSeconds,
+                        name: currentIn.name || "",
+                        comment: (currentIn.comments || "").trim()
+                    });
+                }
                 currentIn = m;
             }
         }
@@ -645,6 +652,9 @@
             return;
         }
 
+        // Ensure the shared confirm button runs the single-cut path, not batch.
+        state._batchConfirmPending = false;
+
         var totalRemove = 0;
         for (var i = 0; i < state.removeZones.length; i++) {
             totalRemove += (state.removeZones[i].end - state.removeZones[i].start);
@@ -729,6 +739,8 @@
             // Step 3: Execute cuts via ExtendScript
             var escaped = escExtend(tmpPath);
             evalScript('executeCuts("' + escaped + '")', function(cutResult) {
+                // Temp instruction file already consumed by the host — clean it up.
+                try { fs.unlinkSync(tmpPath); } catch(_e) {}
                 dom.analyzeProgressFill.style.width = "95%";
                 dom.analyzeProgressText.textContent = "Cargando marcadores...";
 
@@ -1731,13 +1743,17 @@
             state.batchLog.push("=== " + seq.seqName + " ===");
 
             evalScript('openSequenceById("' + seq.seqId + '")', function(openResult) {
-                if (openResult.error) {
-                    state.batchLog.push("ERROR al abrir: " + openResult.error);
+                // Guard: if the target sequence could not be made active (verified=false),
+                // NEVER proceed — backup/executeCuts operate on app.project.activeSequence,
+                // so cutting here would corrupt whatever sequence is currently active.
+                if (openResult.error || !openResult.verified) {
+                    var _openErr = openResult.error || "No se pudo activar la secuencia (Premiere no cambió de pestaña a tiempo)";
+                    state.batchLog.push("ERROR al abrir: " + _openErr);
                     state.batchResults.push({
                         seqId: seq.seqId,
                         seqName: seq.seqName,
                         success: false,
-                        error: openResult.error,
+                        error: _openErr,
                         detail: "",
                         log: []
                     });
@@ -1788,7 +1804,9 @@
                     }
 
                     var escaped = escExtend(tmpPath);
+                    var _batchTmpPath = tmpPath;
                     evalScript('executeCuts("' + escaped + '")', function(cutResult) {
+                        try { fs.unlinkSync(_batchTmpPath); } catch(_e) {}
                         dom.analyzeProgressText.textContent =
                             "(" + (current + 1) + "/" + total + ") Finalizando: " + seq.seqName + "...";
                         dom.analyzeProgressFill.style.width = basePct + Math.round((1 / total) * 85) + "%";

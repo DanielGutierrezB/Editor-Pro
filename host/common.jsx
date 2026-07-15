@@ -21,7 +21,7 @@ if (typeof JSON.stringify !== "function") {
         if (obj === undefined) return undefined;
         var t = typeof obj;
         if (t === "number" || t === "boolean") return String(obj);
-        if (t === "string") return '"' + obj.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r") + '"';
+        if (t === "string") return '"' + obj.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t").replace(/[\u0000-\u001f]/g, function(c) { return "\\u" + ("0000" + c.charCodeAt(0).toString(16)).slice(-4); }) + '"';
         if (obj instanceof Array) {
             var a = [];
             for (var i = 0; i < obj.length; i++) a.push(JSON.stringify(obj[i]));
