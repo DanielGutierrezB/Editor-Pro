@@ -1,7 +1,6 @@
 /**
  * state.js — Central state manager for Editor-Pro
- * Defines the canonical state object and typed accessors.
- * Exposes: window._epState (raw object, backward compat) and window.EPState
+ * Defines the canonical state object, shared across all modules as window._epState.
  */
 (function(global) {
     "use strict";
@@ -60,21 +59,6 @@
         }
     };
 
-    function getState(key) {
-        return state[key];
-    }
-
-    function setState(key, value) {
-        state[key] = value;
-    }
-
-    global.EPState = {
-        get: getState,
-        set: setState,
-        raw: state
-    };
-
-    // Backward compat: UI modules and main.js access window._epState directly
     global._epState = state;
 
 })(window);

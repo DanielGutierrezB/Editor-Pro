@@ -76,7 +76,13 @@ RenderQueue.prototype._processNext = function() {
   // The actual render is delegated via the callback set by the router
   if (typeof this._renderFn === 'function') {
     var self = this;
-    this._renderFn(job, function(err, result) {
+    var settled = false;
+    var finish = function(err, result) {
+      // The configured render fn may call back from more than one event
+      // (e.g. both a child process 'close' and 'error' handler) — guard
+      // against processing the same job twice and running two renders at once.
+      if (settled) return;
+      settled = true;
       if (err) {
         job.status = 'error';
         job.error = err.message || String(err);
@@ -90,7 +96,16 @@ RenderQueue.prototype._processNext = function() {
       self.currentJobId = null;
       // Process next in queue
       self._processNext();
-    });
+    };
+    try {
+      this._renderFn(job, finish);
+    } catch (syncErr) {
+      // A synchronous throw from _renderFn (e.g. disk/permission errors during
+      // the setup work it does before kicking off the async render) must not
+      // leave currentJobId stuck forever — that would deadlock every job
+      // enqueued after this one until the server restarts.
+      finish(syncErr);
+    }
   } else {
     job.status = 'error';
     job.error = 'No render function configured';

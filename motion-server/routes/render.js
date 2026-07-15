@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const { execSync, execFileSync, execFile } = require('child_process'); // execFileSync used by probeVideoDurationSec
+const { execFileSync, execFile } = require('child_process');
 const fs = require('fs');
 const RemotionManager = require('../lib/remotion-manager');
 const RenderQueue = require('../lib/render-queue');
@@ -310,4 +310,8 @@ router.post('/preview', (req, res) => {
   });
 });
 
+// Exposed so other routes (studio.js) can check whether a render is currently
+// in flight before touching the shared Root.tsx / compositions dir directly —
+// avoids racing the Remotion child process while it bundles.
 module.exports = router;
+module.exports.queue = renderQueue;

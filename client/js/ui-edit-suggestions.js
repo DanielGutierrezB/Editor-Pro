@@ -11,7 +11,7 @@
     // ─── Shared references (captured at init time, not load time) ─
     var state, csInterface, fs, path, os, aiAnalyzer;
     var on, clearContainer, safeCallback, showToast, showElement, hideElement;
-    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress;
+    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress, evalScriptWithJson;
     var checkAIReady, expandSection, formatTime, formatTimeFull, navigateToTime;
     var parseTranscriptJson, _getTranscriptFolders;
     var refreshSequenceInfo, buildTimedTranscript, copyToClipboard;
@@ -24,6 +24,7 @@
     var readTranscriptFromProjectFile, readCaptionsFromProjectFile;
     var srtSegmentsToSttResult, renderTranscriptFromSegments, bindCollapsibles;
     var MP_ANTICIPATION_SECS;
+    var batchSeqRunner;
 
     function _initRefs() {
         state       = global._epState;
@@ -44,6 +45,7 @@
         esc                      = global._epEsc;
         escAttr                  = global._epEscAttr;
         escExtend                = global._epEscExtend;
+        evalScriptWithJson       = global._epEvalScriptWithJson;
         setProgress              = global._epSetProgress;
         checkAIReady             = global._epCheckAIReady;
         expandSection            = global._epExpandSection;
@@ -83,6 +85,7 @@
         MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0.35;
         parseTranscriptJson      = global._epParseTranscriptJson;
         _getTranscriptFolders    = global._epGetTranscriptFolders;
+        batchSeqRunner           = global.BatchSeqRunner;
     }
 
     function getEditColor(type) {
@@ -489,21 +492,10 @@
         });
 
         if (markers.length === 0) return;
-        if (!fs || !os) {
-            showToast("Error: Node.js no disponible", "error");
-            return;
-        }
-        var tmpFile = path.join(os.tmpdir(), "pe_es2_err_markers.json");
-        fs.writeFileSync(tmpFile, JSON.stringify(markers), "utf8");
-        var safePath = tmpFile.replace(/\\/g, "/");
-        csInterface.evalScript('addMarkersFromFile("' + safePath + '")', function(result) {
-            try {
-                var data = JSON.parse(result);
-                if (data.error) { showToast("Error: " + data.error, "error"); return; }
-                showToast(data.placed + " marcadores colocados", "success");
-            } catch(e) {
-                showToast("Error al colocar marcadores", "error");
-            }
+        evalScriptWithJson("addMarkersFromFile", markers, function(err, data) {
+            if (err) { showToast("Error al colocar marcadores", "error"); return; }
+            if (data.error) { showToast("Error: " + data.error, "error"); return; }
+            showToast(data.placed + " marcadores colocados", "success");
         });
     }
 
@@ -512,24 +504,13 @@
             showToast("No hay " + label + " para marcar", "info");
             return;
         }
-        if (!fs || !os) {
-            showToast("Error: Node.js no disponible", "error");
-            return;
-        }
-        var tmpFile = path.join(os.tmpdir(), "pe_es2_markers.json");
-        fs.writeFileSync(tmpFile, JSON.stringify(markers), "utf8");
-        var safePath = tmpFile.replace(/\\/g, "/");
 
         csInterface.evalScript('clearMarkersByPrefix("' + prefix + '")', function() {
-            csInterface.evalScript('addMarkersFromFile("' + safePath + '")', function(result) {
-                try {
-                    var data = JSON.parse(result);
-                    if (data.error) { showToast("Error: " + data.error, "error"); return; }
-                    showToast(data.placed + " marcadores de " + label + " colocados", "success");
-                    refreshSequenceInfo();
-                } catch(e) {
-                    showToast("Error al colocar marcadores", "error");
-                }
+            evalScriptWithJson("addMarkersFromFile", markers, function(err, data) {
+                if (err) { showToast("Error al colocar marcadores", "error"); return; }
+                if (data.error) { showToast("Error: " + data.error, "error"); return; }
+                showToast(data.placed + " marcadores de " + label + " colocados", "success");
+                refreshSequenceInfo();
             });
         });
     }
@@ -754,11 +735,6 @@
             showToast("Este reel no tiene segmentos", "info");
             return;
         }
-        if (!fs || !os || !path) {
-            showToast("Error: Node.js no disponible", "error");
-            return;
-        }
-
         var reelName = (state.sequenceName || "Secuencia") + "_Reel";
         if (state.reelProposals.length > 1) {
             reelName += "_" + (reelIdx + 1);
@@ -768,39 +744,21 @@
             return { start: seg.time, end: seg.endTime || seg.time + 5 };
         });
 
-        var payload = JSON.stringify({
-            reelName: reelName,
-            keepZones: keepZones
-        });
-
-        var tmpFile = path.join(os.tmpdir(), "EditorPro_reel_" + reelIdx + ".json");
-        try {
-            fs.writeFileSync(tmpFile, payload, "utf8");
-        } catch(e) {
-            showToast("Error al escribir archivo temporal: " + e.message, "error");
-            return;
-        }
-
         disableBtn("btn-reelproposal");
         showToast("Generando secuencia de reel...", "info");
 
-        var escaped = escExtend(tmpFile);
-        csInterface.evalScript('createReelSequence("' + escaped + '")', function(result) {
+        evalScriptWithJson("createReelSequence", { reelName: reelName, keepZones: keepZones }, function(err, data) {
             enableBtn("btn-reelproposal");
-            try {
-                var data = JSON.parse(result);
-                if (data.error) {
-                    showToast("Error: " + data.error, "error");
-                    return;
-                }
-                var msg = "Reel creado: " + (data.reelName || reelName);
-                if (data.frameChanged) msg += " (9:16)";
-                showToast(msg, "success");
-                refreshSequenceInfo();
-            } catch(e) {
-                showToast("Error al crear secuencia de reel", "error");
+            if (err) { showToast("Error al crear secuencia de reel", "error"); return; }
+            if (data.error) {
+                showToast("Error: " + data.error, "error");
+                return;
             }
-        });
+            var msg = "Reel creado: " + (data.reelName || reelName);
+            if (data.frameChanged) msg += " (9:16)";
+            showToast(msg, "success");
+            refreshSequenceInfo();
+        }, { fileName: "EditorPro_reel_" + reelIdx + ".json" });
     }
 
     function setRPProgress(pct, text) {
@@ -903,61 +861,15 @@
         });
     }
 
+    // Transcript lookup/loading is identical to the Smart Supertexts batch mode —
+    // shared in BatchSeqRunner (batch-seq-runner.js).
+
     function _es2BatchFindTranscript(folders, seqName) {
-        if (!seqName || !fs || !path) return null;
-        var baseName = seqName.replace(/[\/\\:*?"<>|]/g, "_");
-        for (var fi = 0; fi < folders.length; fi++) {
-            var folder = folders[fi];
-            var jp = path.join(folder, baseName + ".json");
-            if (fs.existsSync(jp)) return jp;
-            var sp = path.join(folder, baseName + ".srt");
-            if (fs.existsSync(sp)) return sp;
-        }
-        return null;
+        return batchSeqRunner.findSequenceTranscript(folders, seqName);
     }
 
     function _es2BatchLoadTranscript(filePath) {
-        if (!filePath || !fs) return null;
-        try {
-            var segments = null;
-
-            if (filePath.toLowerCase().endsWith(".json")) {
-                var parsed = parseTranscriptJson(filePath);
-                if (parsed && parsed.words && parsed.words.length > 5) {
-                    var srt = sttResultToSRT(parsed);
-                    segments = parseSRT(srt);
-                }
-                if (!segments || segments.length < 3) {
-                    var raw = fs.readFileSync(filePath, "utf8");
-                    var jsonData = JSON.parse(raw);
-                    if (jsonData.segments && jsonData.segments.length > 0 && jsonData.segments[0].words) {
-                        segments = [];
-                        for (var si = 0; si < jsonData.segments.length; si++) {
-                            var seg = jsonData.segments[si];
-                            var words = seg.words || [];
-                            var text = words.map(function(w) { return w.text || ""; }).join(" ").trim();
-                            if (text) {
-                                segments.push({
-                                    startTime: seg.start || 0,
-                                    endTime: (seg.start || 0) + (seg.duration || 5),
-                                    text: text
-                                });
-                            }
-                        }
-                    }
-                }
-            } else {
-                var content = fs.readFileSync(filePath, "utf8");
-                segments = parseSRT(content);
-            }
-
-            if (segments && segments.length > 3) {
-                return segments.map(function(s) {
-                    return "[" + s.startTime.toFixed(1) + "s - " + s.endTime.toFixed(1) + "s] " + s.text;
-                }).join("\n");
-            }
-            return null;
-        } catch(_e) { return null; }
+        return batchSeqRunner.loadTimedTranscript(filePath);
     }
 
     function _es2BatchRenderCards() {
@@ -1066,10 +978,7 @@
     }
 
     function _es2BatchSetProgress(pct, text) {
-        var fill = document.getElementById("es2-batch-progress-fill");
-        var label = document.getElementById("es2-batch-progress-text");
-        if (fill) fill.style.width = Math.min(pct, 100) + "%";
-        if (label) label.textContent = text || "";
+        batchSeqRunner.setBatchProgress("es2", pct, text);
     }
 
     function _es2BatchUpdateCardStatus(seqName, pillClass, pillText) {
@@ -1103,17 +1012,7 @@
     }
 
     function _es2BatchSetCancelBtn(running) {
-        var btn = document.getElementById("btn-es2-batch-cancel");
-        if (!btn) return;
-        if (running) {
-            btn.textContent = "Detener";
-            btn.style.borderColor = "rgba(248,113,113,0.4)";
-            btn.style.color = "#f87171";
-        } else {
-            btn.textContent = "Cerrar Batch";
-            btn.style.borderColor = "";
-            btn.style.color = "";
-        }
+        batchSeqRunner.setBatchCancelBtn("es2", running);
     }
 
     function es2BatchClose() {
@@ -1215,12 +1114,7 @@
     }
 
     function _es2BatchGetAnalyzedNames() {
-        var names = [];
-        for (var qi = 0; qi < _es2BatchQueue.length; qi++) {
-            var n = _es2BatchQueue[qi].name;
-            if (_es2BatchResults[n] && _es2BatchResults[n].result) names.push(n);
-        }
-        return names;
+        return batchSeqRunner.getBatchAnalyzedNames(_es2BatchQueue, _es2BatchResults, "result");
     }
 
     function _es2BatchNavigateTo(seqName) {
@@ -1261,10 +1155,7 @@
 
     function _es2BatchUpdateNav() {
         var analyzed = _es2BatchGetAnalyzedNames();
-        var prevBtn = document.getElementById("btn-es2-bnav-prev");
-        var nextBtn = document.getElementById("btn-es2-bnav-next");
-        if (prevBtn) prevBtn.className = "btn-batch-nav" + (_es2BatchCurrentNav <= 0 ? " disabled" : "");
-        if (nextBtn) nextBtn.className = "btn-batch-nav" + (_es2BatchCurrentNav >= analyzed.length - 1 ? " disabled" : "");
+        batchSeqRunner.updateBatchNavButtons("es2", _es2BatchCurrentNav, analyzed.length);
     }
 
     function es2BatchNavPrev() {

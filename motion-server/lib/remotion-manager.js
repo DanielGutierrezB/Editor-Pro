@@ -323,6 +323,15 @@ class RemotionManager {
 
     let stdout = '';
     let stderr = '';
+    let callbackFired = false;
+    const fireOnce = (err, result) => {
+      // 'close' and 'error' can both fire for the same spawned process — make sure
+      // we only ever report one outcome to the caller (RenderQueue relies on this).
+      if (callbackFired) return;
+      callbackFired = true;
+      if (err) callback(err);
+      else callback(null, result);
+    };
 
     proc.stdout.on('data', (data) => { stdout += data.toString(); });
     proc.stderr.on('data', (data) => { stderr += data.toString(); });
@@ -358,7 +367,7 @@ class RemotionManager {
             } catch(_e) {}
           }
         }
-        callback(null, { mp4Path: finalPath, compositionId });
+        fireOnce(null, { mp4Path: finalPath, compositionId });
       } else {
         const errorMsg = stderr || stdout;
         const buildErrorMatch = errorMsg.match(/compositions\/([^:]+\.tsx):\d+:\d+: ERROR:/);
@@ -371,12 +380,12 @@ class RemotionManager {
             try { fs.unlinkSync(brokenPath); } catch(_e) {}
           }
         }
-        callback(new Error(`Render failed (code ${code}): ${errorMsg}`));
+        fireOnce(new Error(`Render failed (code ${code}): ${errorMsg}`));
       }
     });
 
     proc.on('error', (err) => {
-      callback(new Error('Spawn error: ' + err.message));
+      fireOnce(new Error('Spawn error: ' + err.message));
     });
 
     return proc;

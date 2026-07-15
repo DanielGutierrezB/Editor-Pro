@@ -11,7 +11,7 @@
     // ─── Shared references (captured at init time, not load time) ─
     var state, csInterface, fs, path, os, aiAnalyzer, stt, recorder;
     var on, clearContainer, safeCallback, showToast, showElement, hideElement;
-    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress;
+    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress, evalScriptWithJson;
     var checkAIReady, expandSection, formatTime, formatTimeFull, navigateToTime;
     var refreshSequenceInfo, buildTimedTranscript, copyToClipboard;
     var getPromptContext, togglePromptEditorById, savePromptById, resetPromptById;
@@ -47,6 +47,7 @@
         esc                      = global._epEsc;
         escAttr                  = global._epEscAttr;
         escExtend                = global._epEscExtend;
+        evalScriptWithJson       = global._epEvalScriptWithJson;
         setProgress              = global._epSetProgress;
         checkAIReady             = global._epCheckAIReady;
         expandSection            = global._epExpandSection;
@@ -1620,14 +1621,10 @@
                 color: 6
             });
 
-            var tmpFile = path.join(os.tmpdir(), "edupro_preview_markers.json");
-            try {
-                fs.writeFileSync(tmpFile, JSON.stringify(previewMarkers), "utf8");
-            } catch(e) { return; }
-            var safePath = tmpFile.replace(/\\/g, "/");
-            csInterface.evalScript('addMarkersFromFile("' + escExtend(safePath) + '")', function() {
+            evalScriptWithJson("addMarkersFromFile", previewMarkers, function(err) {
+                if (err) return;
                 navigateToTime(Math.max(0, seg.inTime - 1));
-            });
+            }, { fileName: "edupro_preview_markers.json" });
         });
     }
 
@@ -1643,12 +1640,10 @@
                 comment: (mkr.comment || "Marcador sugerido") + " — \"" + (mkr.approximateText || "").substring(0, 80) + "\"",
                 color: 6
             }];
-            var tmpFile = path.join(os.tmpdir(), "edupro_preview_markers.json");
-            try { fs.writeFileSync(tmpFile, JSON.stringify(previewMarkers), "utf8"); } catch(e) { return; }
-            var safePath = tmpFile.replace(/\\/g, "/");
-            csInterface.evalScript('addMarkersFromFile("' + escExtend(safePath) + '")', function() {
+            evalScriptWithJson("addMarkersFromFile", previewMarkers, function(err) {
+                if (err) return;
                 navigateToTime(Math.max(0, startTime - 1));
-            });
+            }, { fileName: "edupro_preview_markers.json" });
         });
     }
 
@@ -1803,12 +1798,6 @@
     }
 
     function _doPlaceMarkers(markers) {
-        if (!fs || !os) {
-            showToast("Error: Node.js no disponible", "error");
-            return;
-        }
-
-        var tmpFile = path.join(os.tmpdir(), "edupro_markers.json");
         var markerData = markers.map(function(m) {
             return {
                 time: m.time,
@@ -1819,17 +1808,12 @@
             };
         });
 
-        try {
-            fs.writeFileSync(tmpFile, JSON.stringify(markerData), "utf8");
-        } catch(e) {
-            showToast("Error al escribir archivo temporal: " + e.message, "error");
-            return;
-        }
-
-        var safePath = tmpFile.replace(/\\/g, "/");
-        csInterface.evalScript('addMarkersFromFile("' + escExtend(safePath) + '")', function(result) {
-            try {
-                var data = JSON.parse(result);
+        evalScriptWithJson("addMarkersFromFile", markerData, function(err, data) {
+            if (err) {
+                showToast("Error al colocar marcadores: " + err.message, "error");
+                return;
+            }
+            {
                 if (data.error) {
                     showToast("Error: " + data.error, "error");
                     return;
@@ -1852,8 +1836,6 @@
                 openRecStep(6);
                 showToast(data.placed + " marcadores colocados — puedes cortar la secuencia", "success");
                 refreshSequenceInfo();
-            } catch(e) {
-                showToast("Error al colocar marcadores", "error");
             }
         });
     }
