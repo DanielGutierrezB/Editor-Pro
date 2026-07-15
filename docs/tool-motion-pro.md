@@ -94,67 +94,74 @@ Propuestas: [{
 }]
 ```
 
-## 20 Tipos de Motion
+## 16 Tipos de Motion
+
+Definidos en `motion-server/lib/prompts/type-instructions.js` (`TYPE_INSTRUCTIONS`):
 
 ```
 ┌──────────────┬────────────────────────────────────────┐
 │ Tipo         │ Descripción                            │
 ├──────────────┼────────────────────────────────────────┤
-│ comparison   │ Tabla/columnas comparativas            │
+│ comparison   │ Tabla/columnas comparativas (A vs B)   │
 │ steps        │ Proceso paso a paso                    │
-│ icons        │ Iconos con labels                      │
+│ icons        │ Reveal de iconos con labels            │
 │ chart        │ Gráficos animados (barras, líneas)     │
-│ title        │ Título con subtítulo                   │
-│ cards        │ Tarjetas con contenido                 │
-│ diagram      │ Diagramas de flujo                     │
+│ title        │ Título/intro con subtítulo             │
+│ cards        │ Tarjetas en flujo horizontal           │
+│ diagram      │ Diagrama de flujo                      │
 │ ui           │ Mockup de interfaz                     │
-│ metrics      │ Métricas con odómetro                  │
-│ gauge        │ Gauge circular animado                 │
-│ reveal       │ Revelar contenido con scroll           │
-│ list         │ Lista animada                          │
-│ timeline     │ Línea de tiempo horizontal             │
-│ funnel       │ Embudo de conversión                   │
-│ callout      │ Callout con flecha                     │
-│ beforeafter  │ Antes/después con slider               │
-│ ... y más    │                                        │
+│ timeline     │ Línea de tiempo (eventos secuenciales) │
+│ reveal       │ Revelar / draw-on                      │
+│ list         │ Lista animada (items verticales)       │
+│ metrics      │ Dashboard de KPIs/métricas             │
+│ beforeafter  │ Antes/después (split screen)           │
+│ funnel       │ Embudo/pipeline con flujo              │
+│ gauge        │ Gauge/benchmark (métrica vs objetivo)  │
+│ callout      │ Callout / frase clave                  │
 └──────────────┴────────────────────────────────────────┘
 ```
 
-## Paso 2: Proponer → Generar → Preview
+## Paso 2: Context Pass → Generación (Static Layout) → Preview
+
+El pipeline de generación por defecto (el que dispara "Generar") es el **motor de
+Static Layout**: el LLM diseña solo el layout + estilo estáticos y el **Anim
+wrapper** inyecta toda la animación automáticamente. El antiguo subsistema de
+templates (`template-manager.js`, `template-prompt.js`, `templates/*.tsx`) fue
+eliminado — la ruta `POST /api/generate/template` hoy es el motor de static-layout.
 
 ```
-Propuesta seleccionada
+Context Pass (una sola llamada para todo el batch)
+    POST /api/generate/context
+    ├─ Analiza el transcript completo + lista de segmentos marcados
+    └─ Genera notas de contexto + plan de timing por segmento
          │
          ▼
-OPCIÓN A: Template-based (rápido)
-    POST /api/generate/template
-    ├─ Elige template predefinido según type
-    ├─ LLM llena datos del template
-    └─ TSX predecible, consistente
-
-OPCIÓN B: Free-form (creativo)
-    POST /api/generate/propose → descripción visual
-    POST /api/generate → TSX Remotion original
-    ├─ LLM genera código TSX desde cero
-    ├─ Más creativo pero puede fallar
-    └─ Sanitización automática:
-        ├─ tsx-sanitizer.js: brandfetch, Trail, transitions
-        ├─ tsx-validator.js: imports, syntax
-        └─ Auto-fix para errores comunes
+Por cada propuesta seleccionada:
+    POST /api/generate/template  (motor Static Layout)
+    ├─ getStaticLayoutPrompt(): el LLM diseña SOLO layout + estilo (sin animación)
+    ├─ injectAnimWrapper(): inyecta la implementación de Anim/Section (motion)
+    └─ Sanitización + validación automática:
+        ├─ tsx-sanitizer.js: brandfetch, Trail, transitions, staticPreview
+        ├─ tsx-validator.js: imports permitidos, syntax + auto-fix
+        └─ timing-validator.js: gaps + persistencia de elementos hasta el frame final
          │
          ▼
-POST /api/render/preview → still PNG (~15 segundos)
+POST /api/render/preview → still PNG
          │
-         ├─ Remotion renderiza frame 30 como PNG
+         ├─ Remotion renderiza un frame como PNG
          ├─ staticPreview: elementos a full opacity
          │
          ▼
 PNG colocado en timeline como preview
          │
          ├─ Usuario revisa visualmente
-         ├─ Puede dar feedback → regenerar
+         ├─ Puede dar feedback → regenerar (POST /api/feedback)
          └─ Cuando está OK → Animar
 ```
+
+> También existe una ruta de generación free-form (`POST /api/generate`) que genera
+> TSX Remotion desde cero, pero el flujo estándar de la UI usa el motor de
+> Static Layout descrito arriba.
 
 ## Paso 2b: Feedback → Regenerar
 
@@ -189,7 +196,8 @@ POST /api/render (con durationFrames override)
          │
          ├─ Render queue: 1 job a la vez
          ├─ Polling: GET /api/render/status/:jobId (cada 3s)
-         ├─ Render: H.264, 1920×1080, 30fps, CRF 15
+         ├─ Render: Remotion → ProRes 422, 1920×1080, 30fps
+         │   (ProRes 4444 con alpha en modo transparente)
          │
          ▼
 MP4 listo
@@ -257,6 +265,11 @@ tsx-validator.js:
 └─ autoFixSyntax() → cerrar strings abiertas
          │
          ▼
+timing-validator.js:
+├─ detectar gaps de timing
+└─ verificar que los elementos persisten hasta el frame final
+         │
+         ▼
 TSX limpio → writeComposition() → Root.tsx → render
 ```
 
@@ -283,32 +296,41 @@ Al cambiar de secuencia:
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
 | GET | `/api/status` | Estado del servidor |
-| POST | `/api/generate` | Generar TSX desde transcript |
-| POST | `/api/generate/template` | Generar con template |
+| POST | `/api/rhythm` | Análisis de ritmo del transcript |
+| GET/POST | `/api/prompts` | Obtener / actualizar prompts |
+| POST | `/api/palette` | Generar/analizar paleta de colores |
 | POST | `/api/generate/propose` | Propuesta visual (art director) |
+| POST | `/api/generate` | Generar TSX free-form desde transcript |
+| POST | `/api/generate/template` | Motor Static Layout (layout + Anim wrapper) |
+| POST | `/api/generate/context` | Context Pass del batch completo |
 | POST | `/api/render` | Encolar render → jobId |
 | GET | `/api/render/status/:id` | Estado del job |
 | POST | `/api/render/preview` | Render still PNG |
 | POST | `/api/feedback` | Regenerar con feedback |
 | GET | `/api/studio/sync` | Sincronizar sesión |
 | GET | `/api/studio/start` | Abrir Remotion Studio |
-| POST | `/api/rhythm` | Análisis de ritmo del transcript |
-| GET | `/api/prompts` | Obtener prompts actuales |
-| POST | `/api/prompts` | Actualizar prompts |
+| GET | `/api/studio/url[/:id]` | URL de Remotion Studio |
+| POST/GET | `/api/broll/*` | Rutas de B-Roll (ver [B-Roll](./tool-broll.md)) |
 
 ## Archivos
 
-| Archivo | Rol | Líneas |
-|---------|-----|--------|
-| `ui-motion-pro.js` | UI completa: paleta, propuestas, generación, animación, control panel | 2,793 |
-| `motion-pro.js` | Server lifecycle, HTTP client, polling | 893 |
-| `motion-server/server.js` | Express entry point (puerto 3847) | 230 |
-| `motion-server/lib/remotion-manager.js` | Composition writing, Root.tsx, render | 391 |
-| `motion-server/lib/tsx-sanitizer.js` | Sanitización de TSX | 232 |
-| `motion-server/lib/tsx-validator.js` | Validación + auto-fix | 166 |
-| `motion-server/lib/prompts.js` | System prompt + type instructions | 898 |
-| `motion-server/lib/llm.js` | Abstracción multi-proveedor LLM | 475 |
-| `motion-server/lib/render-queue.js` | Cola async de renders | 138 |
-| `motion-server/lib/rhythm-analyzer.js` | Análisis de ritmo | 215 |
-| `host/motion.jsx` | importAndPlaceMotions, replaceMotionOnTrack | 564 |
-| `css/motion-pro.css` | Estilos | 550 |
+| Archivo | Rol |
+|---------|-----|
+| `ui-motion-pro.js` | UI completa: paleta, propuestas, generación, animación, control panel |
+| `motion-pro.js` | Server lifecycle, versionado, sesión; delega HTTP en `motion-server-client.js` |
+| `motion-server-client.js` | Cliente HTTP compartido (`createMotionServerClient`) — usado por Motion-Pro y B-Roll |
+| `motion-server/server.js` | Express entry point (puerto 3847) |
+| `motion-server/lib/remotion-manager.js` | Composition writing, Root.tsx, render |
+| `motion-server/lib/tsx-sanitizer.js` | Sanitización de TSX |
+| `motion-server/lib/tsx-validator.js` | Validación de imports/syntax + auto-fix |
+| `motion-server/lib/timing-validator.js` | Validación de timing (gaps, persistencia) |
+| `motion-server/lib/anim-wrapper.js` | Inyecta implementación de Anim/Section (motion) |
+| `motion-server/lib/static-layout-prompt.js` | Prompt del motor Static Layout |
+| `motion-server/lib/prompts.js` | Orquestador de prompts (~349 ln); contenido en `lib/prompts/` |
+| `motion-server/lib/prompts/` | system-prompt, palette-prompt, composition-defs, type-instructions |
+| `motion-server/lib/llm.js` | Abstracción multi-proveedor LLM (`_httpJson` unificado) |
+| `motion-server/lib/render-queue.js` | Cola async de renders (1 a la vez, `fireOnce`) |
+| `motion-server/lib/rhythm-analyzer.js` | Análisis de ritmo del transcript |
+| `motion-server/lib/color-extractor.js` | Extracción de colores de marca |
+| `host/motion.jsx` | importAndPlaceMotions, replaceMotionOnTrack, importAndPlaceAbove |
+| `css/motion-pro.css` | Estilos |

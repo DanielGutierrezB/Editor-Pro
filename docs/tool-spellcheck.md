@@ -27,7 +27,7 @@ SpellCheckEngine.check(text)
          │   (haber/a ver, ahí/hay/ay, etc.)
          │
          ▼
-AIAnalyzer.analyzeSpellcheck(clips)
+AIAnalyzer.analyzeSpellCheck(text, context)
          │
          ├─ LLM revisa contexto completo
          ├─ Detecta errores que Hunspell no puede:
@@ -64,8 +64,9 @@ SpellCheckEngine.addToDict(word)
 
 | Archivo | Rol |
 |---------|-----|
-| `ui-spellcheck.js` | UI de resultados (429 líneas) |
-| `spellcheck-engine.js` | Hunspell + análisis (781 líneas) |
-| `context-rules.js` | Reglas de confusión español (467 líneas) |
-| `host/spellcheck.jsx` | exportSequenceXML, getSequenceCaptions |
-| `css/spellcheck.css` | Estilos (400 líneas) |
+| `ui-spellcheck.js` | UI de resultados |
+| `spellcheck-engine.js` | Hunspell (typo-js) + análisis ortográfico |
+| `context-rules.js` | Reglas de confusión español (haber/a ver, etc.) |
+| `ai-analyzer.js` | analyzeSpellCheck() — LLM call |
+| `host/spellcheck.jsx` | exportSequenceXML |
+| `css/spellcheck.css` | Estilos |

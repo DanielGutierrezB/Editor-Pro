@@ -136,7 +136,11 @@ Navegar entre secuencias ← →
 
 | Archivo | Rol |
 |---------|-----|
-| `ui-supertexts.js` | UI + batch + filtro (1,996 líneas) |
+| `ui-supertexts.js` | UI + batch + filtro por tracks |
+| `batch-seq-runner.js` | Helpers de "modo batch" (compartidos con Edit Suggestions) |
 | `host/supertexts.jsx` | insertSupertextMOGRTs, replaceMOGRTClip |
 | `ai-analyzer.js` | analyzeSupertexts() — LLM call |
-| `css/supertexts.css` | Estilos (692 líneas) |
+| `css/supertexts.css` | Estilos |
+
+Ver también la referencia técnica de los MOGRT:
+[Smart Supertext MOGRTs](./smart-supertext-mogrt.md).

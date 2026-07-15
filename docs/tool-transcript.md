@@ -45,7 +45,7 @@ Secuencia cambia (polling cada 2s)
     SÍ             NO
     │              │
     ▼              ▼
-Restaurar      transcript-cache.js:
+Restaurar      transcript-manager.js:
 estado         autoLoadTranscriptForSequence()
 cacheado           │
                    ├─ 1. Buscar en carpetas conocidas
@@ -73,7 +73,7 @@ evalScript("getSequenceTranscriptInfo()")
          │
          ▼
 Prioridad 1: Carpetas conocidas
-         │ (transcript-cache)
+         │ (transcript-manager)
          │
 Prioridad 2: Archivos cerca del proyecto
          │ (.prtranscript > .json > .srt)
@@ -128,6 +128,9 @@ Al cambiar de secuencia:
 
 | Archivo | Rol |
 |---------|-----|
-| `transcript-parser.js` | Parseo de todos los formatos (679 líneas) |
-| `transcript-manager.js` | Carga, búsqueda, UI (634 líneas) |
-| `transcript-cache.js` | Auto-load, cache por secuencia (388 líneas) |
+| `transcript-parser.js` | Parseo de todos los formatos (SRT, JSON, .prtranscript, captions) |
+| `transcript-manager.js` | Carga, búsqueda, cache por secuencia, auto-load y UI |
+
+> `transcript-cache.js` fue eliminado en el refactor de calidad de código; sus
+> funciones públicas (auto-load y cache por secuencia) las expone ahora
+> `transcript-manager.js`.

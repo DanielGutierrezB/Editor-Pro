@@ -14,7 +14,7 @@ Transcripción cargada
 Click "Analizar Edición"
          │
          ▼
-AIAnalyzer.analyzeEditSuggestions(transcript, promptContext)
+AIAnalyzer.analyzeEditSuggestions2(transcript, promptContext)
          │
          ├─ LLM analiza el transcript completo
          │
@@ -108,6 +108,7 @@ Mismo patrón que Smart Supertexts:
 
 | Archivo | Rol |
 |---------|-----|
-| `ui-edit-suggestions.js` | UI de ambas herramientas (1,318 líneas) |
-| `ai-analyzer.js` | analyzeEditSuggestions(), analyzeReelProposal() |
+| `ui-edit-suggestions.js` | UI de ambas herramientas (Edit Suggestions + Reel Proposal) |
+| `ai-analyzer.js` | analyzeEditSuggestions2(), analyzeReelProposal() |
+| `batch-seq-runner.js` | Helpers de "modo batch" (compartidos con Smart Supertexts) |
 | `host/recording.jsx` | createReelSequence() |

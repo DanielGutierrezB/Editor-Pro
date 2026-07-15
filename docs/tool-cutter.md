@@ -14,8 +14,8 @@ Lee los marcadores de la secuencia activa, identifica bloques de contenido (IN/O
                         │                     │                  │
                         ▼                     ▼                  ▼
                  getSequenceMarkers()   UI: bloques keep/    backup →
-                 → host/common.jsx     remove con tiempos   executeCuts()
-                                       + estadísticas       → host/cutter.jsx
+                 → host/sequence-info  remove con tiempos   executeCuts()
+                   .jsx                 + estadísticas       → host/cutter.jsx
 ```
 
 ## Flujo Detallado
@@ -88,16 +88,26 @@ POST-CORTE → Marker Manager → View Mapping
 
 1. Asignar marcadores como CAM o PC
 2. Seleccionar track CAM (ej: V1) y track PC (ej: V2)
-3. activateViews(jsonPath) → host/common.jsx
+3. activateViews(jsonPath) → host/sequence-info.jsx
    ├─ Habilita clips en el track correcto
    └─ Deshabilita clips en el track incorrecto
 ```
+
+## Presets de Vista
+
+- Las vistas mapeadas se guardan como presets en `localStorage`
+  (`editorpro_view_presets`).
+- Notas de Grabación (Paso 7) genera automáticamente el preset
+  "Auto (Notas de Grabación)" a partir de la clasificación CAM/PC.
 
 ## Archivos
 
 | Archivo | Rol |
 |---------|-----|
-| `client/js/cutter.js` | UI + lógica completa (2,234 líneas) |
+| `client/js/cutter.js` | UI + lógica completa (marcadores, batch, vistas, presets) |
 | `host/cutter.jsx` | executeCuts, trimZoneOnTrack |
-| `host/common.jsx` | getSequenceMarkers, backupSequence, activateViews |
-| `client/css/cutter.css` | Estilos (309 líneas) |
+| `host/sequence-info.jsx` | getSequenceMarkers, getVideoTrackNames, getVideoClipPaths, activateViews |
+| `host/backup.jsx` | backupSequence, restoreBackup, restoreBackupById |
+| `host/marker-ops.jsx` | limpieza/colorización de marcadores post-corte |
+| `host/sequence-discovery.jsx` | listado/navegación multi-secuencia (batch) |
+| `client/css/cutter.css` | Estilos |

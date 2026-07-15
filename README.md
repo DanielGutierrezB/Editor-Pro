@@ -1,4 +1,36 @@
-# Editor-Pro — Guía de Instalación
+# Editor-Pro
+
+Plugin **CEP para Adobe Premiere Pro** con herramientas de edición asistida por IA
+y transcripción para producción de clases educativas. Vanilla JS, sin frameworks ni
+bundler.
+
+## ¿Qué incluye?
+
+El panel agrupa 9 herramientas colapsables:
+
+| Herramienta | Qué hace |
+|-------------|----------|
+| **Cortes Automáticos** | Lee marcadores IN/OUT → preview → corta (con backup, batch y vistas) |
+| **Transcripción** | Cargar/exportar audio, transcribir (ElevenLabs/Whisper), importar SRT/JSON/captions |
+| **SpellCheck IA** | Revisión ortográfica y de estilo en clips de texto (Essential Graphics) |
+| **Smart Supertexts** | Genera supertextos como gráficos MOGRT en la timeline |
+| **Sugerencias de Edición** | Analiza el transcript → highlights, cortes y errores |
+| **Propuesta de Reel** | Propone reels verticales (9:16) de alta retención |
+| **Notas de Grabación** | Pipeline de 7 pasos: audio → transcripción → tomas → marcadores → corte → vistas |
+| **Motion-Pro** | Motion graphics automáticos con Remotion (transcript → IA → MP4 en timeline) |
+| **B-Roll** | Imágenes y video generados por IA (image-to-video) colocados en la timeline |
+
+Proveedores de IA de texto soportados: **Ollama** (local), **Gemini**, **Claude**,
+**GPT** y **OpenRouter**. Motion-Pro y B-Roll usan además un servidor local
+(`motion-server/`, puerto 3847) y el proyecto Remotion de `motion-render/`.
+
+> 📖 Documentación técnica completa (arquitectura y por herramienta) en
+> [`docs/`](./docs/README.md). Guía de prompts editables en
+> [`Prompts/`](./Prompts/README.md).
+
+---
+
+## Instalación
 
 ## 1. Descargar el ZXP
 

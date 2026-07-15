@@ -70,16 +70,24 @@ Alternativas:
 Transcript cargado
          │
          ▼
-RecordingNotes.detectTakes(sttResult)
+RecordingNotes.detectSegments()
          │
-         ├─ Analiza el audio/transcript para detectar:
+         ├─ Analiza words[] buscando comandos de voz LITERALES:
          │
          │   "IN" triggers (inicio de toma):
-         │   └─ Pausa > 2s seguida de contenido
+         │   ├─ "retomemos" / "retoma"
+         │   └─ conteo descendente ("3, 2, 1" / "3, 2...") →
+         │      el IN se coloca al FINAL del último número
          │
          │   "OUT" triggers (fin de toma):
-         │   ├─ Palabras clave: "corte", "corta", "alto", "para", "pausa"
-         │   └─ Pausa larga > 3s
+         │   └─ "pausa", "corte", "corta", "alto", "para" →
+         │      el OUT se coloca al final de la última palabra de contenido
+         │
+         ├─ Post-procesamiento inteligente:
+         │   ├─ _postProcessSegments(): filtra segmentos cortos (<5s),
+         │   │  vacíos, incompletos y autocorrecciones
+         │   └─ _groupRetakes(): agrupa re-tomas por similitud Jaccard
+         │      (umbral ≥ 0.4) y recomienda la última de cada grupo
          │
          ▼
 ┌─────────────────────────────────┐
@@ -104,7 +112,7 @@ Tomas detectadas
 Click "Revisar con IA"
          │
          ▼
-AIAnalyzer.analyzeSupplementary(activeSegments, inactiveSegments)
+AIAnalyzer.analyzeTakes(activeSegments, inactiveSegments)
          │
          ├─ IA compara contenido de tomas activas vs inactivas
          ├─ Detecta: contenido único en zonas "eliminadas"
@@ -192,9 +200,11 @@ Click "Aplicar Vistas"
 
 | Archivo | Rol |
 |---------|-----|
-| `ui-recording.js` | UI de los 7 pasos (2,550 líneas) |
-| `recording-notes.js` | Detección de tomas IN/OUT (738 líneas) |
-| `speech-to-text.js` | STT multi-proveedor (933 líneas) |
-| `host/recording.jsx` | exportSequenceAudio, openBackupAndCut |
-| `host/common.jsx` | activateViews, backupSequence |
-| `css/recording.css` | Estilos (704 líneas) |
+| `ui-recording.js` | UI de los 7 pasos |
+| `recording-notes.js` | Detección de tomas IN/OUT, filtrado, agrupación de retomas |
+| `speech-to-text.js` | STT multi-proveedor (ElevenLabs, Whisper local/API) |
+| `host/recording.jsx` | exportSequenceAudio, openBackupAndCut, createReelSequence |
+| `host/spellcheck.jsx` | addMarkersFromFile, clearMarkersByPrefix (colocación por seqId) |
+| `host/sequence-info.jsx` | activateViews, getVideoClipPaths |
+| `host/backup.jsx` | backupSequence, restoreBackupById |
+| `css/recording.css` | Estilos |
