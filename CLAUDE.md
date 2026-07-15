@@ -20,15 +20,17 @@ Editor-Pro/
 │   │   └── supertexts.css   # Estilos de Smart Supertexts
 │   └── js/
 │       ├── CSInterface.js   # Bridge oficial Adobe CEP (no tocar)
-│       ├── utils.js         # DOM helpers, formatters, escaping (window.EPUtils)
+│       ├── utils.js         # DOM helpers, formatters, escaping, evalScriptWithJson (window.EPUtils)
 │       ├── state.js         # Estado central (window._epState)
-│       ├── modal.js         # Sistema de modales
+│       ├── event-bus.js     # Pub/sub (window._epBus) — desacopla módulos
+│       ├── logger.js        # Logging central (window._epLog)
 │       ├── settings.js      # Carga/guardado de settings, provider UI
 │       ├── sequence-controller.js # Polling de secuencia activa, dropdown
 │       ├── prompt-editor.js # Editor de prompts IA con versionado
 │       ├── transcript-parser.js # Parseo de SRT/JSON/prtranscript/captions
-│       ├── transcript-cache.js  # Pre-cache de transcripts por secuencia
-│       ├── transcript-manager.js # Carga, búsqueda, y UI de transcripts
+│       ├── transcript-manager.js # Carga, búsqueda, cache y UI de transcripts (incluye auto-load y copia a carpeta)
+│       ├── motion-server-client.js # Cliente HTTP compartido hacia motion-server (usado por motion-pro.js y broll.js)
+│       ├── batch-seq-runner.js  # Helpers de "modo batch" compartidos entre ui-supertexts.js y ui-edit-suggestions.js
 │       ├── ai-analyzer.js   # IA multi-proveedor (Ollama, Gemini, Claude, GPT)
 │       ├── speech-to-text.js # STT multi-proveedor (ElevenLabs, Whisper local/API)
 │       ├── recording-notes.js # Notas de grabación — detección IN/OUT, segmentos
@@ -39,7 +41,7 @@ Editor-Pro/
 │       ├── motion-pro.js    # Motion-Pro — server lifecycle, generación, versionado
 │       ├── spellcheck-engine.js # Hunspell (typo-js) + reglas ortográficas
 │       ├── context-rules.js # Reglas de confusión español (haber/a ver, etc.)
-│       ├── main.js          # Orquestador delgado: init, bindings, proxies (~800 líneas)
+│       ├── main.js          # Orquestador delgado: init, bindings, wiring entre módulos (~700 líneas)
 │       ├── ui-spellcheck.js # UI de SpellCheck
 │       ├── ui-supertexts.js # UI de Smart Supertexts + MOGRT
 │       ├── ui-edit-suggestions.js # UI de Edit Suggestions + Reel Proposal
@@ -47,11 +49,16 @@ Editor-Pro/
 │       ├── ui-broll-clips.js    # B-Roll UI: Step 3 (clip cards, animate, place, regen)
 │       ├── ui-broll.js          # B-Roll UI orchestrator (init, settings, accordion, session switch)
 │       ├── ui-recording.js  # UI de Recording Notes + STT + Vistas
-│       └── ui-motion-pro.js # UI de Motion-Pro
+│       └── ui-motion-pro.js # UI de Motion-Pro (server lifecycle, propuestas, panel de control con versionado)
 ├── host/                    # ExtendScript — API de Premiere Pro (ES3)
-│   ├── index.jsx            # Entry point (#include de módulos)
-│   ├── common.jsx           # Helpers comunes, polyfills, JSON
-│   ├── cutter.jsx           # Cortes, marcadores, backup/restore
+│   ├── index.jsx            # Entry point (#include de módulos, orden importa por dependencias de datos aunque las funciones se hoisting-ean)
+│   ├── common.jsx           # Solo JSON polyfill (ES3) + TICKS_PER_SECOND — el resto se movió a los módulos de abajo
+│   ├── backup.jsx           # Backup/restore de secuencias + persistencia en disco (editorpro_backups.json)
+│   ├── bin-utils.jsx        # Búsqueda/creación de bins en el project panel
+│   ├── sequence-info.jsx    # Lectura de secuencia activa, tracks, clips, utilidades varias (secsToTicks, movePlayhead, etc.)
+│   ├── marker-ops.jsx       # Limpieza/colorización de marcadores post-corte
+│   ├── sequence-discovery.jsx # Listado/navegación multi-secuencia del proyecto
+│   ├── cutter.jsx           # Cortes, marcadores, ejecución de zonas de remove
 │   ├── spellcheck.jsx       # Exportación XML para spellcheck
 │   ├── supertexts.jsx       # MOGRT insertion, Smart Supertexts
 │   ├── broll.jsx            # B-Roll: importAndPlaceBroll, replaceBrollClip, getBrollTrackInfo
@@ -65,13 +72,21 @@ Editor-Pro/
 │       ├── broll-prompts.js    # Prompt builder para análisis B-roll
 │       ├── image-generator.js  # Generación de imágenes (placeholder/ComfyUI/FAL.ai/Gemini)
 │       ├── video-generator.js  # Generación de video (placeholder/LTX/Kling/FAL/Gemini Veo)
-│       ├── remotion-manager.js # Composition writing, Root.tsx, render (~390 líneas)
+│       ├── audio-generator.js  # Generación de audio ambiental (placeholder/ElevenLabs)
+│       ├── anim-wrapper.js     # Wrapper de animación estática → video para providers sin motion
+│       ├── remotion-manager.js # Composition writing, Root.tsx, render (~460 líneas)
 │       ├── tsx-sanitizer.js    # Sanitización de TSX (brandfetch, Trail, transitions, staticPreview)
 │       ├── tsx-validator.js    # Validación de imports/syntax + auto-fix
-│       ├── llm.js              # LLM provider abstraction
-│       ├── prompts.js          # Prompt builder (loads from Prompts/MotionPro/*.md)
-│       ├── render-queue.js     # Async render queue (1 at a time, polling)
-│       ├── template-manager.js # Template registry
+│       ├── timing-validator.js # Validación de timing (gaps, elementos que no persisten hasta el frame final)
+│       ├── static-layout-prompt.js # Prompt para el layout estático (B-Roll)
+│       ├── llm.js              # LLM provider abstraction — un solo `_httpJson` interno para los 4 providers
+│       ├── prompts.js          # Orquestador de prompts Motion-Pro (ensambla systemMsg/userMsg); contenido real en lib/prompts/
+│       ├── prompts/            # Submódulos de prompts.js (split — ver sección "Motion-Pro" más abajo)
+│       │   ├── system-prompt.js    # Carga de docs (Prompts/MotionPro/*.md) + buildSystemPrompt()
+│       │   ├── palette-prompt.js   # Generación de paleta de colores + utilidades de contraste
+│       │   ├── composition-defs.js # Librería de componentes Remotion reutilizables por tipo
+│       │   └── type-instructions.js # Instrucciones creativas por tipo de motion
+│       ├── render-queue.js     # Async render queue (1 at a time, polling; callback idempotente con fireOnce)
 │       ├── rhythm-analyzer.js  # Transcript rhythm analysis
 │       └── color-extractor.js  # Brand color extraction
 ├── motion-render/           # Proyecto Remotion (React/TSX → MP4)
@@ -93,9 +108,11 @@ Editor-Pro/
 client/js/*.js  →  csInterface.evalScript("functionName(args)")  →  host/index.jsx  →  return JSON string
 ```
 
-- El host (`index.jsx`) es ES3 entry point que `#include`s modular .jsx files (common, cutter, spellcheck, supertexts, recording, motion).
+- El host (`index.jsx`) es ES3 entry point que `#include`s los módulos .jsx (common, backup, bin-utils, sequence-info, marker-ops, sequence-discovery, cutter, spellcheck, supertexts, recording, motion, broll).
 - `TICKS_PER_SECOND = 254016000000` para convertir tiempo de Premiere.
 - Incluye polyfill JSON propio para ES3.
+- ExtendScript's `#include` es concatenación textual y las declaraciones de función se hoisting-ean por todo el script, así que estos módulos pueden llamarse entre sí sin importar el orden de `#include`.
+- Del lado del cliente, `evalScriptWithJson(fn, jsonPath, data, callback)` en `utils.js` es el helper canónico para el patrón "escribir JSON temporal → evalScript → parsear resultado" — úsalo en vez de reimplementar `fs.writeFileSync` + `csInterface.evalScript` manualmente en cada módulo UI.
 
 ## Estado central (state.js)
 
@@ -135,8 +152,8 @@ state = {
 
 ## Módulos JS — responsabilidades
 
-### main.js (~3950 líneas)
-Controlador central. Todo el wiring de eventos, UI, y flujo entre módulos.
+### main.js (~700 líneas)
+Controlador central. Todo el wiring de eventos, UI, y flujo entre módulos. Ya no contiene proxies muertos ni duplicados — cada función expuesta tiene al menos un caller real.
 - `init()` — crea instancias de módulos, carga settings, bindings
 - `onTranscriptChange()` — parsea SRT, actualiza state.segments
 - `startTranscription()` — llama a `stt.transcribe()`, alimenta Recording Notes
@@ -147,6 +164,12 @@ Controlador central. Todo el wiring de eventos, UI, y flujo entre módulos.
 - `placeRecordingMarkers()` — coloca marcadores IN/OUT en la secuencia activa
 - `executeRecCuts()` — ejecuta cortes basados en las zonas de remove calculadas
 - `restoreRecCutBackup()` — restaura el backup de la secuencia
+
+### motion-server-client.js
+Factory `createMotionServerClient({ port, postTimeoutMs })` — cliente HTTP mínimo (`post`, `get`, `checkServer`) usado por `motion-pro.js` y `broll.js` para hablar con `motion-server`. Antes cada módulo tenía su propia copia casi idéntica de `_post`/`_get`/`checkServer`; ahora ambos delegan en `this._client`.
+
+### batch-seq-runner.js
+Helpers puros compartidos por el "modo batch" de Smart Supertexts (`ui-supertexts.js`) y Edit Suggestions (`ui-edit-suggestions.js`): `findSequenceTranscript`, `loadTimedTranscript`, `setBatchProgress`, `setBatchCancelBtn`, `getBatchAnalyzedNames`, `updateBatchNavButtons`. Elimina las ~6 funciones `_st2Batch*` / `_es2Batch*` que eran copias casi idénticas entre ambos archivos.
 
 ### ai-analyzer.js
 Clase `AIAnalyzer`. Proveedores: `ollama`, `google`, `anthropic`, `openai`.
@@ -358,6 +381,8 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 - **Motion-Pro pipeline timeout**: configurable (default 5 min), stored in `localStorage` key `editorpro_mp_pipeline_timeout`.
 - **Backup persistence**: `_batchBackups` se persisten a `editorpro_backups.json` junto al `.prproj`; se restauran al cargar el host.
 - **OUT triggers**: además de "pausa", ahora "corte", "corta", "alto" y "para" disparan OUT en Recording Notes.
+- **Archivos grandes en client/js (`cutter.js`, `ui-recording.js`, `ui-supertexts.js`, `ui-motion-pro.js`, `ui-edit-suggestions.js`)**: siguen por encima de las 1000 líneas. Son candidatos a split (por sub-feature/paso de wizard), pero requieren tests de regresión manuales en Premiere real antes de tocarlos — no hay cobertura automatizada de la UI dentro de Premiere. Ver `tests/test-runner.html` para lo que sí está cubierto (parsers, utils, batch-seq-runner, etc.).
+- **`RenderQueue` (motion-server/lib/render-queue.js) y `remotion-manager.js`**: los callbacks de render usan un guard `fireOnce`/`safeCb` para garantizar que solo disparan una vez — evita colgar la cola si `close` y `error` del proceso hijo llegan ambos.
 
 ## Motion-Pro — Motion Graphics Automáticos
 
@@ -396,6 +421,15 @@ Clase `MotionPro`. Maneja:
 - `regenerateFull()` — nueva generación completa
 - `getStudioUrl()/startStudio()` — abre Remotion Studio en browser
 - `saveState()/loadState()` — persistencia en localStorage (`editorpro_motionpro_state`)
+- `checkServer()/_post()/_get()` delegan en `this._client` (`client/js/motion-server-client.js`), compartido con `broll.js` — ya no hay una copia local de la lógica HTTP.
+
+### prompts.js — orquestador (motion-server/lib/)
+
+`prompts.js` (349 líneas) ensambla los tres prompts del pipeline (`getVisualProposalPrompt`, `getGenerationPrompt`, `getFeedbackPrompt`) pero delega el contenido pesado en `lib/prompts/`:
+- `system-prompt.js` — carga `Prompts/MotionPro/*.md` (design system, quality rules, available packages) y construye `buildSystemPrompt(type)`
+- `palette-prompt.js` — genera el código de la paleta de colores (`buildPaletteCode`), notas de contraste (`paletteContextNote`) y utilidades de color (`isGreenish`, WCAG contrast)
+- `composition-defs.js` — librería de componentes Remotion reutilizables por tipo de animación (`getComponentsForType`)
+- `type-instructions.js` — instrucciones creativas específicas por tipo (`TYPE_INSTRUCTIONS`, `getTypeInstructions`)
 
 ### Versionado
 
@@ -503,3 +537,20 @@ host/broll.jsx (importAndPlaceBroll, replaceBrollClip)
 
 - `Prompts/BRoll/analysis.md` — System prompt para detección de momentos B-roll
 - `motion-server/lib/broll-prompts.js` — Builder que carga el prompt y construye el user message
+
+### Cliente HTTP compartido
+
+`BRoll.checkServer()/_post()/_get()` delegan en `this._client` (`client/js/motion-server-client.js`), el mismo helper que usa `motion-pro.js` — antes cada uno tenía su propia implementación casi idéntica de request HTTP + parseo de respuesta.
+
+---
+
+## Refactor histórico (thermo-nuclear code quality review)
+
+Este proyecto pasó por una revisión de calidad de código que eliminó código muerto, corrigió bugs de concurrencia/integridad de datos, consolidó duplicación en helpers canónicos, y dividió los archivos que superaban ampliamente el límite de 1000 líneas. Resumen de lo que cambió (para no sorprenderse si buscas algo que ya no existe):
+
+- **Eliminado**: `client/js/transcript-cache.js` (dead code — sus funciones públicas ahora las expone `transcript-manager.js`), `client/js/modal.js` (duplicado de utilidades ya cubiertas por `utils.js`/`transcript-manager.js`), 13 proxies muertos en `main.js`, y el subsistema completo de templates en `motion-server` (`lib/template-manager.js`, `lib/template-prompt.js`, `templates/*.tsx` — nunca se usaba, Motion-Pro genera TSX vía LLM, no desde templates).
+- **Bugs corregidos**: pérdida de datos en `restoreBackupById` (parseaba mal el backup), hoisting incorrecto de `_findProjectItemByPath` en `broll.jsx`, deadlock potencial en `RenderQueue` por callbacks duplicados (`close`+`error` del proceso hijo), condición de carrera en `remotion-manager.js` al sincronizar `Root.tsx` durante un render en curso.
+- **Helpers canónicos nuevos**: `evalScriptWithJson()` (client/js/utils.js) para el patrón JSON-temp-file + evalScript; `createMotionServerClient()` (client/js/motion-server-client.js) para HTTP hacia motion-server; `_httpJson()` interno en `motion-server/lib/llm.js` que unifica los 4 providers de IA.
+- **Batch runner extraído**: `client/js/batch-seq-runner.js` dedupe la lógica de "modo batch" entre Smart Supertexts y Edit Suggestions.
+- **Archivos grandes divididos**: `host/common.jsx` (era ~1160 líneas, ahora 55 + 5 módulos enfocados: `backup.jsx`, `bin-utils.jsx`, `sequence-info.jsx`, `marker-ops.jsx`, `sequence-discovery.jsx`); `motion-server/lib/prompts.js` (era 1118 líneas, ahora 349 + 4 submódulos en `lib/prompts/`). `motion-pro.js` y `broll.js` bajaron de las 1000 líneas al extraer el cliente HTTP compartido.
+- **Diferido intencionalmente**: dividir `cutter.js`, `ui-recording.js`, `ui-supertexts.js`, `ui-motion-pro.js`, `ui-edit-suggestions.js` (todos > 1000 líneas) — son componentes de UI con mucho estado compartido y sin cobertura de test automatizada dentro de Premiere real, así que el riesgo de regresión silenciosa es alto. Candidatos para una próxima pasada con tests manuales dedicados.
