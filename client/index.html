@@ -1006,6 +1006,31 @@
 
     </div>
 
+    <!-- Confirm Dialog (Cutter) -->
+    <div id="cutter-confirm-overlay" class="confirm-overlay hidden">
+        <div class="confirm-dialog">
+            <div class="confirm-title">Confirmar cortes</div>
+            <div id="cutter-confirm-msg" class="confirm-msg">
+                Se creará un backup de la secuencia y se ejecutarán los cortes. Esta acción modificará la secuencia activa.
+            </div>
+            <div class="confirm-actions">
+                <button id="btn-cutter-cancel" class="btn btn-ghost">Cancelar</button>
+                <button id="btn-cutter-confirm" class="btn btn-confirm-danger">Cortar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Modal (persistent, closeable) -->
+    <div id="info-modal-overlay" class="confirm-overlay hidden">
+        <div class="confirm-dialog info-modal-dialog">
+            <div class="confirm-title" id="info-modal-title">Información</div>
+            <div id="info-modal-body" class="info-modal-body"></div>
+            <div class="confirm-actions">
+                <button id="btn-info-modal-close" class="btn btn-ghost">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div id="toast" class="toast"></div>
 
