@@ -5,8 +5,6 @@
 (function(global) {
     "use strict";
 
-    var http;
-    try { http = require("http"); } catch(e) { http = null; }
     var childProcess;
     try { childProcess = require("child_process"); } catch(e) { childProcess = null; }
     var pathMod;
@@ -42,38 +40,23 @@
         this.serverProcess = null;
         this.generating = false;
         this.analyzing = false;
+        this._client = global.createMotionServerClient
+            ? global.createMotionServerClient({ port: SERVER_PORT, postTimeoutMs: 180000 })
+            : null;
     }
 
     // ─── Server Lifecycle ─────────────────────────────────────────
 
     MotionPro.prototype.checkServer = function(callback) {
         var self = this;
-        if (!http) {
+        if (!this._client) {
             self.serverRunning = false;
             if (callback) callback(false);
             return;
         }
-        var req = http.get(SERVER_URL + "/api/status", function(res) {
-            var data = "";
-            res.on("data", function(chunk) { data += chunk; });
-            res.on("end", function() {
-                try {
-                    var status = JSON.parse(data);
-                    self.serverRunning = status.running === true;
-                } catch(e) {
-                    self.serverRunning = false;
-                }
-                if (callback) callback(self.serverRunning);
-            });
-        });
-        req.on("error", function() {
-            self.serverRunning = false;
-            if (callback) callback(false);
-        });
-        req.setTimeout(3000, function() {
-            req.destroy();
-            self.serverRunning = false;
-            if (callback) callback(false);
+        this._client.checkServer(function(running) {
+            self.serverRunning = running;
+            if (callback) callback(running);
         });
     };
 
@@ -275,71 +258,16 @@
     };
 
     // ─── HTTP helpers ─────────────────────────────────────────────
+    // Delegates to the shared client in motion-server-client.js (also used by BRoll).
 
     MotionPro.prototype._post = function(path, body, callback) {
-        if (!http) {
-            callback(new Error("HTTP not available"));
-            return;
-        }
-        var called = false;
-        function safeCallback(err, data) {
-            if (called) return;
-            called = true;
-            if (err) return callback(err);
-            callback(null, data);
-        }
-        var data = JSON.stringify(body);
-        var req = http.request({
-            hostname: "127.0.0.1",
-            port: SERVER_PORT,
-            path: path,
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(data)
-            }
-        }, function(res) {
-            var chunks = "";
-            res.on("data", function(c) { chunks += c; });
-            res.on("end", function() {
-                try {
-                    safeCallback(null, JSON.parse(chunks));
-                } catch(e) {
-                    safeCallback(new Error("Parse error: " + chunks.substring(0, 200)));
-                }
-            });
-        });
-        req.on("error", function(err) { safeCallback(err); });
-        req.setTimeout(180000, function() { req.destroy(); safeCallback(new Error("Request timeout 180s")); }); // 3 min (LLM calls can be slow)
-        req.write(data);
-        req.end();
+        if (!this._client) { callback(new Error("HTTP not available")); return; }
+        this._client.post(path, body, callback);
     };
 
     MotionPro.prototype._get = function(path, callback) {
-        if (!http) {
-            callback(new Error("HTTP not available"));
-            return;
-        }
-        var called = false;
-        function safeCallback(err, data) {
-            if (called) return;
-            called = true;
-            if (err) return callback(err);
-            callback(null, data);
-        }
-        var req = http.get(SERVER_URL + path, function(res) {
-            var data = "";
-            res.on("data", function(c) { data += c; });
-            res.on("end", function() {
-                try {
-                    safeCallback(null, JSON.parse(data));
-                } catch(e) {
-                    safeCallback(new Error("Parse error"));
-                }
-            });
-        });
-        req.on("error", function(err) { safeCallback(err); });
-        req.setTimeout(15000, function() { req.destroy(); safeCallback(new Error("GET timeout 15s")); });
+        if (!this._client) { callback(new Error("HTTP not available")); return; }
+        this._client.get(path, callback);
     };
 
     // ─── Async Render Polling ─────────────────────────────────────

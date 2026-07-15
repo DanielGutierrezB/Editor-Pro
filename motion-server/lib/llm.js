@@ -1,35 +1,42 @@
 /**
  * LLM wrapper — multi-provider support for motion-server
  * Mirrors the provider logic from ai-analyzer.js but runs server-side.
+ *
+ * All providers share the same transport/response-parsing shape (build a
+ * JSON body → POST it → parse JSON → check for an API-level error → extract
+ * the text). That shared shape lives in _httpJson(); each provider only
+ * supplies the small bits that actually differ: host/path/protocol, how to
+ * build the request body (with or without an image), and how to pull the
+ * text back out of the response.
  */
 const https = require('https');
 const http = require('http');
 
 const PROVIDERS = {
   ollama: {
+    protocol: 'http',
     host: 'localhost',
     port: 11434,
     path: '/api/chat',
-    local: true,
   },
   google: {
+    protocol: 'https',
     host: 'generativelanguage.googleapis.com',
-    local: false,
   },
   anthropic: {
+    protocol: 'https',
     host: 'api.anthropic.com',
     path: '/v1/messages',
-    local: false,
   },
   openai: {
+    protocol: 'https',
     host: 'api.openai.com',
     path: '/v1/chat/completions',
-    local: false,
   },
   openrouter: {
+    protocol: 'https',
     host: 'openrouter.ai',
     path: '/api/v1/chat/completions',
-    local: false,
   },
 };
 
@@ -86,202 +93,166 @@ function _resolveProviderModel(provider, model, apiKey) {
   return { provider: p, model: m };
 }
 
-function sendLLM({ provider, model, apiKey, systemMsg, userMsg }, callback) {
+/**
+ * Shared transport core for every provider/vision combination below.
+ * `req` describes exactly what varies per call: { host, port, path, protocol, headers, body }.
+ * `extractText(parsed)` pulls the model's text out of the provider's JSON shape.
+ */
+function _httpJson(req, extractText, callback) {
+  const transport = req.protocol === 'http' ? http : https;
+  let callbackFired = false;
+  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
+
+  const httpReq = transport.request({
+    hostname: req.host,
+    port: req.port,
+    path: req.path,
+    method: 'POST',
+    headers: Object.assign(
+      { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(req.body) },
+      req.headers || {}
+    ),
+  }, (res) => {
+    let data = '';
+    res.on('data', (chunk) => { data += chunk; });
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        const errMsg = _extractErrorMessage(parsed);
+        if (errMsg) {
+          console.error('[llm] API error from ' + req.host + ': ' + errMsg);
+          return safeCb(new Error(errMsg));
+        }
+        const text = extractText(parsed) || '';
+        if (!text) {
+          console.warn('[llm] Empty content from ' + req.host + '. Response keys:', Object.keys(parsed).join(','));
+        }
+        safeCb(null, text);
+      } catch (e) {
+        safeCb(new Error('Parse error: ' + e.message));
+      }
+    });
+  });
+  httpReq.on('error', safeCb);
+  httpReq.setTimeout(120000, function() { httpReq.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
+  httpReq.write(req.body);
+  httpReq.end();
+}
+
+/** Recognizes the Anthropic (`type`/`error`) and OpenAI-compatible (`error.message`) error shapes. */
+function _extractErrorMessage(parsed) {
+  if (!parsed || (parsed.type !== 'error' && !parsed.error)) return null;
+  const err = parsed.error;
+  return (err && err.message) || JSON.stringify(err || parsed);
+}
+
+// ── Per-provider request builders ───────────────────────────────────────────
+// Each returns { req: {host, port, path, protocol, headers, body}, extractText }.
+// `image` is an optional base64 PNG string — when present, builds the vision variant.
+
+function _buildOllamaCall(cfg, model, apiKey, systemMsg, userMsg, image) {
+  const userMessage = { role: 'user', content: userMsg };
+  if (image) userMessage.images = [image];
+  return {
+    req: {
+      protocol: 'http', host: cfg.host, port: cfg.port, path: cfg.path,
+      body: JSON.stringify({
+        model: model || (image ? 'llava' : 'mistral-small3.1:latest'),
+        messages: [{ role: 'system', content: systemMsg }, userMessage],
+        stream: false,
+      }),
+    },
+    extractText: (parsed) => parsed.message && parsed.message.content,
+  };
+}
+
+function _buildGoogleCall(cfg, model, apiKey, systemMsg, userMsg, image) {
+  const m = model || 'gemini-2.0-flash';
+  const parts = image
+    ? [{ inline_data: { mime_type: 'image/png', data: image } }, { text: userMsg }]
+    : [{ text: userMsg }];
+  return {
+    req: {
+      protocol: 'https', host: cfg.host,
+      path: `/v1beta/models/${m}:generateContent?key=${apiKey}`,
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemMsg }] },
+        contents: [{ parts }],
+        generationConfig: { temperature: 0.7 },
+      }),
+    },
+    extractText: (parsed) => parsed.candidates && parsed.candidates[0] && parsed.candidates[0].content
+      && parsed.candidates[0].content.parts && parsed.candidates[0].content.parts[0]
+      && parsed.candidates[0].content.parts[0].text,
+  };
+}
+
+function _buildAnthropicCall(cfg, model, apiKey, systemMsg, userMsg, image) {
+  const content = image
+    ? [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: image } }, { type: 'text', text: userMsg }]
+    : userMsg;
+  return {
+    req: {
+      protocol: 'https', host: cfg.host, path: cfg.path,
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: model || 'claude-sonnet-4-20250514',
+        max_tokens: image ? 4096 : 16000,
+        system: systemMsg,
+        messages: [{ role: 'user', content }],
+      }),
+    },
+    extractText: (parsed) => parsed.content && parsed.content[0] && parsed.content[0].text,
+  };
+}
+
+function _buildOpenAICall(cfg, model, apiKey, systemMsg, userMsg, image) {
+  const userContent = image
+    ? [{ type: 'text', text: userMsg }, { type: 'image_url', image_url: { url: 'data:image/png;base64,' + image } }]
+    : userMsg;
+  return {
+    req: {
+      protocol: 'https', host: cfg.host, path: cfg.path,
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: model || 'gpt-4o-mini',
+        messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: userContent }],
+        temperature: 0.7,
+      }),
+    },
+    extractText: (parsed) => parsed.choices && parsed.choices[0] && parsed.choices[0].message
+      && parsed.choices[0].message.content,
+  };
+}
+
+const CALL_BUILDERS = {
+  ollama: _buildOllamaCall,
+  google: _buildGoogleCall,
+  anthropic: _buildAnthropicCall,
+  // openai + openrouter share the same OpenAI-compatible format
+  openai: _buildOpenAICall,
+  openrouter: _buildOpenAICall,
+};
+
+function _send(provider, model, apiKey, systemMsg, userMsg, image, callback) {
   const resolved = _resolveProviderModel(provider, model, apiKey);
   const p = resolved.provider;
-  const m = resolved.model;
   const cfg = PROVIDERS[p];
-  if (!cfg) {
+  const buildCall = CALL_BUILDERS[p];
+  if (!cfg || !buildCall) {
     console.error('[llm] Unknown provider: ' + p);
     return callback(new Error('Unknown provider: ' + p));
   }
 
   const promptLen = (systemMsg || '').length + (userMsg || '').length;
-  console.log('[llm] sendLLM provider=' + p + ' model=' + m + ' promptChars=' + promptLen);
+  console.log('[llm] send' + (image ? 'Vision' : '') + ' provider=' + p + ' model=' + resolved.model + ' promptChars=' + promptLen);
 
-  if (p === 'ollama') {
-    return _sendOllama(cfg, m, systemMsg, userMsg, callback);
-  }
-  if (p === 'google') {
-    return _sendGoogle(m, apiKey, systemMsg, userMsg, callback);
-  }
-  if (p === 'anthropic') {
-    return _sendAnthropic(cfg, m, apiKey, systemMsg, userMsg, callback);
-  }
-  // openai + openrouter share the same format
-  return _sendOpenAI(cfg, m, apiKey, systemMsg, userMsg, callback);
+  const call = buildCall(cfg, resolved.model, apiKey, systemMsg, userMsg, image);
+  _httpJson(call.req, call.extractText, callback);
 }
 
-function _sendOllama(cfg, model, systemMsg, userMsg, callback) {
-  const body = JSON.stringify({
-    model: model || 'mistral-small3.1:latest',
-    messages: [
-      { role: 'system', content: systemMsg },
-      { role: 'user', content: userMsg },
-    ],
-    stream: false,
-  });
-
-  let callbackFired = false;
-  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
-
-  const req = http.request({
-    hostname: cfg.host,
-    port: cfg.port,
-    path: cfg.path,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-  }, (res) => {
-    let data = '';
-    res.on('data', (chunk) => { data += chunk; });
-    res.on('end', () => {
-      try {
-        const parsed = JSON.parse(data);
-        const text = parsed.message?.content || '';
-        safeCb(null, text);
-      } catch (e) {
-        safeCb(new Error('Parse error: ' + e.message));
-      }
-    });
-  });
-  req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
-  req.write(body);
-  req.end();
-}
-
-function _sendGoogle(model, apiKey, systemMsg, userMsg, callback) {
-  const m = model || 'gemini-2.0-flash';
-  const body = JSON.stringify({
-    system_instruction: { parts: [{ text: systemMsg }] },
-    contents: [{ parts: [{ text: userMsg }] }],
-    generationConfig: { temperature: 0.7 },
-  });
-
-  let callbackFired = false;
-  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
-
-  const req = https.request({
-    hostname: 'generativelanguage.googleapis.com',
-    path: `/v1beta/models/${m}:generateContent?key=${apiKey}`,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-  }, (res) => {
-    let data = '';
-    res.on('data', (chunk) => { data += chunk; });
-    res.on('end', () => {
-      try {
-        const parsed = JSON.parse(data);
-        const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        safeCb(null, text);
-      } catch (e) {
-        safeCb(new Error('Parse error: ' + e.message));
-      }
-    });
-  });
-  req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
-  req.write(body);
-  req.end();
-}
-
-function _sendAnthropic(cfg, model, apiKey, systemMsg, userMsg, callback) {
-  const body = JSON.stringify({
-    model: model || 'claude-sonnet-4-20250514',
-    max_tokens: 16000,
-    system: systemMsg,
-    messages: [{ role: 'user', content: userMsg }],
-  });
-
-  let callbackFired = false;
-  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
-
-  const req = https.request({
-    hostname: cfg.host,
-    path: cfg.path,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(body),
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-  }, (res) => {
-    let data = '';
-    res.on('data', (chunk) => { data += chunk; });
-    res.on('end', () => {
-      try {
-        const parsed = JSON.parse(data);
-        // Check for Anthropic API errors
-        if (parsed.type === 'error' || parsed.error) {
-          const errMsg = parsed.error?.message || JSON.stringify(parsed.error || parsed);
-          console.error('[llm] Anthropic API error:', errMsg);
-          return safeCb(new Error('Anthropic API error: ' + errMsg));
-        }
-        const text = parsed.content?.[0]?.text || '';
-        if (!text) {
-          console.warn('[llm] Empty content from Anthropic. Response type:', parsed.type, 'stop_reason:', parsed.stop_reason);
-        }
-        safeCb(null, text);
-      } catch (e) {
-        safeCb(new Error('Parse error: ' + e.message));
-      }
-    });
-  });
-  req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
-  req.write(body);
-  req.end();
-}
-
-function _sendOpenAI(cfg, model, apiKey, systemMsg, userMsg, callback) {
-  const body = JSON.stringify({
-    model: model || 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: systemMsg },
-      { role: 'user', content: userMsg },
-    ],
-    temperature: 0.7,
-  });
-
-  let callbackFired = false;
-  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
-
-  const req = https.request({
-    hostname: cfg.host,
-    path: cfg.path,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(body),
-      'Authorization': `Bearer ${apiKey}`,
-    },
-  }, (res) => {
-    let data = '';
-    res.on('data', (chunk) => { data += chunk; });
-    res.on('end', () => {
-      try {
-        const parsed = JSON.parse(data);
-        // Check for API error responses
-        if (parsed.error) {
-          const errMsg = parsed.error.message || JSON.stringify(parsed.error);
-          console.error('[llm] API error from ' + cfg.host + ':', errMsg);
-          return safeCb(new Error('API error: ' + errMsg));
-        }
-        const text = parsed.choices?.[0]?.message?.content || '';
-        if (!text) {
-          console.warn('[llm] Empty content from ' + cfg.host + '. Response keys:', Object.keys(parsed).join(','));
-        }
-        safeCb(null, text);
-      } catch (e) {
-        safeCb(new Error('Parse error: ' + e.message));
-      }
-    });
-  });
-  req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
-  req.write(body);
-  req.end();
+function sendLLM({ provider, model, apiKey, systemMsg, userMsg }, callback) {
+  _send(provider, model, apiKey, systemMsg, userMsg, null, callback);
 }
 
 /**
@@ -289,193 +260,7 @@ function _sendOpenAI(cfg, model, apiKey, systemMsg, userMsg, callback) {
  * Supports OpenRouter, OpenAI, Anthropic, Google, and Ollama vision models.
  */
 function sendLLMWithVision({ provider, model, apiKey, systemMsg, userMsg, imageBase64 }, callback) {
-  const resolved = _resolveProviderModel(provider, model, apiKey);
-  const p = resolved.provider;
-  const m = resolved.model;
-  const cfg = PROVIDERS[p];
-  if (!cfg) return callback(new Error('Unknown provider: ' + p));
-
-  const dataUri = 'data:image/png;base64,' + imageBase64;
-
-  if (p === 'anthropic') {
-    return _sendAnthropicVision(cfg, m, apiKey, systemMsg, userMsg, imageBase64, callback);
-  }
-  if (p === 'google') {
-    return _sendGoogleVision(m, apiKey, systemMsg, userMsg, imageBase64, callback);
-  }
-  if (p === 'ollama') {
-    return _sendOllamaVision(cfg, m, systemMsg, userMsg, imageBase64, callback);
-  }
-  // openai + openrouter share the same OpenAI-compatible vision format
-  return _sendOpenAIVision(cfg, m, apiKey, systemMsg, userMsg, dataUri, callback);
-}
-
-function _sendAnthropicVision(cfg, model, apiKey, systemMsg, userMsg, imageBase64, callback) {
-  const body = JSON.stringify({
-    model: model || 'claude-sonnet-4-20250514',
-    max_tokens: 4096,
-    system: systemMsg,
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageBase64 } },
-        { type: 'text', text: userMsg },
-      ],
-    }],
-  });
-
-  let callbackFired = false;
-  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
-
-  const req = https.request({
-    hostname: cfg.host,
-    path: cfg.path,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(body),
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-  }, (res) => {
-    let data = '';
-    res.on('data', (chunk) => { data += chunk; });
-    res.on('end', () => {
-      try {
-        const parsed = JSON.parse(data);
-        const text = parsed.content?.[0]?.text || '';
-        safeCb(null, text);
-      } catch (e) {
-        safeCb(new Error('Parse error: ' + e.message));
-      }
-    });
-  });
-  req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
-  req.write(body);
-  req.end();
-}
-
-function _sendGoogleVision(model, apiKey, systemMsg, userMsg, imageBase64, callback) {
-  const m = model || 'gemini-2.0-flash';
-  const body = JSON.stringify({
-    system_instruction: { parts: [{ text: systemMsg }] },
-    contents: [{
-      parts: [
-        { inline_data: { mime_type: 'image/png', data: imageBase64 } },
-        { text: userMsg },
-      ],
-    }],
-    generationConfig: { temperature: 0.7 },
-  });
-
-  let callbackFired = false;
-  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
-
-  const req = https.request({
-    hostname: 'generativelanguage.googleapis.com',
-    path: `/v1beta/models/${m}:generateContent?key=${apiKey}`,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-  }, (res) => {
-    let data = '';
-    res.on('data', (chunk) => { data += chunk; });
-    res.on('end', () => {
-      try {
-        const parsed = JSON.parse(data);
-        const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        safeCb(null, text);
-      } catch (e) {
-        safeCb(new Error('Parse error: ' + e.message));
-      }
-    });
-  });
-  req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
-  req.write(body);
-  req.end();
-}
-
-function _sendOllamaVision(cfg, model, systemMsg, userMsg, imageBase64, callback) {
-  const body = JSON.stringify({
-    model: model || 'llava',
-    messages: [
-      { role: 'system', content: systemMsg },
-      { role: 'user', content: userMsg, images: [imageBase64] },
-    ],
-    stream: false,
-  });
-
-  let callbackFired = false;
-  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
-
-  const req = http.request({
-    hostname: cfg.host,
-    port: cfg.port,
-    path: cfg.path,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-  }, (res) => {
-    let data = '';
-    res.on('data', (chunk) => { data += chunk; });
-    res.on('end', () => {
-      try {
-        const parsed = JSON.parse(data);
-        const text = parsed.message?.content || '';
-        safeCb(null, text);
-      } catch (e) {
-        safeCb(new Error('Parse error: ' + e.message));
-      }
-    });
-  });
-  req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
-  req.write(body);
-  req.end();
-}
-
-function _sendOpenAIVision(cfg, model, apiKey, systemMsg, userMsg, dataUri, callback) {
-  const body = JSON.stringify({
-    model: model || 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: systemMsg },
-      { role: 'user', content: [
-        { type: 'text', text: userMsg },
-        { type: 'image_url', image_url: { url: dataUri } },
-      ]},
-    ],
-    temperature: 0.7,
-  });
-
-  let callbackFired = false;
-  const safeCb = (err, result) => { if (!callbackFired) { callbackFired = true; callback(err, result); } };
-
-  const req = https.request({
-    hostname: cfg.host,
-    path: cfg.path,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(body),
-      'Authorization': `Bearer ${apiKey}`,
-    },
-  }, (res) => {
-    let data = '';
-    res.on('data', (chunk) => { data += chunk; });
-    res.on('end', () => {
-      try {
-        const parsed = JSON.parse(data);
-        const text = parsed.choices?.[0]?.message?.content || '';
-        safeCb(null, text);
-      } catch (e) {
-        safeCb(new Error('Parse error: ' + e.message));
-      }
-    });
-  });
-  req.on('error', safeCb);
-  req.setTimeout(120000, function() { req.destroy(); safeCb(new Error('LLM request timeout after 120s')); });
-  req.write(body);
-  req.end();
+  _send(provider, model, apiKey, systemMsg, userMsg, imageBase64, callback);
 }
 
 module.exports = { sendLLM, sendLLMWithVision };

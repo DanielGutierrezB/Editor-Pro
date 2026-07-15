@@ -11,7 +11,7 @@
     // ─── Shared references (captured at init time, not load time) ─
     var state, csInterface, fs, path, os, aiAnalyzer;
     var on, clearContainer, safeCallback, showToast, showElement, hideElement;
-    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress;
+    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress, evalScriptWithJson;
     var checkAIReady, expandSection, formatTime, formatTimeFull, navigateToTime;
     var parseTranscriptJson, _getTranscriptFolders;
     var refreshSequenceInfo, buildTimedTranscript, copyToClipboard;
@@ -44,6 +44,7 @@
         esc                      = global._epEsc;
         escAttr                  = global._epEscAttr;
         escExtend                = global._epEscExtend;
+        evalScriptWithJson       = global._epEvalScriptWithJson;
         setProgress              = global._epSetProgress;
         checkAIReady             = global._epCheckAIReady;
         expandSection            = global._epExpandSection;
@@ -489,21 +490,10 @@
         });
 
         if (markers.length === 0) return;
-        if (!fs || !os) {
-            showToast("Error: Node.js no disponible", "error");
-            return;
-        }
-        var tmpFile = path.join(os.tmpdir(), "pe_es2_err_markers.json");
-        fs.writeFileSync(tmpFile, JSON.stringify(markers), "utf8");
-        var safePath = tmpFile.replace(/\\/g, "/");
-        csInterface.evalScript('addMarkersFromFile("' + safePath + '")', function(result) {
-            try {
-                var data = JSON.parse(result);
-                if (data.error) { showToast("Error: " + data.error, "error"); return; }
-                showToast(data.placed + " marcadores colocados", "success");
-            } catch(e) {
-                showToast("Error al colocar marcadores", "error");
-            }
+        evalScriptWithJson("addMarkersFromFile", markers, function(err, data) {
+            if (err) { showToast("Error al colocar marcadores", "error"); return; }
+            if (data.error) { showToast("Error: " + data.error, "error"); return; }
+            showToast(data.placed + " marcadores colocados", "success");
         });
     }
 
@@ -512,24 +502,13 @@
             showToast("No hay " + label + " para marcar", "info");
             return;
         }
-        if (!fs || !os) {
-            showToast("Error: Node.js no disponible", "error");
-            return;
-        }
-        var tmpFile = path.join(os.tmpdir(), "pe_es2_markers.json");
-        fs.writeFileSync(tmpFile, JSON.stringify(markers), "utf8");
-        var safePath = tmpFile.replace(/\\/g, "/");
 
         csInterface.evalScript('clearMarkersByPrefix("' + prefix + '")', function() {
-            csInterface.evalScript('addMarkersFromFile("' + safePath + '")', function(result) {
-                try {
-                    var data = JSON.parse(result);
-                    if (data.error) { showToast("Error: " + data.error, "error"); return; }
-                    showToast(data.placed + " marcadores de " + label + " colocados", "success");
-                    refreshSequenceInfo();
-                } catch(e) {
-                    showToast("Error al colocar marcadores", "error");
-                }
+            evalScriptWithJson("addMarkersFromFile", markers, function(err, data) {
+                if (err) { showToast("Error al colocar marcadores", "error"); return; }
+                if (data.error) { showToast("Error: " + data.error, "error"); return; }
+                showToast(data.placed + " marcadores de " + label + " colocados", "success");
+                refreshSequenceInfo();
             });
         });
     }
@@ -754,11 +733,6 @@
             showToast("Este reel no tiene segmentos", "info");
             return;
         }
-        if (!fs || !os || !path) {
-            showToast("Error: Node.js no disponible", "error");
-            return;
-        }
-
         var reelName = (state.sequenceName || "Secuencia") + "_Reel";
         if (state.reelProposals.length > 1) {
             reelName += "_" + (reelIdx + 1);
@@ -768,39 +742,21 @@
             return { start: seg.time, end: seg.endTime || seg.time + 5 };
         });
 
-        var payload = JSON.stringify({
-            reelName: reelName,
-            keepZones: keepZones
-        });
-
-        var tmpFile = path.join(os.tmpdir(), "EditorPro_reel_" + reelIdx + ".json");
-        try {
-            fs.writeFileSync(tmpFile, payload, "utf8");
-        } catch(e) {
-            showToast("Error al escribir archivo temporal: " + e.message, "error");
-            return;
-        }
-
         disableBtn("btn-reelproposal");
         showToast("Generando secuencia de reel...", "info");
 
-        var escaped = escExtend(tmpFile);
-        csInterface.evalScript('createReelSequence("' + escaped + '")', function(result) {
+        evalScriptWithJson("createReelSequence", { reelName: reelName, keepZones: keepZones }, function(err, data) {
             enableBtn("btn-reelproposal");
-            try {
-                var data = JSON.parse(result);
-                if (data.error) {
-                    showToast("Error: " + data.error, "error");
-                    return;
-                }
-                var msg = "Reel creado: " + (data.reelName || reelName);
-                if (data.frameChanged) msg += " (9:16)";
-                showToast(msg, "success");
-                refreshSequenceInfo();
-            } catch(e) {
-                showToast("Error al crear secuencia de reel", "error");
+            if (err) { showToast("Error al crear secuencia de reel", "error"); return; }
+            if (data.error) {
+                showToast("Error: " + data.error, "error");
+                return;
             }
-        });
+            var msg = "Reel creado: " + (data.reelName || reelName);
+            if (data.frameChanged) msg += " (9:16)";
+            showToast(msg, "success");
+            refreshSequenceInfo();
+        }, { fileName: "EditorPro_reel_" + reelIdx + ".json" });
     }
 
     function setRPProgress(pct, text) {

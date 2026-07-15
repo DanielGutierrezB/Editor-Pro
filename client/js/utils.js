@@ -162,6 +162,42 @@
         return (bytes / 1048576).toFixed(1) + " MB";
     }
 
+    // ─── ExtendScript bridge (temp-JSON → evalScript) ──────────────
+    // Canonical replacement for the "write payload to a tmp JSON file, escape
+    // the path, evalScript(fnName(\"path\"))" dance that used to be hand-rolled
+    // at ~15 call sites across the UI modules (with inconsistent path escaping).
+
+    function evalScriptWithJson(fnName, payload, callback, opts) {
+        opts = opts || {};
+        var fs = global._epFs || (typeof require !== "undefined" ? require("fs") : null);
+        var path = global._epPath || (typeof require !== "undefined" ? require("path") : null);
+        var os = global._epOs || (typeof require !== "undefined" ? require("os") : null);
+        var cs = global._epCSInterface;
+        if (!fs || !path || !os || !cs) {
+            if (callback) callback(new Error("fs/path/os/CSInterface no disponibles"));
+            return;
+        }
+
+        var fileName = opts.fileName || ("EditorPro_" + fnName + "_" + Date.now() + ".json");
+        var tmpFile = path.join(os.tmpdir(), fileName);
+        try {
+            fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
+        } catch (writeErr) {
+            if (callback) callback(writeErr);
+            return;
+        }
+
+        var safePath = tmpFile.replace(/\\/g, "/");
+        cs.evalScript(fnName + '("' + escExtend(safePath) + '")', function(rawResult) {
+            if (!callback) return;
+            try {
+                callback(null, JSON.parse(rawResult), rawResult);
+            } catch (parseErr) {
+                callback(parseErr, null, rawResult);
+            }
+        });
+    }
+
     // ─── Clipboard & navigation ───────────────────────────────────
 
     function copyToClipboard(text) {
@@ -226,6 +262,7 @@
         esc: esc,
         escAttr: escAttr,
         escExtend: escExtend,
+        evalScriptWithJson: evalScriptWithJson,
         normalizeSupertextNewlines: normalizeSupertextNewlines,
         normalizeSt2Fields: normalizeSt2Fields,
         escSupertextHtml: escSupertextHtml,
@@ -257,6 +294,7 @@
     global._epEsc = esc;
     global._epEscAttr = escAttr;
     global._epEscExtend = escExtend;
+    global._epEvalScriptWithJson = evalScriptWithJson;
     global._epNormalizeSupertextNewlines = normalizeSupertextNewlines;
     global._epNormalizeSt2Fields = normalizeSt2Fields;
     global._epEscSupertextHtml = escSupertextHtml;

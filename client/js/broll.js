@@ -7,8 +7,6 @@
 (function(global) {
     "use strict";
 
-    var http;
-    try { http = require("http"); } catch(e) { http = null; }
     var childProcess;
     try { childProcess = require("child_process"); } catch(e) { childProcess = null; }
     var pathMod;
@@ -19,7 +17,6 @@
     try { os = require("os"); } catch(e) { os = null; }
 
     var SERVER_PORT = 3847;
-    var SERVER_URL = "http://127.0.0.1:" + SERVER_PORT;
     var STORAGE_KEY = "editorpro_broll_state";
     var SETTINGS_KEY = "editorpro_broll_settings";
 
@@ -34,6 +31,9 @@
         this.generateCancelRequested = false;
         this._pollTimers = {};
         this._settings = this._loadSettings();
+        this._client = global.createMotionServerClient
+            ? global.createMotionServerClient({ port: SERVER_PORT, postTimeoutMs: 300000 })
+            : null;
     }
 
     // ── Settings ───────────────────────────────────────────────────────────────
@@ -132,58 +132,21 @@
     // ── Server check ───────────────────────────────────────────────────────────
 
     BRoll.prototype.checkServer = function(callback) {
-        if (!http) { if (callback) callback(false); return; }
-        var req = http.get(SERVER_URL + "/api/status", function(res) {
-            var data = "";
-            res.on("data", function(c) { data += c; });
-            res.on("end", function() {
-                try { callback(JSON.parse(data).running === true); }
-                catch(e) { callback(false); }
-            });
-        });
-        req.on("error", function() { callback(false); });
-        req.setTimeout(3000, function() { req.destroy(); callback(false); });
+        if (!this._client) { if (callback) callback(false); return; }
+        this._client.checkServer(callback);
     };
 
     // ── HTTP helpers ───────────────────────────────────────────────────────────
+    // Delegates to the shared client in motion-server-client.js (also used by MotionPro).
 
     BRoll.prototype._post = function(urlPath, body, callback) {
-        if (!http) { callback(new Error("HTTP not available")); return; }
-        var called = false;
-        function cb(err, data) { if (called) return; called = true; callback(err, data); }
-        var data = JSON.stringify(body);
-        var req = http.request({
-            hostname: "127.0.0.1", port: SERVER_PORT,
-            path: urlPath, method: "POST",
-            headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) }
-        }, function(res) {
-            var chunks = "";
-            res.on("data", function(c) { chunks += c; });
-            res.on("end", function() {
-                try { cb(null, JSON.parse(chunks)); }
-                catch(e) { cb(new Error("Parse error: " + chunks.substring(0, 200))); }
-            });
-        });
-        req.on("error", function(e) { cb(e); });
-        req.setTimeout(300000, function() { req.destroy(); cb(new Error("Request timeout (5 min)")); });
-        req.write(data);
-        req.end();
+        if (!this._client) { callback(new Error("HTTP not available")); return; }
+        this._client.post(urlPath, body, callback);
     };
 
     BRoll.prototype._get = function(urlPath, callback) {
-        if (!http) { callback(new Error("HTTP not available")); return; }
-        var called = false;
-        function cb(err, data) { if (called) return; called = true; callback(err, data); }
-        var req = http.get(SERVER_URL + urlPath, function(res) {
-            var data = "";
-            res.on("data", function(c) { data += c; });
-            res.on("end", function() {
-                try { cb(null, JSON.parse(data)); }
-                catch(e) { cb(new Error("Parse error")); }
-            });
-        });
-        req.on("error", function(e) { cb(e); });
-        req.setTimeout(15000, function() { req.destroy(); cb(new Error("GET timeout")); });
+        if (!this._client) { callback(new Error("HTTP not available")); return; }
+        this._client.get(urlPath, callback);
     };
 
     // ── Poll a B-roll job ──────────────────────────────────────────────────────

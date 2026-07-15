@@ -11,7 +11,7 @@
     // ─── Shared references (captured at init time, not load time) ─
     var state, csInterface, fs, path, os, aiAnalyzer;
     var on, clearContainer, safeCallback, showToast, showElement, hideElement;
-    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress;
+    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress, evalScriptWithJson;
     var checkAIReady, expandSection, formatTime, formatTimeFull, navigateToTime;
     var refreshSequenceInfo, buildTimedTranscript, copyToClipboard;
     var getPromptContext, togglePromptEditorById, savePromptById, resetPromptById;
@@ -43,6 +43,7 @@
         esc                      = global._epEsc;
         escAttr                  = global._epEscAttr;
         escExtend                = global._epEscExtend;
+        evalScriptWithJson       = global._epEvalScriptWithJson;
         setProgress              = global._epSetProgress;
         checkAIReady             = global._epCheckAIReady;
         expandSection            = global._epExpandSection;
@@ -955,20 +956,15 @@
                 var items = buildST2Payload(selected);
                 var payload = { baseTrackIndex: trackIdx, supertexts: items };
 
-                var tmpFile = path.join(os.tmpdir(), "EditorPro_ST2_Batch_" + Date.now() + ".json");
-                fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
-                var safePath = tmpFile.replace(/\\/g, "/");
-
-                csInterface.evalScript('insertSupertextMOGRTs("' + escExtend(safePath) + '")', function(res) {
-                    try {
-                        var data = JSON.parse(res);
-                        var ins = data.inserted || 0;
-                        _st2BatchUpdateCardStatus(seqName, "st2-total", ins + " creados ✓");
-                        showToast(seqName + ": " + ins + " gráficos insertados", "success");
-                    } catch(e) {
+                evalScriptWithJson("insertSupertextMOGRTs", payload, function(err, data) {
+                    if (err) {
                         _st2BatchUpdateCardStatus(seqName, "st2-error", "Error");
-                        showToast("Error: " + e.message, "error");
+                        showToast("Error: " + err.message, "error");
+                        return;
                     }
+                    var ins = data.inserted || 0;
+                    _st2BatchUpdateCardStatus(seqName, "st2-total", ins + " creados ✓");
+                    showToast(seqName + ": " + ins + " gráficos insertados", "success");
                 });
             }, 1500);
         });
@@ -1029,18 +1025,13 @@
                     var items = buildST2Payload(selected);
                     var payload = { baseTrackIndex: trackIdx, supertexts: items };
 
-                    var tmpFile = path.join(os.tmpdir(), "EditorPro_ST2_Batch_" + Date.now() + ".json");
-                    fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
-                    var safePath = tmpFile.replace(/\\/g, "/");
-
-                    csInterface.evalScript('insertSupertextMOGRTs("' + escExtend(safePath) + '")', function(res) {
-                        try {
-                            var data = JSON.parse(res);
+                    evalScriptWithJson("insertSupertextMOGRTs", payload, function(err, data) {
+                        if (err) {
+                            _st2BatchUpdateCardStatus(seqName, "st2-error", "Error");
+                        } else {
                             var ins = data.inserted || 0;
                             totalInserted += ins;
                             _st2BatchUpdateCardStatus(seqName, "st2-total", ins + " creados ✓");
-                        } catch(e) {
-                            _st2BatchUpdateCardStatus(seqName, "st2-error", "Error");
                         }
                         current++;
                         setTimeout(processNext, 500);
@@ -2227,44 +2218,39 @@
 
         var payload = { baseTrackIndex: trackIdx, supertexts: items };
 
-        var tmpFile = path.join(os.tmpdir(), "EditorPro_ST2_MOGRTs.json");
-        fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
-        var safePath = tmpFile.replace(/\\/g, "/");
-
         disableBtn("btn-st2-create-graphics");
         showElement("st2-progress");
         setST2Progress(10, "Insertando " + items.length + " gráficos en la línea de tiempo...");
 
-        csInterface.evalScript('insertSupertextMOGRTs("' + escExtend(safePath) + '")', function(res) {
+        evalScriptWithJson("insertSupertextMOGRTs", payload, function(err, data) {
             hideElement("st2-progress"); hideElement("st2-progress-header");
             enableBtn("btn-st2-create-graphics");
-            try {
-                var data = JSON.parse(res);
-                if (data.error) {
-                    if (window.EPLogger) EPLogger.error("supertexts", "mogrt-insert-complete", data.error);
-                    showToast(data.error, "error");
-                    return;
-                }
-                state.supertexts2Inserted = true;
-                if (window.EPLogger) EPLogger.log("supertexts", "mogrt-insert-complete", data.inserted + "/" + data.total + " inserted, textSet=" + (data.textSet || 0));
-                document.querySelectorAll(".st2-replace-btn").forEach(function(btn) { btn.classList.remove("hidden"); });
-                var msg = data.inserted + " de " + data.total + " gráficos insertados";
-                if (data.textSet > 0) msg += " (" + data.textSet + " con texto)";
-                var toastType = "success";
-                if (data.errors && data.errors.length > 0) {
-                    msg += "\n" + data.errors.length + " advertencias:";
-                    for (var ei = 0; ei < Math.min(data.errors.length, 3); ei++) {
-                        msg += "\n• " + data.errors[ei];
-                    }
-                    if (data.errors.length > 3) msg += "\n• ... +" + (data.errors.length - 3) + " más";
-                    console.log("ST2 errors:", JSON.stringify(data.errors));
-                    if (data.textSet === 0) toastType = "error";
-                }
-                showToast(msg, data.inserted > 0 ? toastType : "error");
-                refreshSequenceInfo();
-            } catch(e) {
-                showToast("Error al crear gráficos: " + e.message, "error");
+            if (err) {
+                showToast("Error al crear gráficos: " + err.message, "error");
+                return;
             }
+            if (data.error) {
+                if (window.EPLogger) EPLogger.error("supertexts", "mogrt-insert-complete", data.error);
+                showToast(data.error, "error");
+                return;
+            }
+            state.supertexts2Inserted = true;
+            if (window.EPLogger) EPLogger.log("supertexts", "mogrt-insert-complete", data.inserted + "/" + data.total + " inserted, textSet=" + (data.textSet || 0));
+            document.querySelectorAll(".st2-replace-btn").forEach(function(btn) { btn.classList.remove("hidden"); });
+            var msg = data.inserted + " de " + data.total + " gráficos insertados";
+            if (data.textSet > 0) msg += " (" + data.textSet + " con texto)";
+            var toastType = "success";
+            if (data.errors && data.errors.length > 0) {
+                msg += "\n" + data.errors.length + " advertencias:";
+                for (var ei = 0; ei < Math.min(data.errors.length, 3); ei++) {
+                    msg += "\n• " + data.errors[ei];
+                }
+                if (data.errors.length > 3) msg += "\n• ... +" + (data.errors.length - 3) + " más";
+                console.log("ST2 errors:", JSON.stringify(data.errors));
+                if (data.textSet === 0) toastType = "error";
+            }
+            showToast(msg, data.inserted > 0 ? toastType : "error");
+            refreshSequenceInfo();
         });
     }
 
@@ -2290,18 +2276,10 @@
         };
         if (st.term) payload.term = st.term;
 
-        var tmpFile = path.join(os.tmpdir(), "EditorPro_ST2_Replace.json");
-        fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
-        var safePath = tmpFile.replace(/\\/g, "/");
-
-        csInterface.evalScript('replaceMOGRTClip("' + escExtend(safePath) + '")', function(res) {
-            try {
-                var data = JSON.parse(res);
-                if (data.error) { showToast(data.error, "error"); return; }
-                showToast("Clip reemplazado: " + st.text.substring(0, 30), "success");
-            } catch(e) {
-                showToast("Error al reemplazar", "error");
-            }
+        evalScriptWithJson("replaceMOGRTClip", payload, function(err, data) {
+            if (err) { showToast("Error al reemplazar", "error"); return; }
+            if (data.error) { showToast(data.error, "error"); return; }
+            showToast("Clip reemplazado: " + st.text.substring(0, 30), "success");
         });
     }
 
@@ -2606,48 +2584,43 @@
                 schemasForES[key] = propMap;
             }
         }
-        var tmpSchema = path.join(os.tmpdir(), 'EditorPro_MogrtSchemas.json');
-        var schemasJSON = JSON.stringify(schemasForES);
-        console.log('[MOGRT] Writing schema for ES (' + Object.keys(schemasForES).length + ' types, ' + schemasJSON.length + ' bytes) to: ' + tmpSchema);
-        fs.writeFileSync(tmpSchema, schemasJSON, 'utf8');
-        var safeSchemaPath = tmpSchema.replace(/\\/g, '/');
+        console.log('[MOGRT] Writing schema for ES (' + Object.keys(schemasForES).length + ' types)');
 
-        csInterface.evalScript('scanMOGRTClips("' + escExtend(safeSchemaPath) + '")', function(res) {
-            try {
-                var data = JSON.parse(res);
-                if (data.error) { showToast(data.error, 'error'); if (statusEl) statusEl.textContent = ''; return; }
-                _st2CtrlClips = data.clips || [];
-                // Enrich clips with schema info
-                _st2CtrlClips.forEach(function(c) {
-                    c.selected = true;
-                    var typeTag = _st2CtrlGetType(c);
-                    var schema = _st2GetSchemaForType(typeTag);
-                    if (schema) {
-                        // Merge schema info into clip properties
-                        (c.properties || []).forEach(function(p) {
-                            var schemaProp = schema.properties.find(function(sp) { return sp.name === p.name; });
-                            if (schemaProp) {
-                                if (schemaProp.type === 'slider') {
-                                    p.min = schemaProp.min;
-                                    p.max = schemaProp.max;
-                                }
-                                if (schemaProp.type === 'dropdown') {
-                                    p.options = schemaProp.options;
-                                }
-                                if (schemaProp.type === 'text') {
-                                    p.defaultFont = schemaProp.font;
-                                    p.defaultFontSize = schemaProp.fontSize;
-                                }
-                            }
-                        });
-                    }
-                });
-                if (statusEl) statusEl.textContent = _st2CtrlClips.length + ' clips MOGRT';
-                _st2CtrlRender();
-            } catch(e) {
-                showToast('Error: ' + e.message, 'error');
+        evalScriptWithJson("scanMOGRTClips", schemasForES, function(err, data) {
+            if (err) {
+                showToast('Error: ' + err.message, 'error');
                 if (statusEl) statusEl.textContent = '';
+                return;
             }
+            if (data.error) { showToast(data.error, 'error'); if (statusEl) statusEl.textContent = ''; return; }
+            _st2CtrlClips = data.clips || [];
+            // Enrich clips with schema info
+            _st2CtrlClips.forEach(function(c) {
+                c.selected = true;
+                var typeTag = _st2CtrlGetType(c);
+                var schema = _st2GetSchemaForType(typeTag);
+                if (schema) {
+                    // Merge schema info into clip properties
+                    (c.properties || []).forEach(function(p) {
+                        var schemaProp = schema.properties.find(function(sp) { return sp.name === p.name; });
+                        if (schemaProp) {
+                            if (schemaProp.type === 'slider') {
+                                p.min = schemaProp.min;
+                                p.max = schemaProp.max;
+                            }
+                            if (schemaProp.type === 'dropdown') {
+                                p.options = schemaProp.options;
+                            }
+                            if (schemaProp.type === 'text') {
+                                p.defaultFont = schemaProp.font;
+                                p.defaultFontSize = schemaProp.fontSize;
+                            }
+                        }
+                    });
+                }
+            });
+            if (statusEl) statusEl.textContent = _st2CtrlClips.length + ' clips MOGRT';
+            _st2CtrlRender();
         });
     }
 
@@ -3092,29 +3065,21 @@
             })
         };
 
-        var tmpFile = path.join(os.tmpdir(), 'EditorPro_ST2_CtrlApply.json');
-        fs.writeFileSync(tmpFile, JSON.stringify(payload), 'utf8');
-        var safePath = tmpFile.replace(/\\/g, '/');
-
         showToast('Aplicando a ' + selected.length + ' clips...', 'info');
-        csInterface.evalScript('applyMOGRTProperties("' + escExtend(safePath) + '")', function(res) {
-            try {
-                var data = JSON.parse(res);
-                if (data.error) { showToast(data.error, 'error'); return; }
-                showToast(data.modified + ' clips modificados', 'success');
-                // Re-scan to refresh values, preserving current filter
-                var savedFilter = _st2CtrlTypeFilter;
-                _st2CtrlScan();
-                // Restore filter after scan completes
-                setTimeout(function() {
-                    if (savedFilter) {
-                        _st2CtrlTypeFilter = savedFilter;
-                        _st2CtrlApplyFilter();
-                    }
-                }, 500);
-            } catch(e) {
-                showToast('Error: ' + e.message, 'error');
-            }
+        evalScriptWithJson("applyMOGRTProperties", payload, function(err, data) {
+            if (err) { showToast('Error: ' + err.message, 'error'); return; }
+            if (data.error) { showToast(data.error, 'error'); return; }
+            showToast(data.modified + ' clips modificados', 'success');
+            // Re-scan to refresh values, preserving current filter
+            var savedFilter = _st2CtrlTypeFilter;
+            _st2CtrlScan();
+            // Restore filter after scan completes
+            setTimeout(function() {
+                if (savedFilter) {
+                    _st2CtrlTypeFilter = savedFilter;
+                    _st2CtrlApplyFilter();
+                }
+            }, 500);
         });
     }
 
