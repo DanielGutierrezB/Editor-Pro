@@ -67,10 +67,11 @@ router.post('/', (req, res) => {
     }
 
     try {
-      // Sync session before writing (ensures clean state)
-      if (sessionDir) manager.syncFromSession(sessionDir);
+      // writeComposition() only writes this one file and appends it to Root.tsx —
+      // it doesn't need (and must NOT trigger) a full syncFromSession, which wipes
+      // the shared compositions dir and would race an in-flight render's bundling.
       const result = manager.writeComposition(compositionId, tsxCode, durationFrames);
-      
+
       // Check if writeComposition returned a syntax error object
       if (result && result.syntaxError) {
         console.error('[generate/free-form] Syntax error in ' + compositionId + ':', (result.errors || []).join('; '));
@@ -160,7 +161,8 @@ router.post('/template', (req, res) => {
 
     try {
       const manager = new RemotionManager(req.app.locals.renderProject);
-      if (sessionDir) manager.syncFromSession(sessionDir);
+      // See the note in the free-form route above — writeComposition() is additive
+      // and syncing here would race an in-flight render's bundling.
       const result = manager.writeComposition(compositionId, tsxCode, durationFrames);
 
       if (result && result.syntaxError) {

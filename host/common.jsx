@@ -683,16 +683,23 @@ function restoreBackupById(seqId) {
         $.sleep(500);
 
         var result = restoreBackup();
+        var restoreOk = false;
+        try { restoreOk = !!JSON.parse(result).success; } catch(_pe) { restoreOk = false; }
 
-        // Clean up batch backup entry
-        delete _batchBackups[seqId];
-        _persistBackups();
-
-        // Restore previous globals
-        _backupSeqId = prevBackupSeqId;
-        _backupSeqName = prevBackupSeqName;
-        _originalSeqId = prevOriginalSeqId;
-        _originalParentBinName = prevOriginalParentBinName;
+        if (restoreOk) {
+            // restoreBackup() already cleared _backupSeqId/_originalSeqId on success;
+            // only drop the registry entry once we know the restore actually happened,
+            // so a failed restore can still be retried from the UI.
+            delete _batchBackups[seqId];
+            _persistBackups();
+        } else {
+            // Restore did not succeed — put the previous globals back so this call's
+            // temporary swap doesn't leave stale/corrupted backup state behind.
+            _backupSeqId = prevBackupSeqId;
+            _backupSeqName = prevBackupSeqName;
+            _originalSeqId = prevOriginalSeqId;
+            _originalParentBinName = prevOriginalParentBinName;
+        }
 
         return result;
     } catch(e) {

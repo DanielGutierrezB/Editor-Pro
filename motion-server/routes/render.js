@@ -310,4 +310,8 @@ router.post('/preview', (req, res) => {
   });
 });
 
+// Exposed so other routes (studio.js) can check whether a render is currently
+// in flight before touching the shared Root.tsx / compositions dir directly —
+// avoids racing the Remotion child process while it bundles.
 module.exports = router;
+module.exports.queue = renderQueue;

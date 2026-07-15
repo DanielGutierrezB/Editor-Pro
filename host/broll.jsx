@@ -10,26 +10,12 @@ if (typeof TICKS_PER_SECOND === "undefined") {
     var TICKS_PER_SECOND = 254016000000;
 }
 
-// ── Utility (defensive — may already be defined in common.jsx or motion.jsx) ──
-
-if (typeof _findProjectItemByPath === "undefined") {
-    function _findProjectItemByPath(searchPath, bin) {
-        if (!bin || !bin.children) return null;
-        for (var i = 0; i < bin.children.numItems; i++) {
-            var child = bin.children[i];
-            try {
-                if (child.getMediaPath && child.getMediaPath() === searchPath) return child;
-            } catch(e) {}
-            if (child.type === 2 && child.children) {
-                var found = _findProjectItemByPath(searchPath, child);
-                if (found) return found;
-            }
-        }
-        return null;
-    }
-}
-
 // ── Bin management ────────────────────────────────────────────────────────────
+// Note: _findProjectItemByPath is defined in motion.jsx (loaded before this file
+// via host/index.jsx) and is a strict superset of what broll needs — it used to be
+// redefined here behind an `if (typeof ... === "undefined")` guard, but ExtendScript's
+// ES3 function-declaration hoisting ignores that guard and always installed this
+// file's weaker exact-path-only version, silently degrading Motion-Pro's item lookup.
 
 var _brBaseTrack = -1;
 var _brLastSequenceId = "";
