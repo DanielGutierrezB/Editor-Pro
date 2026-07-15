@@ -631,4 +631,10 @@
     global._epSaveLastTranscriptFolder = _saveLastTranscriptFolder;
     global._epTryLoadTranscriptFromFolder = _tryLoadTranscriptFromFolder;
 
+    // Bare-global bindings consumed directly by main.js / sequence-controller.js
+    // (this used to be provided by the now-removed transcript-cache.js)
+    global.autoLoadTranscriptForSequence = autoLoadTranscriptForSequence;
+    global.handleJsonTranscriptSelect = handleJsonTranscriptSelect;
+    global.copyTranscriptToFolder = copyTranscriptToFolder;
+
 })(window);

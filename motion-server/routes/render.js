@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const { execSync, execFileSync, execFile } = require('child_process'); // execFileSync used by probeVideoDurationSec
+const { execFileSync, execFile } = require('child_process');
 const fs = require('fs');
 const RemotionManager = require('../lib/remotion-manager');
 const RenderQueue = require('../lib/render-queue');

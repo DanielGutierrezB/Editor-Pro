@@ -174,7 +174,7 @@
         });
         on("btn-export-seq-transcript", "click", exportFromSequence);
         on("btn-transcribe-whisper", "click", function() {
-            expandSection("recording");
+            window._epExpandSection("recording");
             startTranscription();
         });
         on("btn-bring-whisper-transcript", "click", loadLastWhisperIntoTranscript);
@@ -501,38 +501,17 @@
     // PROXY FUNCTIONS — delegate to UI modules
     // ═══════════════════════════════════════════════════════════════
 
-    function expandSection(tool) {
-        if (window.EditorProUI && window.EditorProUI.recording && window.EditorProUI.recording.expandSection) {
-            return window.EditorProUI.recording.expandSection(tool);
-        }
-        var hdr = document.querySelector('[data-tool="' + tool + '"]');
-        if (!hdr) return;
-        var body = hdr.nextElementSibling;
-        var icon = hdr.querySelector(".toggle-icon");
-        if (body) body.classList.remove("hidden");
-        if (icon) icon.textContent = "▾";
-    }
-
-    function clearRenderedTranscript() {
-        var container = document.getElementById("transcript-rendered");
-        var textarea = document.getElementById("transcript-input");
-        if (container) { container.innerHTML = ""; container.classList.add("hidden"); }
-        if (textarea) textarea.classList.remove("hidden");
-    }
-
     // Prompt editor delegates
     function togglePromptEditorById(id) { if (window._epTogglePromptEditorById) window._epTogglePromptEditorById(id); }
     function savePromptById(id) { if (window._epSavePromptById) window._epSavePromptById(id); }
     function resetPromptById(id) { if (window._epResetPromptById) window._epResetPromptById(id); }
 
     // SpellCheck delegates
-    function renderSpellCheckResults() { if (window.EditorProUI && window.EditorProUI.spellcheck) window.EditorProUI.spellcheck.render(); }
     function startSpellCheck() { if (window.EditorProUI && window.EditorProUI.spellcheck) window.EditorProUI.spellcheck.start(); }
     function loadCustomDictionary() { if (window.EditorProUI && window.EditorProUI.spellcheck) window.EditorProUI.spellcheck.loadDictionary(); }
     function addDictWord() { if (window.EditorProUI && window.EditorProUI.spellcheck) window.EditorProUI.spellcheck.addDictWord(); }
 
     // Supertexts delegates
-    function renderSupertext2Results(r) { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.render(r); }
     function startSupertexts2() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.start(); }
     function toggleSelectAllSupertexts2() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.toggleSelectAll(); }
     function createSupertext2Graphics() { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.createGraphics(); }
@@ -604,8 +583,6 @@
     function es2BatchNavPrev() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchNavPrev(); }
     function es2BatchNavNext() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchNavNext(); }
     function es2BatchNavBack() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.batchNavBack(); }
-    function renderES2Results(r) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.render(r); }
-    function renderReelResults(r) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.renderReelResults(r); }
     function startEditSuggestions2() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.start(); }
     function exportEditSuggestions2() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.exportData(); }
     function startReelProposal() { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.startReelProposal(); }
@@ -633,17 +610,11 @@
     function refreshWhisperLocalStatus() { if (window.EditorProUI && window.EditorProUI.recording) window.EditorProUI.recording.refreshWhisperLocalStatus(); }
     function refreshTraerTranscriptButtons() { if (window.EditorProUI && window.EditorProUI.recording) window.EditorProUI.recording.refreshTraerTranscriptButtons(); }
     function refreshTranscriptWhisperAudioStatus() { if (window.EditorProUI && window.EditorProUI.recording) window.EditorProUI.recording.refreshTranscriptWhisperAudioStatus(); }
-    function setSttProgress(p, t) { if (window.EditorProUI && window.EditorProUI.recording) window.EditorProUI.recording.setSttProgress(p, t); }
-    function applySttResultToRecordingNotes(r, s) { if (window.EditorProUI && window.EditorProUI.recording) window.EditorProUI.recording.applySttResultToRecordingNotes(r, s); }
-    function renderClickableTranscript(w, n) { if (window.EditorProUI && window.EditorProUI.recording && window.EditorProUI.recording.renderClickableTranscript) window.EditorProUI.recording.renderClickableTranscript(w, n); }
-
     // Motion-Pro delegates
     function mpInit() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.init(); }
-    function mpSwitchToSequence() { if (window.EditorProUI && window.EditorProUI.motionPro && window.EditorProUI.motionPro.switchToSequence) window.EditorProUI.motionPro.switchToSequence(); }
 
     // B-Roll delegates
     function brInit() { if (window.EditorProUI && window.EditorProUI.broll) window.EditorProUI.broll.init(); }
-    function brSwitchToSequence(n) { if (window.EditorProUI && window.EditorProUI.broll && window.EditorProUI.broll.switchToSequence) window.EditorProUI.broll.switchToSequence(n); }
     function brUpdateAnalyzeButton() { if (window.EditorProUI && window.EditorProUI.broll) window.EditorProUI.broll.updateAnalyzeButton(); }
     function mpUpdateAnalyzeButton() { if (window.EditorProUI && window.EditorProUI.motionPro && window.EditorProUI.motionPro.updateAnalyzeButton) window.EditorProUI.motionPro.updateAnalyzeButton(); }
     function mpToggleServer() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.toggleServer(); }
@@ -657,11 +628,6 @@
     function mpSaveGenPrompts() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.saveGenPrompts(); }
     function mpResetGenPrompts() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.resetGenPrompts(); }
     function mpBindGenPromptAccordions() { if (window.EditorProUI && window.EditorProUI.motionPro) window.EditorProUI.motionPro.bindGenPromptAccordions(); }
-
-    // Progress delegates
-    function setST2Progress(p, t) { if (window.EditorProUI && window.EditorProUI.supertexts) window.EditorProUI.supertexts.setST2Progress(p, t); }
-    function setES2Progress(p, t) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.setES2Progress(p, t); }
-    function setRPProgress(p, t) { if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.setRPProgress(p, t); }
 
     function refreshAllHeaderProgress() {
         if (window.EditorProUI && window.EditorProUI.recording) window.EditorProUI.recording.refreshSttHeaderProgressVisibility();
