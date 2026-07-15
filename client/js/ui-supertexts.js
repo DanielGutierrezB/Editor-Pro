@@ -23,6 +23,7 @@
     var readTranscriptFromProjectFile, readCaptionsFromProjectFile;
     var srtSegmentsToSttResult, renderTranscriptFromSegments, bindCollapsibles;
     var _getTranscriptFolders, parseTranscriptJson, _buildTranscriptCache;
+    var batchSeqRunner;
 
     function _initRefs() {
         state       = global._epState;
@@ -83,6 +84,7 @@
         _getTranscriptFolders    = global._epGetTranscriptFolders;
         parseTranscriptJson      = global._epParseTranscriptJson;
         _buildTranscriptCache    = global._epBuildTranscriptCache;
+        batchSeqRunner           = global.BatchSeqRunner;
         _st2InitTrackFilter();
         _st2InitTabs();
     }
@@ -559,74 +561,19 @@
     }
 
     // ── Helpers ─────────────────────────────────────────────────
+    // Transcript lookup/loading and progress-bar updates are identical to the
+    // Edit Suggestions batch mode — shared in BatchSeqRunner (batch-seq-runner.js).
 
     function _st2BatchFindTranscript(folders, seqName) {
-        if (!seqName || !fs || !path) return null;
-        var baseName = seqName.replace(/[\/\\:*?"<>|]/g, "_");
-        for (var fi = 0; fi < folders.length; fi++) {
-            var folder = folders[fi];
-            // Coincidencia exacta: nombreSecuencia.json o .srt
-            var jp = path.join(folder, baseName + ".json");
-            if (fs.existsSync(jp)) return jp;
-            var sp = path.join(folder, baseName + ".srt");
-            if (fs.existsSync(sp)) return sp;
-        }
-        return null;
+        return batchSeqRunner.findSequenceTranscript(folders, seqName);
     }
 
-    /**
-     * Carga un transcript y lo devuelve en el formato "[X.Xs - Y.Ys] texto"
-     * que es el mismo que buildTimedTranscript() produce para análisis individual.
-     */
     function _st2BatchLoadTranscript(filePath) {
-        if (!filePath || !fs) return null;
-        try {
-            var segments = null;
-
-            if (filePath.toLowerCase().endsWith(".json")) {
-                var parsed = parseTranscriptJson(filePath);
-                if (parsed && parsed.words && parsed.words.length > 5) {
-                    var srt = sttResultToSRT(parsed);
-                    segments = parseSRT(srt);
-                }
-                if (!segments || segments.length < 3) {
-                    var raw = fs.readFileSync(filePath, "utf8");
-                    var data = JSON.parse(raw);
-                    if (data.segments && data.segments.length > 0 && data.segments[0].words) {
-                        segments = [];
-                        for (var si = 0; si < data.segments.length; si++) {
-                            var seg = data.segments[si];
-                            var words = seg.words || [];
-                            var text = words.map(function(w) { return w.text || ""; }).join(" ").trim();
-                            if (text) {
-                                segments.push({
-                                    startTime: seg.start || 0,
-                                    endTime: (seg.start || 0) + (seg.duration || 5),
-                                    text: text
-                                });
-                            }
-                        }
-                    }
-                }
-            } else {
-                var content = fs.readFileSync(filePath, "utf8");
-                segments = parseSRT(content);
-            }
-
-            if (segments && segments.length > 3) {
-                return segments.map(function(s) {
-                    return "[" + s.startTime.toFixed(1) + "s - " + s.endTime.toFixed(1) + "s] " + s.text;
-                }).join("\n");
-            }
-            return null;
-        } catch(_e) { return null; }
+        return batchSeqRunner.loadTimedTranscript(filePath);
     }
 
     function _st2BatchSetProgress(pct, text) {
-        var fill = document.getElementById("st2-batch-progress-fill");
-        var label = document.getElementById("st2-batch-progress-text");
-        if (fill) fill.style.width = Math.min(pct, 100) + "%";
-        if (label) label.textContent = text || "";
+        batchSeqRunner.setBatchProgress("st2", pct, text);
     }
 
     function _st2BatchUpdateCardStatus(seqName, pillClass, pillText) {
@@ -693,17 +640,7 @@
     }
 
     function _st2BatchSetCancelBtn(running) {
-        var btn = document.getElementById("btn-st2-batch-cancel");
-        if (!btn) return;
-        if (running) {
-            btn.textContent = "Detener";
-            btn.style.borderColor = "rgba(248,113,113,0.4)";
-            btn.style.color = "#f87171";
-        } else {
-            btn.textContent = "Cerrar Batch";
-            btn.style.borderColor = "";
-            btn.style.color = "";
-        }
+        batchSeqRunner.setBatchCancelBtn("st2", running);
     }
 
     // ── Parallel Analysis ──────────────────────────────────────
@@ -860,12 +797,7 @@
     // ── Navigation: edit per class ─────────────────────────────
 
     function _st2BatchGetAnalyzedNames() {
-        var names = [];
-        for (var qi = 0; qi < _st2BatchQueue.length; qi++) {
-            var n = _st2BatchQueue[qi].name;
-            if (_st2BatchResults[n] && _st2BatchResults[n].supertexts) names.push(n);
-        }
-        return names;
+        return batchSeqRunner.getBatchAnalyzedNames(_st2BatchQueue, _st2BatchResults, "supertexts");
     }
 
     function _st2BatchNavigateTo(seqName) {
@@ -907,10 +839,7 @@
 
     function _st2BatchUpdateNav() {
         var analyzed = _st2BatchGetAnalyzedNames();
-        var prevBtn = document.getElementById("btn-st2-bnav-prev");
-        var nextBtn = document.getElementById("btn-st2-bnav-next");
-        if (prevBtn) prevBtn.className = "btn-batch-nav" + (_st2BatchCurrentNav <= 0 ? " disabled" : "");
-        if (nextBtn) nextBtn.className = "btn-batch-nav" + (_st2BatchCurrentNav >= analyzed.length - 1 ? " disabled" : "");
+        batchSeqRunner.updateBatchNavButtons("st2", _st2BatchCurrentNav, analyzed.length);
     }
 
     function st2BatchNavPrev() {

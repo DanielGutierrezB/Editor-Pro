@@ -24,6 +24,7 @@
     var readTranscriptFromProjectFile, readCaptionsFromProjectFile;
     var srtSegmentsToSttResult, renderTranscriptFromSegments, bindCollapsibles;
     var MP_ANTICIPATION_SECS;
+    var batchSeqRunner;
 
     function _initRefs() {
         state       = global._epState;
@@ -84,6 +85,7 @@
         MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0.35;
         parseTranscriptJson      = global._epParseTranscriptJson;
         _getTranscriptFolders    = global._epGetTranscriptFolders;
+        batchSeqRunner           = global.BatchSeqRunner;
     }
 
     function getEditColor(type) {
@@ -859,61 +861,15 @@
         });
     }
 
+    // Transcript lookup/loading is identical to the Smart Supertexts batch mode —
+    // shared in BatchSeqRunner (batch-seq-runner.js).
+
     function _es2BatchFindTranscript(folders, seqName) {
-        if (!seqName || !fs || !path) return null;
-        var baseName = seqName.replace(/[\/\\:*?"<>|]/g, "_");
-        for (var fi = 0; fi < folders.length; fi++) {
-            var folder = folders[fi];
-            var jp = path.join(folder, baseName + ".json");
-            if (fs.existsSync(jp)) return jp;
-            var sp = path.join(folder, baseName + ".srt");
-            if (fs.existsSync(sp)) return sp;
-        }
-        return null;
+        return batchSeqRunner.findSequenceTranscript(folders, seqName);
     }
 
     function _es2BatchLoadTranscript(filePath) {
-        if (!filePath || !fs) return null;
-        try {
-            var segments = null;
-
-            if (filePath.toLowerCase().endsWith(".json")) {
-                var parsed = parseTranscriptJson(filePath);
-                if (parsed && parsed.words && parsed.words.length > 5) {
-                    var srt = sttResultToSRT(parsed);
-                    segments = parseSRT(srt);
-                }
-                if (!segments || segments.length < 3) {
-                    var raw = fs.readFileSync(filePath, "utf8");
-                    var jsonData = JSON.parse(raw);
-                    if (jsonData.segments && jsonData.segments.length > 0 && jsonData.segments[0].words) {
-                        segments = [];
-                        for (var si = 0; si < jsonData.segments.length; si++) {
-                            var seg = jsonData.segments[si];
-                            var words = seg.words || [];
-                            var text = words.map(function(w) { return w.text || ""; }).join(" ").trim();
-                            if (text) {
-                                segments.push({
-                                    startTime: seg.start || 0,
-                                    endTime: (seg.start || 0) + (seg.duration || 5),
-                                    text: text
-                                });
-                            }
-                        }
-                    }
-                }
-            } else {
-                var content = fs.readFileSync(filePath, "utf8");
-                segments = parseSRT(content);
-            }
-
-            if (segments && segments.length > 3) {
-                return segments.map(function(s) {
-                    return "[" + s.startTime.toFixed(1) + "s - " + s.endTime.toFixed(1) + "s] " + s.text;
-                }).join("\n");
-            }
-            return null;
-        } catch(_e) { return null; }
+        return batchSeqRunner.loadTimedTranscript(filePath);
     }
 
     function _es2BatchRenderCards() {
@@ -1022,10 +978,7 @@
     }
 
     function _es2BatchSetProgress(pct, text) {
-        var fill = document.getElementById("es2-batch-progress-fill");
-        var label = document.getElementById("es2-batch-progress-text");
-        if (fill) fill.style.width = Math.min(pct, 100) + "%";
-        if (label) label.textContent = text || "";
+        batchSeqRunner.setBatchProgress("es2", pct, text);
     }
 
     function _es2BatchUpdateCardStatus(seqName, pillClass, pillText) {
@@ -1059,17 +1012,7 @@
     }
 
     function _es2BatchSetCancelBtn(running) {
-        var btn = document.getElementById("btn-es2-batch-cancel");
-        if (!btn) return;
-        if (running) {
-            btn.textContent = "Detener";
-            btn.style.borderColor = "rgba(248,113,113,0.4)";
-            btn.style.color = "#f87171";
-        } else {
-            btn.textContent = "Cerrar Batch";
-            btn.style.borderColor = "";
-            btn.style.color = "";
-        }
+        batchSeqRunner.setBatchCancelBtn("es2", running);
     }
 
     function es2BatchClose() {
@@ -1171,12 +1114,7 @@
     }
 
     function _es2BatchGetAnalyzedNames() {
-        var names = [];
-        for (var qi = 0; qi < _es2BatchQueue.length; qi++) {
-            var n = _es2BatchQueue[qi].name;
-            if (_es2BatchResults[n] && _es2BatchResults[n].result) names.push(n);
-        }
-        return names;
+        return batchSeqRunner.getBatchAnalyzedNames(_es2BatchQueue, _es2BatchResults, "result");
     }
 
     function _es2BatchNavigateTo(seqName) {
@@ -1217,10 +1155,7 @@
 
     function _es2BatchUpdateNav() {
         var analyzed = _es2BatchGetAnalyzedNames();
-        var prevBtn = document.getElementById("btn-es2-bnav-prev");
-        var nextBtn = document.getElementById("btn-es2-bnav-next");
-        if (prevBtn) prevBtn.className = "btn-batch-nav" + (_es2BatchCurrentNav <= 0 ? " disabled" : "");
-        if (nextBtn) nextBtn.className = "btn-batch-nav" + (_es2BatchCurrentNav >= analyzed.length - 1 ? " disabled" : "");
+        batchSeqRunner.updateBatchNavButtons("es2", _es2BatchCurrentNav, analyzed.length);
     }
 
     function es2BatchNavPrev() {
