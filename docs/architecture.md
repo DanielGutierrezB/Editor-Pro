@@ -17,23 +17,14 @@
 │  │  Sin frameworks      │    │  - Clips de video      │  │
 │  │  Sin bundler         │    │  - Essential Graphics  │  │
 │  │                      │    │  - Audio export        │  │
-│  └──────────┬───────────┘    └────────────────────────┘  │
-│             │                                             │
-└─────────────┼─────────────────────────────────────────────┘
-              │ HTTP localhost:3847
-              ▼
-┌─────────────────────────────────┐
-│      Motion Server (Node.js)    │
-│                                 │
-│  Express + LLM APIs + Remotion  │
-│                                 │
-│  ┌───────────┐  ┌────────────┐  │
-│  │  LLM API  │  │  Remotion  │  │
-│  │ (generate │  │  (render   │  │
-│  │  TSX)     │  │   MP4)     │  │
-│  └───────────┘  └────────────┘  │
-└─────────────────────────────────┘
+│  └──────────────────────┘    └────────────────────────┘  │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
 ```
+
+Las llamadas a proveedores de IA/STT se hacen directamente desde el panel JS
+(vía HTTP a las APIs de cada proveedor, o a Ollama/whisper.cpp locales). No hay
+servidor Node.js intermedio.
 
 ## Comunicación Panel ↔ Premiere
 
@@ -57,39 +48,41 @@ csInterface.evalScript(               function getActiveSequenceInfo() {
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    CAPA UI (5 módulos)               │
+│                    CAPA UI (4 módulos + cutter)      │
 │  ui-spellcheck │ ui-supertexts │ ui-edit-suggestions │
-│  ui-recording  │ ui-motion-pro │ cutter              │
+│  ui-recording  │ cutter (auto-contenido)             │
 ├─────────────────────────────────────────────────────┤
 │              CAPA ORQUESTADOR                        │
-│  main.js — init, event binding, proxies (704 líneas) │
+│  main.js — init, event binding, proxies             │
 ├─────────────────────────────────────────────────────┤
 │               CAPA MÓDULOS EXTRAÍDOS                 │
 │  prompt-editor │ transcript-parser │ transcript-cache │
 │  transcript-manager │ settings │ sequence-controller  │
+│  updater (auto-actualización vía GitHub API)         │
 ├─────────────────────────────────────────────────────┤
 │                 CAPA SERVICIOS                        │
 │  ai-analyzer │ speech-to-text │ spellcheck-engine    │
-│  recording-notes │ motion-pro │ context-rules         │
+│  recording-notes │ context-rules                     │
 ├─────────────────────────────────────────────────────┤
 │                  CAPA CORE                            │
 │  state.js │ utils.js │ modal.js │ logger.js          │
-│  CSInterface.js (Adobe bridge — no tocar)             │
+│  event-bus.js │ CSInterface.js (Adobe bridge — no tocar) │
 └─────────────────────────────────────────────────────┘
 ```
 
 ## Orden de Carga (index.html)
 
 ```
-1. Core:     logger → CSInterface → state → utils → modal
+1. Core:     logger → CSInterface → state → utils → event-bus → modal
 2. Services: settings → sequence-controller → spellcheck-engine →
              context-rules → ai-analyzer → speech-to-text →
-             recording-notes → motion-pro
+             recording-notes
 3. Modules:  prompt-editor → transcript-parser → transcript-cache →
              transcript-manager → cutter
-4. Main:     main.js (orchestrator)
-5. UI:       ui-spellcheck → ui-supertexts → ui-edit-suggestions →
-             ui-recording → ui-motion-pro
+4. Updater:  updater
+5. Main:     main.js (orchestrator)
+6. UI:       ui-spellcheck → ui-supertexts → ui-edit-suggestions →
+             ui-recording
 ```
 
 ## Estado
@@ -148,8 +141,7 @@ host/
 ├── cutter.jsx       ← executeCuts, trimZoneOnTrack
 ├── spellcheck.jsx   ← exportSequenceXML, addMarkersFromFile
 ├── supertexts.jsx   ← insertSupertextMOGRTs, replaceMOGRTClip
-├── recording.jsx    ← exportSequenceAudio, openBackupAndCut
-└── motion.jsx       ← importAndPlaceMotions, replaceMotionOnTrack
+└── recording.jsx    ← exportSequenceAudio, openBackupAndCut, marcadores, vistas
 ```
 
 ## Proveedores
@@ -158,5 +150,4 @@ host/
 |------|-------------|-----|
 | **IA Texto** | Ollama, Gemini, Claude, GPT, OpenRouter | Análisis de transcript, supertexts, edición |
 | **STT** | ElevenLabs Scribe, Whisper local, Whisper API | Transcripción de audio |
-| **Visión** | moondream, llava, llama3.2-vision | Clasificación CAM/PC |
-| **Render** | Remotion (local) | Motion graphics → MP4 |
+| **Visión** | moondream, llava, llama3.2-vision | Clasificación CAM/PC (Vistas) |

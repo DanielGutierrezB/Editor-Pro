@@ -59,41 +59,6 @@ if [ -d "$SCRIPT_DIR/Prompts" ]; then
     cp -R "$SCRIPT_DIR/Prompts" "$BUILD/ext/Prompts"
 fi
 
-# Motion-Pro server (without node_modules — user runs npm install)
-mkdir -p "$BUILD/ext/motion-server"
-cp "$SCRIPT_DIR/motion-server/package.json" "$BUILD/ext/motion-server/"
-cp "$SCRIPT_DIR/motion-server/server.js"    "$BUILD/ext/motion-server/"
-cp -R "$SCRIPT_DIR/motion-server/routes"    "$BUILD/ext/motion-server/routes"
-cp -R "$SCRIPT_DIR/motion-server/lib"       "$BUILD/ext/motion-server/lib"
-if [ -d "$SCRIPT_DIR/motion-server/public" ]; then
-    cp -R "$SCRIPT_DIR/motion-server/public" "$BUILD/ext/motion-server/public"
-fi
-
-# Motion-Pro Remotion project (without node_modules and generated files)
-mkdir -p "$BUILD/ext/motion-render/src/components" "$BUILD/ext/motion-render/src/compositions"
-cp "$SCRIPT_DIR/motion-render/package.json"      "$BUILD/ext/motion-render/"
-cp "$SCRIPT_DIR/motion-render/tsconfig.json"      "$BUILD/ext/motion-render/"
-cp "$SCRIPT_DIR/motion-render/remotion.config.ts" "$BUILD/ext/motion-render/"
-cp "$SCRIPT_DIR/motion-render/src/index.ts"       "$BUILD/ext/motion-render/src/"
-# Clean Root.tsx (no generated compositions)
-cat > "$BUILD/ext/motion-render/src/Root.tsx" << 'ROOTEOF'
-import React from 'react';
-import { Composition } from 'remotion';
-// === DYNAMIC IMPORTS START ===
-// === DYNAMIC IMPORTS END ===
-
-export const RemotionRoot: React.FC = () => {
-  return (
-    <>
-      {/* === DYNAMIC COMPOSITIONS START === */}
-      {/* === DYNAMIC COMPOSITIONS END === */}
-    </>
-  );
-};
-ROOTEOF
-cp "$SCRIPT_DIR/motion-render/src/components/"*.ts  "$BUILD/ext/motion-render/src/components/" 2>/dev/null || true
-cp "$SCRIPT_DIR/motion-render/src/components/"*.tsx "$BUILD/ext/motion-render/src/components/" 2>/dev/null || true
-
 # Write current commit SHA so the updater knows what version is installed
 CURRENT_SHA=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo "")
 if [ -n "$CURRENT_SHA" ]; then
@@ -105,7 +70,7 @@ fi
 echo "$CHANNEL" > "$BUILD/ext/.update-channel"
 echo "  ✓ .update-channel set to: $CHANNEL"
 
-echo "  ✓ Files staged (including Motion-Pro)"
+echo "  ✓ Files staged"
 
 echo "→ Packaging ZXP..."
 if [ "$CHANNEL" = "main" ]; then

@@ -6,14 +6,7 @@
  */
 
 #include "common.jsx"
-#include "backup.jsx"
-#include "bin-utils.jsx"
-#include "sequence-info.jsx"
-#include "marker-ops.jsx"
-#include "sequence-discovery.jsx"
 #include "cutter.jsx"
 #include "spellcheck.jsx"
 #include "supertexts.jsx"
 #include "recording.jsx"
-#include "motion.jsx"
-#include "broll.jsx"

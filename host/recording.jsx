@@ -1,5 +1,5 @@
 /**
- * host/recording.jsx — Recording Notes: audio export, markers, backup+cut, reel sequences
+ * host/recording.jsx — Recording Notes: audio export, markers, backup+cut
  * Loaded via #include from host/index.jsx
  */
 
@@ -41,8 +41,11 @@ function getPlayheadPosition() {
 }
 
 // ─── Transcribe Folder (next to .prproj) ─────────────────────
+// Read-only: resolves the Transcribe folder path WITHOUT creating it on disk.
+// The folder is created lazily at the first real write (audio export / transcript
+// save / copy). Pass createIfMissing=true only from an actual write path.
 
-function getTranscribeFolder() {
+function getTranscribeFolder(createIfMissing) {
     try {
         var projPath = app.project.path;
         if (!projPath || projPath === "") {
@@ -53,7 +56,7 @@ function getTranscribeFolder() {
         var projDir = projFile.parent;
         var transcribeDir = new Folder(projDir.fsName + "/Transcribe");
 
-        if (!transcribeDir.exists) {
+        if (createIfMissing === true && !transcribeDir.exists) {
             transcribeDir.create();
         }
 
@@ -63,7 +66,7 @@ function getTranscribeFolder() {
             projectDir: projDir.fsName
         });
     } catch(e) {
-        return JSON.stringify({ error: "Error al crear carpeta Transcribe: " + e.message });
+        return JSON.stringify({ error: "Error al resolver carpeta Transcribe: " + e.message });
     }
 }
 
@@ -250,126 +253,4 @@ function openBackupAndCut(seqId, cutsFilePath) {
         return JSON.stringify({ error: "Error en openBackupAndCut: " + e.message });
     }
 }
-
-// ─── Create Reel Sequence ────────────────────────────────────
-// Clones the active sequence, renames it, and removes everything
-// except the specified keep zones (reel segments).
-
-function createReelSequence(jsonPath) {
-    try {
-        var seq = app.project.activeSequence;
-        if (!seq) return JSON.stringify({ error: "No hay secuencia activa." });
-
-        var f = new File(jsonPath);
-        if (!f.exists) return JSON.stringify({ error: "Archivo no encontrado: " + jsonPath });
-        f.encoding = "UTF-8"; f.open("r"); var content = f.read(); f.close();
-
-        var data = JSON.parse(content);
-        var reelName = data.reelName || (seq.name + "_Reel");
-        var keepZones = data.keepZones;
-        if (!keepZones || keepZones.length === 0) {
-            return JSON.stringify({ error: "No hay segmentos para el reel." });
-        }
-
-        var originalSeqId = seq.sequenceID;
-
-        var existingIds = {};
-        for (var si = 0; si < app.project.sequences.numSequences; si++) {
-            existingIds[app.project.sequences[si].sequenceID] = true;
-        }
-
-        seq.clone();
-        $.sleep(500);
-
-        var clonedSeq = null;
-        for (var i = 0; i < app.project.sequences.numSequences; i++) {
-            var s = app.project.sequences[i];
-            if (!existingIds[s.sequenceID]) {
-                clonedSeq = s;
-                break;
-            }
-        }
-
-        if (!clonedSeq) {
-            return JSON.stringify({ error: "No se pudo clonar la secuencia." });
-        }
-
-        try { clonedSeq.name = reelName; } catch(e) {}
-        $.sleep(200);
-
-        var parentBin = findBinContainingSequence(app.project.rootItem, originalSeqId, seq.name);
-        if (!parentBin) parentBin = app.project.rootItem;
-        var reelBin = findOrCreateBin(parentBin, "Reels");
-        if (reelBin) {
-            var clonedItem = findItemByNameRecursive(app.project.rootItem, reelName);
-            if (clonedItem) {
-                try { clonedItem.item.moveBin(reelBin); } catch(e) {}
-            }
-        }
-
-        app.project.openSequence(clonedSeq.sequenceID);
-        $.sleep(500);
-
-        // Set 9:16 vertical resolution (1080x1920) via QE
-        var frameChanged = false;
-        try {
-            app.enableQE();
-            var qeReelSeq = qe.project.getActiveSequence();
-            if (qeReelSeq) {
-                qeReelSeq.setVideoFrameSize(1080, 1920);
-                frameChanged = true;
-            }
-        } catch(e) {
-            // QE frame resize failed — continue with original dimensions
-        }
-        $.sleep(300);
-
-        var seqEnd = 0;
-        try { seqEnd = parseFloat(clonedSeq.end) / TICKS_PER_SECOND; } catch(e) {}
-
-        keepZones.sort(function(a, b) { return parseFloat(a.start) - parseFloat(b.start); });
-
-        var removeZones = [];
-        var cursor = 0;
-        for (var k = 0; k < keepZones.length; k++) {
-            var kStart = parseFloat(keepZones[k].start);
-            var kEnd = parseFloat(keepZones[k].end);
-            if (kStart > cursor + 0.1) {
-                removeZones.push({ start: cursor, end: kStart, label: "Pre-reel gap " + (k + 1) });
-            }
-            cursor = kEnd;
-        }
-        if (cursor < seqEnd - 0.1) {
-            removeZones.push({ start: cursor, end: seqEnd, label: "Post-reel tail" });
-        }
-
-        if (removeZones.length === 0) {
-            return JSON.stringify({ success: true, reelName: reelName, reelSeqId: clonedSeq.sequenceID, frameChanged: frameChanged, message: "Reel creado (sin cortes necesarios)." });
-        }
-
-        var cutDataStr = JSON.stringify({ removeZones: removeZones, seqName: reelName, timestamp: "" });
-        var tmpCutFile = new File(Folder.temp.fsName + "/EditorPro_reel_cuts.json");
-        tmpCutFile.encoding = "UTF-8"; tmpCutFile.open("w"); tmpCutFile.write(cutDataStr); tmpCutFile.close();
-
-        var cutResultStr = executeCuts(tmpCutFile.fsName);
-
-        // Keep the reel sequence open (don't switch back)
-
-        var cutResult;
-        try { cutResult = JSON.parse(cutResultStr); } catch(e) {
-            return JSON.stringify({ error: "Error al parsear resultado de cortes del reel." });
-        }
-
-        cutResult.reelName = reelName;
-        cutResult.reelSeqId = clonedSeq.sequenceID;
-        cutResult.frameChanged = frameChanged;
-        return JSON.stringify(cutResult);
-    } catch(e) {
-        return JSON.stringify({ error: "Error al crear reel: " + e.message });
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// ═══ MOTION-PRO — Import & Place MP4 clips ═══════════════════
-// ═══════════════════════════════════════════════════════════════
 

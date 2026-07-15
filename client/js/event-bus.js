@@ -12,7 +12,6 @@
  *   - "sequence-first-load" → { name }       — first sequence detected after panel open
  *   - "transcript-changed"  → {}             — transcript text updated (textarea, cache, file)
  *   - "state-restored"      → { sequenceName } — full state restored from cache
- *   - "server-status"       → { running }    — motion-server started/stopped
  */
 (function(global) {
     "use strict";

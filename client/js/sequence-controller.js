@@ -68,7 +68,6 @@
 
                 if (changed && !_isAnyBatchActive()) {
                     restoreSequenceState(newSeqName);
-                    if (global.EditorProUI && global.EditorProUI.motionPro && global.EditorProUI.motionPro.switchToSequence) global.EditorProUI.motionPro.switchToSequence();
                     if (global.EventBus) global.EventBus.emit("sequence-changed", { name: newSeqName });
                 } else if (isFirstLoad) {
                     if (!state.transcript && (!state.segments || state.segments.length === 0)) {
@@ -111,7 +110,6 @@
                         document.getElementById("seq-meta").textContent = meta.join(" · ");
                         if (_isAnyBatchActive()) return;
                         restoreSequenceState(data.name);
-                        if (global.EditorProUI && global.EditorProUI.motionPro && global.EditorProUI.motionPro.switchToSequence) global.EditorProUI.motionPro.switchToSequence();
                         if (global.EventBus) global.EventBus.emit("sequence-changed", { name: data.name });
                         csInterface.evalScript("getTranscribeFolder()", function(tfResult) {
                             try {
@@ -218,9 +216,6 @@
         if (cached.supertexts2 && cached.supertexts2.length > 0) {
             tags.push({ label: "💡 " + cached.supertexts2.length + " supertexts", color: "var(--success)" });
         }
-        if (cached.reelProposals && cached.reelProposals.length > 0) {
-            tags.push({ label: "🎬 " + cached.reelProposals.length + " reels", color: "#ec4899" });
-        }
         if (cached.detectionResult) {
             var segs = cached.detectionResult.segments;
             if (segs && segs.length > 0) {
@@ -274,9 +269,7 @@
             es2Highlights: state.es2Highlights,
             es2Suggestions: state.es2Suggestions,
             es2Errors: state.es2Errors,
-            es2ResultSummary: document.getElementById("es2-summary") ? document.getElementById("es2-summary").innerHTML : "",
-            reelProposals: state.reelProposals,
-            reelAssessment: document.getElementById("rp-assessment") ? document.getElementById("rp-assessment").innerHTML : ""
+            es2ResultSummary: document.getElementById("es2-summary") ? document.getElementById("es2-summary").innerHTML : ""
         };
     }
 
@@ -299,7 +292,6 @@
             state.es2Highlights = cached.es2Highlights || [];
             state.es2Suggestions = cached.es2Suggestions || [];
             state.es2Errors = cached.es2Errors || [];
-            state.reelProposals = cached.reelProposals || [];
             restoreUIFromState(cached);
             if (global._epShowToast) global._epShowToast("Secuencia: " + seqName, "info");
         } else {
@@ -319,13 +311,11 @@
         state.es2Highlights = [];
         state.es2Suggestions = [];
         state.es2Errors = [];
-        state.reelProposals = [];
         state.analyzing = false;
         state.st2Analyzing = false;
         state.es2Analyzing = false;
         state.recAnalyzing = false;
         state.spellChecking = false;
-        state.mpGenerating = false;
         restoreUIFromState(null);
     }
 
@@ -395,24 +385,6 @@
             if (es2Sum) es2Sum.innerHTML = "";
             if (global._epHideElement) global._epHideElement("es2-results");
             if (global._epShowElement) global._epShowElement("es2-empty");
-        }
-
-        // Reel Proposals
-        if (state.reelProposals && state.reelProposals.length > 0) {
-            if (global.EditorProUI && global.EditorProUI.editSuggestions) global.EditorProUI.editSuggestions.renderReelResults({ reels: state.reelProposals, assessment: "", notSuitable: [] });
-            if (cached && cached.reelAssessment) {
-                var rpAssess = document.getElementById("rp-assessment");
-                if (rpAssess) rpAssess.innerHTML = cached.reelAssessment;
-            }
-            if (global._epShowElement) global._epShowElement("rp-results");
-            if (global._epHideElement) global._epHideElement("rp-empty");
-        } else {
-            var rpList = document.getElementById("rp-list");
-            var rpAssessEl = document.getElementById("rp-assessment");
-            if (rpList) rpList.innerHTML = "";
-            if (rpAssessEl) rpAssessEl.innerHTML = "";
-            if (global._epHideElement) global._epHideElement("rp-results");
-            if (global._epShowElement) global._epShowElement("rp-empty");
         }
     }
 

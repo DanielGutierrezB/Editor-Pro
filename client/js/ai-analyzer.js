@@ -93,7 +93,7 @@
         this.provider = "ollama";
         this.keys = { anthropic: "", openai: "", google: "", openrouter: "" };
         this.model = PROVIDERS.ollama.defaultModel;
-        // Salidas JSON largas (Motion-Pro, supertextos en clases largas)
+        // Salidas JSON largas (supertextos en clases largas)
         this.maxTokens = 16384;
         this.ollamaUrl = "http://localhost:11434";
         /** Tiempo máximo por petición HTTP (ms). Clases largas + Ollama local pueden tardar mucho. */
@@ -167,17 +167,11 @@
         editsuggestions2: _loadPrompt("EditSuggestions/system.md",
             "Eres un editor de video profesional especializado en contenido educativo. Analizas transcripciones para identificar highlights, sugerir cortes, y detectar errores de edición como contenido repetido. Tu análisis es preciso con los tiempos y agrupas segmentos adyacentes que pertenecen al mismo bloque. Responde ÚNICAMENTE con JSON válido, sin markdown ni bloques de código."),
 
-        reelproposal: _loadPrompt("ReelProposal/system.md",
-            "Eres un estratega de contenido digital experto en crear reels virales de alta retención para Instagram, YouTube Shorts y Facebook Reels a partir de clases educativas. Sabes exactamente qué fragmentos de una clase pueden funcionar como contenido corto impactante. Eres crítico y honesto — si el contenido no sirve para reels, lo dices. Responde ÚNICAMENTE con JSON válido, sin markdown ni bloques de código."),
-
         takeAnalysis: _loadPrompt("RecordingNotes/system-takeAnalysis.md",
             "Eres un productor de video educativo experto en post-producción de clases grabadas. Tu trabajo es analizar segmentos de una grabación para identificar tomas repetidas de un mismo contenido, entender la continuidad del discurso entre ellas, y generar notas precisas para el editor. Responde ÚNICAMENTE con JSON válido, sin markdown ni bloques de código."),
 
         supplementReview: _loadPrompt("RecordingNotes/system-supplementReview.md",
-            "Eres un editor de video educativo experto. Tu trabajo es validar que las tomas seleccionadas de una clase grabada cubren todo el contenido necesario, y detectar si hay contenido valioso fuera de las tomas detectadas que debería incluirse. Eres conservador: prefieres no sugerir nada antes que sugerir cambios innecesarios. NUNCA sugieres reactivar tomas si el contenido ya está cubierto por las tomas activas. Responde ÚNICAMENTE con JSON válido, sin markdown ni bloques de código."),
-
-        motionProposals: _loadPrompt("MotionPro/analysis-system.md",
-            "Eres un director de motion graphics educativos. Analizas transcripciones de clases y decides qué momentos se beneficiarían de apoyo visual animado (motion graphics). Los motion graphics deben ser DEMOSTRATIVOS, no literales — no repiten el texto sino que ilustran el concepto visualmente. Solo propones motions donde realmente agregan valor educativo. IMPORTANTE: Los tiempos de tus propuestas DEBEN coincidir exactamente con los tiempos de la transcripción. Cada motion dura lo que dure la narración del concepto — NO uses duraciones uniformes. Responde ÚNICAMENTE con JSON válido, sin markdown ni bloques de código.")
+            "Eres un editor de video educativo experto. Tu trabajo es validar que las tomas seleccionadas de una clase grabada cubren todo el contenido necesario, y detectar si hay contenido valioso fuera de las tomas detectadas que debería incluirse. Eres conservador: prefieres no sugerir nada antes que sugerir cambios innecesarios. NUNCA sugieres reactivar tomas si el contenido ya está cubierto por las tomas activas. Responde ÚNICAMENTE con JSON válido, sin markdown ni bloques de código.")
     };
 
     // ─── PROMPTS (loaded from Prompts/ folder with hardcoded fallbacks) ────
@@ -227,13 +221,6 @@
         var template = _getPromptTemplate("EditSuggestions/prompt.md", "");
         if (template) return template.replace("{TRANSCRIPT}", transcript);
         return "Analiza la siguiente transcripción de una clase educativa.\n\nTRANSCRIPCIÓN:\n" + transcript + "\n\nAnaliza la edición en 3 categorías: highlights, sugerencias, errores.\nResponde ÚNICAMENTE con JSON válido.\n\nFORMATO:\n{\"highlights\":[],\"suggestions\":[],\"errors\":[],\"summary\":\"\",\"overallScore\":85}";
-    };
-
-    AIAnalyzer.prototype._buildReelProposalPrompt = function(transcript, context) {
-        context = context || {};
-        var template = _getPromptTemplate("ReelProposal/prompt.md", "");
-        if (template) return template.replace("{TRANSCRIPT}", transcript);
-        return "Analiza la siguiente transcripción.\n\nTRANSCRIPCIÓN:\n" + transcript + "\n\nPropone REELS de alta retención.\nResponde ÚNICAMENTE con JSON válido.\n\nFORMATO:\n{\"reels\":[],\"assessment\":\"\",\"notSuitable\":[]}";
     };
 
     // ─── Generic send method ─────────────────────────────────────
@@ -455,46 +442,6 @@
         var prompt = (context && context.customPrompt)
             ? context.customPrompt.replace("{TRANSCRIPT}", transcript)
             : this._buildEditSuggestions2Prompt(transcript, context);
-        this._send(systemMsg, prompt, callback);
-    };
-
-    AIAnalyzer.prototype.analyzeReelProposal = function(transcript, context, callback) {
-        if (!this.isConfigured()) {
-            callback({ error: "API key no configurada para " + PROVIDERS[this.provider].name });
-            return;
-        }
-        if (!transcript || transcript.trim().length === 0) {
-            callback({ error: "Transcripción vacía" });
-            return;
-        }
-        var systemMsg = (context && context.customSystemMsg) || SYSTEM_MSGS.reelproposal;
-        var prompt = (context && context.customPrompt)
-            ? context.customPrompt.replace("{TRANSCRIPT}", transcript)
-            : this._buildReelProposalPrompt(transcript, context);
-        this._send(systemMsg, prompt, callback);
-    };
-
-    // ─── Motion-Pro Analysis ──────────────────────────────────────
-
-    AIAnalyzer.prototype._buildMotionProposalsPrompt = function(transcript) {
-        var template = _getPromptTemplate("MotionPro/analysis-prompt.md", "");
-        if (template) return template.replace("{TRANSCRIPT}", transcript);
-        return "Analiza la siguiente transcripción.\n\nTRANSCRIPCIÓN:\n" + transcript + "\n\nIdentifica momentos para MOTION GRAPHICS.\nResponde con JSON: {\"proposals\":[{startTime,endTime,type,description,priority,transcriptSegment}]}";
-    };
-
-    AIAnalyzer.prototype.analyzeMotionProposals = function(transcript, context, callback) {
-        if (!this.isConfigured()) {
-            callback({ error: "API key no configurada para " + PROVIDERS[this.provider].name });
-            return;
-        }
-        if (!transcript || transcript.trim().length === 0) {
-            callback({ error: "Transcripción vacía" });
-            return;
-        }
-        var systemMsg = (context && context.customSystemMsg) || SYSTEM_MSGS.motionProposals;
-        var prompt = (context && context.customPrompt)
-            ? context.customPrompt.replace("{TRANSCRIPT}", transcript)
-            : this._buildMotionProposalsPrompt(transcript);
         this._send(systemMsg, prompt, callback);
     };
 
@@ -888,14 +835,6 @@
 
     AIAnalyzer.prototype.getDefaultEditSuggestions2Prompt = function() {
         return this._buildEditSuggestions2Prompt("{TRANSCRIPT}", {});
-    };
-
-    AIAnalyzer.prototype.getDefaultReelProposalPrompt = function() {
-        return this._buildReelProposalPrompt("{TRANSCRIPT}", {});
-    };
-
-    AIAnalyzer.prototype.getDefaultMotionProposalsPrompt = function() {
-        return this._buildMotionProposalsPrompt("{TRANSCRIPT}");
     };
 
     AIAnalyzer.prototype.getDefaultTakeAnalysisPrompt = function() {

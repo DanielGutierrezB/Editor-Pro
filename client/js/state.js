@@ -1,6 +1,7 @@
 /**
  * state.js — Central state manager for Editor-Pro
- * Defines the canonical state object, shared across all modules as window._epState.
+ * Defines the canonical state object and typed accessors.
+ * Exposes: window._epState (raw object, backward compat) and window.EPState
  */
 (function(global) {
     "use strict";
@@ -24,7 +25,6 @@
         es2Highlights: [],
         es2Suggestions: [],
         es2Errors: [],
-        reelProposals: [],
         customDictionary: [],
         // Recording Notes
         audioPath: "",
@@ -44,13 +44,6 @@
         })(),
         lastWhisperResult: null,
         transcriptCache: {},
-        // Motion-Pro
-        mpAnalyzing: false,
-        mpGenerating: false,
-        mpGenerateCancelRequested: false,
-        // B-Roll
-        brAnalyzing: false,
-        brGenerating: false,
         settings: {
             aiProvider: "ollama",
             aiModel: "mistral-small3.1:latest",
@@ -59,6 +52,21 @@
         }
     };
 
+    function getState(key) {
+        return state[key];
+    }
+
+    function setState(key, value) {
+        state[key] = value;
+    }
+
+    global.EPState = {
+        get: getState,
+        set: setState,
+        raw: state
+    };
+
+    // Backward compat: UI modules and main.js access window._epState directly
     global._epState = state;
 
 })(window);

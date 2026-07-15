@@ -20,20 +20,10 @@
             defaultSystem: function() { return global.AIAnalyzer && global.AIAnalyzer.DEFAULT_SYSTEM_MSGS ? global.AIAnalyzer.DEFAULT_SYSTEM_MSGS.editsuggestions2 : ""; },
             defaultUser: function() { var a = global._epAiAnalyzer; return a && a.getDefaultEditSuggestions2Prompt ? a.getDefaultEditSuggestions2Prompt() : ""; }
         },
-        rp: {
-            storageKey: "pr_rp",
-            defaultSystem: function() { return global.AIAnalyzer && global.AIAnalyzer.DEFAULT_SYSTEM_MSGS ? global.AIAnalyzer.DEFAULT_SYSTEM_MSGS.reelproposal : ""; },
-            defaultUser: function() { var a = global._epAiAnalyzer; return a && a.getDefaultReelProposalPrompt ? a.getDefaultReelProposalPrompt() : ""; }
-        },
         ta: {
             storageKey: "pr_ta",
             defaultSystem: function() { return global.AIAnalyzer && global.AIAnalyzer.DEFAULT_SYSTEM_MSGS ? global.AIAnalyzer.DEFAULT_SYSTEM_MSGS.supplementReview : ""; },
             defaultUser: function() { var a = global._epAiAnalyzer; return a && a.getDefaultSupplementPrompt ? a.getDefaultSupplementPrompt() : ""; }
-        },
-        mp: {
-            storageKey: "pr_mp",
-            defaultSystem: function() { return global.AIAnalyzer && global.AIAnalyzer.DEFAULT_SYSTEM_MSGS ? global.AIAnalyzer.DEFAULT_SYSTEM_MSGS.motionProposals : ""; },
-            defaultUser: function() { var a = global._epAiAnalyzer; return a && a.getDefaultMotionProposalsPrompt ? a.getDefaultMotionProposalsPrompt() : ""; }
         }
     };
 

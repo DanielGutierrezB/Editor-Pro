@@ -1,5 +1,5 @@
 /**
- * Editor-Pro — Edit Suggestions + Reel Proposal UI Module
+ * Editor-Pro — Edit Suggestions UI Module
  * Extracted from main.js for organizational clarity.
  * All behavior is identical to the original.
  */
@@ -11,7 +11,7 @@
     // ─── Shared references (captured at init time, not load time) ─
     var state, csInterface, fs, path, os, aiAnalyzer;
     var on, clearContainer, safeCallback, showToast, showElement, hideElement;
-    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress, evalScriptWithJson;
+    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress;
     var checkAIReady, expandSection, formatTime, formatTimeFull, navigateToTime;
     var parseTranscriptJson, _getTranscriptFolders;
     var refreshSequenceInfo, buildTimedTranscript, copyToClipboard;
@@ -24,7 +24,6 @@
     var readTranscriptFromProjectFile, readCaptionsFromProjectFile;
     var srtSegmentsToSttResult, renderTranscriptFromSegments, bindCollapsibles;
     var MP_ANTICIPATION_SECS;
-    var batchSeqRunner;
 
     function _initRefs() {
         state       = global._epState;
@@ -45,7 +44,6 @@
         esc                      = global._epEsc;
         escAttr                  = global._epEscAttr;
         escExtend                = global._epEscExtend;
-        evalScriptWithJson       = global._epEvalScriptWithJson;
         setProgress              = global._epSetProgress;
         checkAIReady             = global._epCheckAIReady;
         expandSection            = global._epExpandSection;
@@ -85,7 +83,6 @@
         MP_ANTICIPATION_SECS     = global._epMP_ANTICIPATION_SECS || 0.35;
         parseTranscriptJson      = global._epParseTranscriptJson;
         _getTranscriptFolders    = global._epGetTranscriptFolders;
-        batchSeqRunner           = global.BatchSeqRunner;
     }
 
     function getEditColor(type) {
@@ -492,10 +489,21 @@
         });
 
         if (markers.length === 0) return;
-        evalScriptWithJson("addMarkersFromFile", markers, function(err, data) {
-            if (err) { showToast("Error al colocar marcadores", "error"); return; }
-            if (data.error) { showToast("Error: " + data.error, "error"); return; }
-            showToast(data.placed + " marcadores colocados", "success");
+        if (!fs || !os) {
+            showToast("Error: Node.js no disponible", "error");
+            return;
+        }
+        var tmpFile = path.join(os.tmpdir(), "pe_es2_err_markers.json");
+        fs.writeFileSync(tmpFile, JSON.stringify(markers), "utf8");
+        var safePath = tmpFile.replace(/\\/g, "/");
+        csInterface.evalScript('addMarkersFromFile("' + safePath + '")', function(result) {
+            try {
+                var data = JSON.parse(result);
+                if (data.error) { showToast("Error: " + data.error, "error"); return; }
+                showToast(data.placed + " marcadores colocados", "success");
+            } catch(e) {
+                showToast("Error al colocar marcadores", "error");
+            }
         });
     }
 
@@ -504,13 +512,24 @@
             showToast("No hay " + label + " para marcar", "info");
             return;
         }
+        if (!fs || !os) {
+            showToast("Error: Node.js no disponible", "error");
+            return;
+        }
+        var tmpFile = path.join(os.tmpdir(), "pe_es2_markers.json");
+        fs.writeFileSync(tmpFile, JSON.stringify(markers), "utf8");
+        var safePath = tmpFile.replace(/\\/g, "/");
 
         csInterface.evalScript('clearMarkersByPrefix("' + prefix + '")', function() {
-            evalScriptWithJson("addMarkersFromFile", markers, function(err, data) {
-                if (err) { showToast("Error al colocar marcadores", "error"); return; }
-                if (data.error) { showToast("Error: " + data.error, "error"); return; }
-                showToast(data.placed + " marcadores de " + label + " colocados", "success");
-                refreshSequenceInfo();
+            csInterface.evalScript('addMarkersFromFile("' + safePath + '")', function(result) {
+                try {
+                    var data = JSON.parse(result);
+                    if (data.error) { showToast("Error: " + data.error, "error"); return; }
+                    showToast(data.placed + " marcadores de " + label + " colocados", "success");
+                    refreshSequenceInfo();
+                } catch(e) {
+                    showToast("Error al colocar marcadores", "error");
+                }
             });
         });
     }
@@ -569,236 +588,6 @@
         showToast("Sugerencias copiadas", "success");
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // REEL PROPOSAL — Analyze transcript for high-retention reels
-    // ═══════════════════════════════════════════════════════════════
-
-    function startReelProposal() {
-        if (state.es2Analyzing) return;
-        if (!state.transcript || state.transcript.trim().length === 0) {
-            showToast("Carga una transcripción primero", "error");
-            return;
-        }
-        if (!checkAIReady()) return;
-
-        state.es2Analyzing = true;
-        expandSection("reelproposal");
-
-        hideElement("rp-results");
-        hideElement("rp-empty");
-        showElement("rp-progress");
-        setRPProgress(20, "Analizando contenido para reels...");
-        disableBtn("btn-reelproposal");
-
-        var timedTranscript = buildTimedTranscript();
-
-        aiAnalyzer.analyzeReelProposal(timedTranscript, getPromptContext("rp"), function(result) {
-            setRPProgress(100, "Completado");
-
-            setTimeout(function() {
-                try {
-                    hideElement("rp-progress");
-                    hideElement("rp-progress-header");
-                    enableBtn("btn-reelproposal");
-
-                    if (result.error) {
-                        showToast("Error: " + result.error, "error");
-                        showElement("rp-empty");
-                        return;
-                    }
-
-                    state.reelProposals = result.reels || [];
-                    renderReelResults(result);
-                    showElement("rp-results");
-
-                    var count = state.reelProposals.length;
-                    showToast(count > 0 ? count + " propuesta(s) de reel" : "Sin reels viables", count > 0 ? "success" : "info");
-                } finally {
-                    state.es2Analyzing = false;
-                }
-            }, 500);
-        });
-    }
-
-    function renderReelResults(result) {
-        var assessment = document.getElementById("rp-assessment");
-        assessment.innerHTML = esc(result.assessment || "Análisis completado");
-
-        var list = clearContainer(document.getElementById("rp-list"));
-
-        if (result.notSuitable && result.notSuitable.length > 0) {
-            var nsDiv = document.createElement("div");
-            nsDiv.className = "reel-not-suitable";
-            nsDiv.innerHTML = "<strong>⚠ Contenido no apto para reels de alta retención</strong>" +
-                result.notSuitable.map(function(reason) { return "• " + esc(reason); }).join("<br>");
-            list.appendChild(nsDiv);
-        }
-
-        if (state.reelProposals.length === 0 && (!result.notSuitable || result.notSuitable.length === 0)) {
-            list.innerHTML = '<div class="empty-state-mini"><p class="empty-text">No se encontraron propuestas de reel viables</p></div>';
-            return;
-        }
-
-        state.reelProposals.forEach(function(reel, idx) {
-            var card = renderReelCard(reel, idx);
-            list.appendChild(card);
-        });
-    }
-
-    function renderReelCard(reel, idx) {
-        var card = document.createElement("div");
-        card.className = "reel-card";
-
-        var header = document.createElement("div");
-        header.className = "reel-card-header";
-        var estDur = reel.estimatedDuration ? reel.estimatedDuration + "s" : "—";
-        var platform = reel.platform || "all";
-        header.innerHTML =
-            '<div class="reel-card-num">' + (idx + 1) + '</div>' +
-            '<div class="reel-card-info">' +
-                '<div class="reel-card-title">' + esc(reel.title) + '</div>' +
-                '<div class="reel-card-desc">' + esc(reel.description || "") + '</div>' +
-                '<div class="reel-card-meta">' +
-                    '<span class="reel-meta-tag reel-meta-duration">⏱ ' + estDur + '</span>' +
-                    '<span class="reel-meta-tag reel-meta-platform">📱 ' + esc(platform) + '</span>' +
-                '</div>' +
-            '</div>';
-
-        if (reel.segments && reel.segments.length > 0) {
-            header.style.cursor = "pointer";
-            header.addEventListener("click", function() { navigateToTime(reel.segments[0].time); });
-        }
-        card.appendChild(header);
-
-        var body = document.createElement("div");
-        body.className = "reel-card-body";
-
-        if (reel.hookDescription) {
-            var hookDiv = document.createElement("div");
-            hookDiv.className = "reel-hook";
-            hookDiv.textContent = "🎣 Hook: " + reel.hookDescription;
-            body.appendChild(hookDiv);
-        }
-
-        if (reel.segments && reel.segments.length > 0) {
-            var segsDiv = document.createElement("div");
-            segsDiv.className = "reel-segments";
-            reel.segments.forEach(function(seg) {
-                var segEl = document.createElement("div");
-                segEl.className = "reel-segment";
-                segEl.innerHTML =
-                    '<span class="reel-segment-time">' + formatTimeFull(seg.time) + ' - ' + formatTimeFull(seg.endTime || seg.time + 5) + '</span>' +
-                    '<span class="reel-segment-purpose">' + esc(seg.purpose || "") + '</span>' +
-                    '<span class="reel-segment-text">' + esc(seg.text || "") + '</span>';
-                segEl.style.cursor = "pointer";
-                (function(t) {
-                    segEl.addEventListener("click", function(e) {
-                        e.stopPropagation();
-                        navigateToTime(t);
-                    });
-                })(seg.time);
-                segsDiv.appendChild(segEl);
-            });
-            body.appendChild(segsDiv);
-        }
-
-        if (reel.retentionStrategy) {
-            var retDiv = document.createElement("div");
-            retDiv.className = "reel-retention";
-            retDiv.textContent = "📊 Retención: " + reel.retentionStrategy;
-            body.appendChild(retDiv);
-        }
-
-        var actionsDiv = document.createElement("div");
-        actionsDiv.className = "reel-card-actions";
-
-        var genBtn = document.createElement("button");
-        genBtn.className = "btn btn-sm btn-success";
-        genBtn.textContent = "🎬 Generar Contenido";
-        genBtn.title = "Crea una nueva secuencia con los segmentos de este reel";
-        (function(reelIdx) {
-            genBtn.addEventListener("click", function(e) {
-                e.stopPropagation();
-                generateReelSequence(reelIdx);
-            });
-        })(idx);
-        actionsDiv.appendChild(genBtn);
-
-        body.appendChild(actionsDiv);
-        card.appendChild(body);
-        return card;
-    }
-
-    function generateReelSequence(reelIdx) {
-        var reel = state.reelProposals[reelIdx];
-        if (!reel || !reel.segments || reel.segments.length === 0) {
-            showToast("Este reel no tiene segmentos", "info");
-            return;
-        }
-        var reelName = (state.sequenceName || "Secuencia") + "_Reel";
-        if (state.reelProposals.length > 1) {
-            reelName += "_" + (reelIdx + 1);
-        }
-
-        var keepZones = reel.segments.map(function(seg) {
-            return { start: seg.time, end: seg.endTime || seg.time + 5 };
-        });
-
-        disableBtn("btn-reelproposal");
-        showToast("Generando secuencia de reel...", "info");
-
-        evalScriptWithJson("createReelSequence", { reelName: reelName, keepZones: keepZones }, function(err, data) {
-            enableBtn("btn-reelproposal");
-            if (err) { showToast("Error al crear secuencia de reel", "error"); return; }
-            if (data.error) {
-                showToast("Error: " + data.error, "error");
-                return;
-            }
-            var msg = "Reel creado: " + (data.reelName || reelName);
-            if (data.frameChanged) msg += " (9:16)";
-            showToast(msg, "success");
-            refreshSequenceInfo();
-        }, { fileName: "EditorPro_reel_" + reelIdx + ".json" });
-    }
-
-    function setRPProgress(pct, text) {
-        setProgress("rp-progress-fill", "rp-progress-text", pct, text);
-        setProgress("rp-progress-header-fill", "rp-progress-header-text", pct, text);
-        refreshRPHeaderProgressVisibility();
-    }
-
-    function refreshRPHeaderProgressVisibility() {
-        var mainBar = document.getElementById("rp-progress");
-        var isActive = mainBar && !mainBar.classList.contains("hidden");
-        if (!isActive) {
-            hideElement("rp-progress-header");
-            return;
-        }
-        var rpBody = document.querySelector('[data-tool="reelproposal"]');
-        if (!rpBody) return;
-        rpBody = rpBody.nextElementSibling;
-        var collapsed = rpBody && rpBody.classList.contains("hidden");
-        var header = document.getElementById("rp-progress-header");
-        if (header) header.classList.toggle("hidden", !collapsed);
-    }
-
-    function exportReelProposals() {
-        if (state.reelProposals.length === 0) { showToast("Nada que exportar", "info"); return; }
-        var lines = [];
-        state.reelProposals.forEach(function(reel, idx) {
-            lines.push("=== REEL " + (idx + 1) + ": " + reel.title + " ===");
-            lines.push("Duración: ~" + (reel.estimatedDuration || "?") + "s | Plataforma: " + (reel.platform || "all"));
-            lines.push("Hook: " + (reel.hookDescription || "—"));
-            if (reel.segments) {
-                reel.segments.forEach(function(seg) {
-                    lines.push("  " + formatTimeFull(seg.time) + " - " + formatTimeFull(seg.endTime || seg.time + 5) + " | " + (seg.purpose || "") + " | " + (seg.text || ""));
-                });
-            }
-            lines.push("");
-        });
-        copyToClipboard(lines.join("\n"));
-        showToast("Propuestas de reel copiadas", "success");
-    }
 
 
 
@@ -861,15 +650,61 @@
         });
     }
 
-    // Transcript lookup/loading is identical to the Smart Supertexts batch mode —
-    // shared in BatchSeqRunner (batch-seq-runner.js).
-
     function _es2BatchFindTranscript(folders, seqName) {
-        return batchSeqRunner.findSequenceTranscript(folders, seqName);
+        if (!seqName || !fs || !path) return null;
+        var baseName = seqName.replace(/[\/\\:*?"<>|]/g, "_");
+        for (var fi = 0; fi < folders.length; fi++) {
+            var folder = folders[fi];
+            var jp = path.join(folder, baseName + ".json");
+            if (fs.existsSync(jp)) return jp;
+            var sp = path.join(folder, baseName + ".srt");
+            if (fs.existsSync(sp)) return sp;
+        }
+        return null;
     }
 
     function _es2BatchLoadTranscript(filePath) {
-        return batchSeqRunner.loadTimedTranscript(filePath);
+        if (!filePath || !fs) return null;
+        try {
+            var segments = null;
+
+            if (filePath.toLowerCase().endsWith(".json")) {
+                var parsed = parseTranscriptJson(filePath);
+                if (parsed && parsed.words && parsed.words.length > 5) {
+                    var srt = sttResultToSRT(parsed);
+                    segments = parseSRT(srt);
+                }
+                if (!segments || segments.length < 3) {
+                    var raw = fs.readFileSync(filePath, "utf8");
+                    var jsonData = JSON.parse(raw);
+                    if (jsonData.segments && jsonData.segments.length > 0 && jsonData.segments[0].words) {
+                        segments = [];
+                        for (var si = 0; si < jsonData.segments.length; si++) {
+                            var seg = jsonData.segments[si];
+                            var words = seg.words || [];
+                            var text = words.map(function(w) { return w.text || ""; }).join(" ").trim();
+                            if (text) {
+                                segments.push({
+                                    startTime: seg.start || 0,
+                                    endTime: (seg.start || 0) + (seg.duration || 5),
+                                    text: text
+                                });
+                            }
+                        }
+                    }
+                }
+            } else {
+                var content = fs.readFileSync(filePath, "utf8");
+                segments = parseSRT(content);
+            }
+
+            if (segments && segments.length > 3) {
+                return segments.map(function(s) {
+                    return "[" + s.startTime.toFixed(1) + "s - " + s.endTime.toFixed(1) + "s] " + s.text;
+                }).join("\n");
+            }
+            return null;
+        } catch(_e) { return null; }
     }
 
     function _es2BatchRenderCards() {
@@ -978,7 +813,10 @@
     }
 
     function _es2BatchSetProgress(pct, text) {
-        batchSeqRunner.setBatchProgress("es2", pct, text);
+        var fill = document.getElementById("es2-batch-progress-fill");
+        var label = document.getElementById("es2-batch-progress-text");
+        if (fill) fill.style.width = Math.min(pct, 100) + "%";
+        if (label) label.textContent = text || "";
     }
 
     function _es2BatchUpdateCardStatus(seqName, pillClass, pillText) {
@@ -1012,7 +850,17 @@
     }
 
     function _es2BatchSetCancelBtn(running) {
-        batchSeqRunner.setBatchCancelBtn("es2", running);
+        var btn = document.getElementById("btn-es2-batch-cancel");
+        if (!btn) return;
+        if (running) {
+            btn.textContent = "Detener";
+            btn.style.borderColor = "rgba(248,113,113,0.4)";
+            btn.style.color = "#f87171";
+        } else {
+            btn.textContent = "Cerrar Batch";
+            btn.style.borderColor = "";
+            btn.style.color = "";
+        }
     }
 
     function es2BatchClose() {
@@ -1114,7 +962,12 @@
     }
 
     function _es2BatchGetAnalyzedNames() {
-        return batchSeqRunner.getBatchAnalyzedNames(_es2BatchQueue, _es2BatchResults, "result");
+        var names = [];
+        for (var qi = 0; qi < _es2BatchQueue.length; qi++) {
+            var n = _es2BatchQueue[qi].name;
+            if (_es2BatchResults[n] && _es2BatchResults[n].result) names.push(n);
+        }
+        return names;
     }
 
     function _es2BatchNavigateTo(seqName) {
@@ -1155,7 +1008,10 @@
 
     function _es2BatchUpdateNav() {
         var analyzed = _es2BatchGetAnalyzedNames();
-        batchSeqRunner.updateBatchNavButtons("es2", _es2BatchCurrentNav, analyzed.length);
+        var prevBtn = document.getElementById("btn-es2-bnav-prev");
+        var nextBtn = document.getElementById("btn-es2-bnav-next");
+        if (prevBtn) prevBtn.className = "btn-batch-nav" + (_es2BatchCurrentNav <= 0 ? " disabled" : "");
+        if (nextBtn) nextBtn.className = "btn-batch-nav" + (_es2BatchCurrentNav >= analyzed.length - 1 ? " disabled" : "");
     }
 
     function es2BatchNavPrev() {
@@ -1193,11 +1049,6 @@
         setES2Progress: setES2Progress,
         refreshES2HeaderProgressVisibility: refreshES2HeaderProgressVisibility,
         getEditColor: getEditColor,
-        startReelProposal: startReelProposal,
-        renderReelResults: renderReelResults,
-        exportReelProposals: exportReelProposals,
-        setRPProgress: setRPProgress,
-        refreshRPHeaderProgressVisibility: refreshRPHeaderProgressVisibility,
         batchOpen: es2BatchOpen,
         batchAnalyzeAll: es2BatchAnalyzeAll,
         batchClose: es2BatchClose,

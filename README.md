@@ -86,7 +86,7 @@ Cuando haya una nueva versión:
 - Click en el botón 🔄 (recargar) en la esquina superior derecha del panel
 - Si sigue en blanco, cierra y abre Premiere de nuevo
 
-### "Error al analizar / generar motions"
+### "Error al analizar / transcribir"
 - Verifica tu API key en ⚙️
 - Verifica que tienes crédito en [OpenRouter](https://openrouter.ai/settings/credits)
 - Verifica tu conexión a internet

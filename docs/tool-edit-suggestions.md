@@ -1,11 +1,9 @@
-# ✂️ Sugerencias de Edición + 🎬 Propuesta de Reel
+# ✂️ Sugerencias de Edición
 
 ## Qué hace
-**Sugerencias de Edición:** Analiza la transcripción y detecta highlights, sugiere cortes, e identifica errores (contenido repetido, tangentes, errores verbales).
+Analiza la transcripción y detecta highlights, sugiere cortes, e identifica errores (contenido repetido, tangentes, errores verbales). Cada categoría tiene marcadores independientes.
 
-**Propuesta de Reel:** Analiza el contenido y propone reels de alta retención para Instagram/YouTube/Facebook.
-
-## Flujo: Sugerencias de Edición
+## Flujo
 
 ```
 Transcripción cargada
@@ -50,51 +48,7 @@ Respuesta categorizada en 3 tipos:
 └─────────────────────────────────────────────┘
 ```
 
-## Flujo: Propuesta de Reel
-
-```
-Transcripción cargada
-         │
-         ▼
-Click "Analizar para Reels"
-         │
-         ▼
-AIAnalyzer.analyzeReelProposal(transcript, promptContext)
-         │
-         ├─ LLM analiza retención y viralidad
-         │
-         ▼
-┌─────────────────────────────────────────────┐
-│           PROPUESTAS DE REEL                 │
-│                                              │
-│  Assessment: "Buen contenido para reels,    │
-│  3 momentos con potencial viral"             │
-│                                              │
-│  📱 Reel 1: "¿Qué es realmente la IA?"     │
-│     Hook: "La IA no es lo que crees..."     │
-│     Segmento: 1:20 - 2:45 (1:25)           │
-│     Retención estimada: ⭐⭐⭐⭐             │
-│     [▶ Preview] [🎬 Crear secuencia 9:16]   │
-│                                              │
-│  📱 Reel 2: "3 errores que todos cometen"   │
-│     Hook: "El 90% de la gente hace esto..."│
-│     Segmento: 5:10 - 6:30 (1:20)           │
-│     Retención estimada: ⭐⭐⭐⭐⭐            │
-│     [▶ Preview] [🎬 Crear secuencia 9:16]   │
-└─────────────────────────────────────────────┘
-         │
-         ▼
-Click "🎬 Crear secuencia 9:16"
-         │
-         ▼
-evalScript('createReelSequence(jsonPath)')
-         │
-         ├─ Crea nueva secuencia 1080x1920 (vertical)
-         ├─ Copia clips del segmento seleccionado
-         └─ Lista para exportar
-```
-
-## Batch Mode (Ambas herramientas)
+## Batch Mode
 
 ```
 Mismo patrón que Smart Supertexts:
@@ -108,6 +62,5 @@ Mismo patrón que Smart Supertexts:
 
 | Archivo | Rol |
 |---------|-----|
-| `ui-edit-suggestions.js` | UI de ambas herramientas (1,318 líneas) |
-| `ai-analyzer.js` | analyzeEditSuggestions(), analyzeReelProposal() |
-| `host/recording.jsx` | createReelSequence() |
+| `ui-edit-suggestions.js` | UI de Sugerencias de Edición |
+| `ai-analyzer.js` | analyzeEditSuggestions() |

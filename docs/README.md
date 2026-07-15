@@ -9,9 +9,8 @@
 | [Transcripción](./tool-transcript.md) | Parseo multi-formato, cache, auto-load |
 | [SpellCheck IA](./tool-spellcheck.md) | Revisión ortográfica en clips de texto |
 | [Smart Supertexts](./tool-supertexts.md) | Generación de MOGRT desde transcript |
-| [Sugerencias de Edición](./tool-edit-suggestions.md) | Análisis de edición + Reel Proposals |
+| [Sugerencias de Edición](./tool-edit-suggestions.md) | Análisis de edición: highlights, cortes, errores |
 | [Notas de Grabación](./tool-recording.md) | Pipeline de 7 pasos para grabaciones |
-| [Motion-Pro](./tool-motion-pro.md) | Motion graphics automáticos con Remotion |
 
 ## Quick Start
 
@@ -23,4 +22,4 @@
 ./build-zxp.sh
 ```
 
-## Versión actual: v1.3.3
+## Versión actual: v2.0.2

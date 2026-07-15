@@ -11,7 +11,7 @@
     // ─── Shared references (captured at init time, not load time) ─
     var state, csInterface, fs, path, os, aiAnalyzer;
     var on, clearContainer, safeCallback, showToast, showElement, hideElement;
-    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress, evalScriptWithJson;
+    var disableBtn, enableBtn, esc, escAttr, escExtend, setProgress;
     var checkAIReady, expandSection, formatTime, formatTimeFull, navigateToTime;
     var refreshSequenceInfo, buildTimedTranscript, copyToClipboard;
     var getPromptContext, togglePromptEditorById, savePromptById, resetPromptById;
@@ -23,7 +23,6 @@
     var readTranscriptFromProjectFile, readCaptionsFromProjectFile;
     var srtSegmentsToSttResult, renderTranscriptFromSegments, bindCollapsibles;
     var _getTranscriptFolders, parseTranscriptJson, _buildTranscriptCache;
-    var batchSeqRunner;
 
     function _initRefs() {
         state       = global._epState;
@@ -44,7 +43,6 @@
         esc                      = global._epEsc;
         escAttr                  = global._epEscAttr;
         escExtend                = global._epEscExtend;
-        evalScriptWithJson       = global._epEvalScriptWithJson;
         setProgress              = global._epSetProgress;
         checkAIReady             = global._epCheckAIReady;
         expandSection            = global._epExpandSection;
@@ -84,7 +82,6 @@
         _getTranscriptFolders    = global._epGetTranscriptFolders;
         parseTranscriptJson      = global._epParseTranscriptJson;
         _buildTranscriptCache    = global._epBuildTranscriptCache;
-        batchSeqRunner           = global.BatchSeqRunner;
         _st2InitTrackFilter();
         _st2InitTabs();
     }
@@ -561,19 +558,74 @@
     }
 
     // ── Helpers ─────────────────────────────────────────────────
-    // Transcript lookup/loading and progress-bar updates are identical to the
-    // Edit Suggestions batch mode — shared in BatchSeqRunner (batch-seq-runner.js).
 
     function _st2BatchFindTranscript(folders, seqName) {
-        return batchSeqRunner.findSequenceTranscript(folders, seqName);
+        if (!seqName || !fs || !path) return null;
+        var baseName = seqName.replace(/[\/\\:*?"<>|]/g, "_");
+        for (var fi = 0; fi < folders.length; fi++) {
+            var folder = folders[fi];
+            // Coincidencia exacta: nombreSecuencia.json o .srt
+            var jp = path.join(folder, baseName + ".json");
+            if (fs.existsSync(jp)) return jp;
+            var sp = path.join(folder, baseName + ".srt");
+            if (fs.existsSync(sp)) return sp;
+        }
+        return null;
     }
 
+    /**
+     * Carga un transcript y lo devuelve en el formato "[X.Xs - Y.Ys] texto"
+     * que es el mismo que buildTimedTranscript() produce para análisis individual.
+     */
     function _st2BatchLoadTranscript(filePath) {
-        return batchSeqRunner.loadTimedTranscript(filePath);
+        if (!filePath || !fs) return null;
+        try {
+            var segments = null;
+
+            if (filePath.toLowerCase().endsWith(".json")) {
+                var parsed = parseTranscriptJson(filePath);
+                if (parsed && parsed.words && parsed.words.length > 5) {
+                    var srt = sttResultToSRT(parsed);
+                    segments = parseSRT(srt);
+                }
+                if (!segments || segments.length < 3) {
+                    var raw = fs.readFileSync(filePath, "utf8");
+                    var data = JSON.parse(raw);
+                    if (data.segments && data.segments.length > 0 && data.segments[0].words) {
+                        segments = [];
+                        for (var si = 0; si < data.segments.length; si++) {
+                            var seg = data.segments[si];
+                            var words = seg.words || [];
+                            var text = words.map(function(w) { return w.text || ""; }).join(" ").trim();
+                            if (text) {
+                                segments.push({
+                                    startTime: seg.start || 0,
+                                    endTime: (seg.start || 0) + (seg.duration || 5),
+                                    text: text
+                                });
+                            }
+                        }
+                    }
+                }
+            } else {
+                var content = fs.readFileSync(filePath, "utf8");
+                segments = parseSRT(content);
+            }
+
+            if (segments && segments.length > 3) {
+                return segments.map(function(s) {
+                    return "[" + s.startTime.toFixed(1) + "s - " + s.endTime.toFixed(1) + "s] " + s.text;
+                }).join("\n");
+            }
+            return null;
+        } catch(_e) { return null; }
     }
 
     function _st2BatchSetProgress(pct, text) {
-        batchSeqRunner.setBatchProgress("st2", pct, text);
+        var fill = document.getElementById("st2-batch-progress-fill");
+        var label = document.getElementById("st2-batch-progress-text");
+        if (fill) fill.style.width = Math.min(pct, 100) + "%";
+        if (label) label.textContent = text || "";
     }
 
     function _st2BatchUpdateCardStatus(seqName, pillClass, pillText) {
@@ -640,7 +692,17 @@
     }
 
     function _st2BatchSetCancelBtn(running) {
-        batchSeqRunner.setBatchCancelBtn("st2", running);
+        var btn = document.getElementById("btn-st2-batch-cancel");
+        if (!btn) return;
+        if (running) {
+            btn.textContent = "Detener";
+            btn.style.borderColor = "rgba(248,113,113,0.4)";
+            btn.style.color = "#f87171";
+        } else {
+            btn.textContent = "Cerrar Batch";
+            btn.style.borderColor = "";
+            btn.style.color = "";
+        }
     }
 
     // ── Parallel Analysis ──────────────────────────────────────
@@ -797,7 +859,12 @@
     // ── Navigation: edit per class ─────────────────────────────
 
     function _st2BatchGetAnalyzedNames() {
-        return batchSeqRunner.getBatchAnalyzedNames(_st2BatchQueue, _st2BatchResults, "supertexts");
+        var names = [];
+        for (var qi = 0; qi < _st2BatchQueue.length; qi++) {
+            var n = _st2BatchQueue[qi].name;
+            if (_st2BatchResults[n] && _st2BatchResults[n].supertexts) names.push(n);
+        }
+        return names;
     }
 
     function _st2BatchNavigateTo(seqName) {
@@ -839,7 +906,10 @@
 
     function _st2BatchUpdateNav() {
         var analyzed = _st2BatchGetAnalyzedNames();
-        batchSeqRunner.updateBatchNavButtons("st2", _st2BatchCurrentNav, analyzed.length);
+        var prevBtn = document.getElementById("btn-st2-bnav-prev");
+        var nextBtn = document.getElementById("btn-st2-bnav-next");
+        if (prevBtn) prevBtn.className = "btn-batch-nav" + (_st2BatchCurrentNav <= 0 ? " disabled" : "");
+        if (nextBtn) nextBtn.className = "btn-batch-nav" + (_st2BatchCurrentNav >= analyzed.length - 1 ? " disabled" : "");
     }
 
     function st2BatchNavPrev() {
@@ -885,15 +955,20 @@
                 var items = buildST2Payload(selected);
                 var payload = { baseTrackIndex: trackIdx, supertexts: items };
 
-                evalScriptWithJson("insertSupertextMOGRTs", payload, function(err, data) {
-                    if (err) {
+                var tmpFile = path.join(os.tmpdir(), "EditorPro_ST2_Batch_" + Date.now() + ".json");
+                fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
+                var safePath = tmpFile.replace(/\\/g, "/");
+
+                csInterface.evalScript('insertSupertextMOGRTs("' + escExtend(safePath) + '")', function(res) {
+                    try {
+                        var data = JSON.parse(res);
+                        var ins = data.inserted || 0;
+                        _st2BatchUpdateCardStatus(seqName, "st2-total", ins + " creados ✓");
+                        showToast(seqName + ": " + ins + " gráficos insertados", "success");
+                    } catch(e) {
                         _st2BatchUpdateCardStatus(seqName, "st2-error", "Error");
-                        showToast("Error: " + err.message, "error");
-                        return;
+                        showToast("Error: " + e.message, "error");
                     }
-                    var ins = data.inserted || 0;
-                    _st2BatchUpdateCardStatus(seqName, "st2-total", ins + " creados ✓");
-                    showToast(seqName + ": " + ins + " gráficos insertados", "success");
                 });
             }, 1500);
         });
@@ -954,13 +1029,18 @@
                     var items = buildST2Payload(selected);
                     var payload = { baseTrackIndex: trackIdx, supertexts: items };
 
-                    evalScriptWithJson("insertSupertextMOGRTs", payload, function(err, data) {
-                        if (err) {
-                            _st2BatchUpdateCardStatus(seqName, "st2-error", "Error");
-                        } else {
+                    var tmpFile = path.join(os.tmpdir(), "EditorPro_ST2_Batch_" + Date.now() + ".json");
+                    fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
+                    var safePath = tmpFile.replace(/\\/g, "/");
+
+                    csInterface.evalScript('insertSupertextMOGRTs("' + escExtend(safePath) + '")', function(res) {
+                        try {
+                            var data = JSON.parse(res);
                             var ins = data.inserted || 0;
                             totalInserted += ins;
                             _st2BatchUpdateCardStatus(seqName, "st2-total", ins + " creados ✓");
+                        } catch(e) {
+                            _st2BatchUpdateCardStatus(seqName, "st2-error", "Error");
                         }
                         current++;
                         setTimeout(processNext, 500);
@@ -2147,39 +2227,44 @@
 
         var payload = { baseTrackIndex: trackIdx, supertexts: items };
 
+        var tmpFile = path.join(os.tmpdir(), "EditorPro_ST2_MOGRTs.json");
+        fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
+        var safePath = tmpFile.replace(/\\/g, "/");
+
         disableBtn("btn-st2-create-graphics");
         showElement("st2-progress");
         setST2Progress(10, "Insertando " + items.length + " gráficos en la línea de tiempo...");
 
-        evalScriptWithJson("insertSupertextMOGRTs", payload, function(err, data) {
+        csInterface.evalScript('insertSupertextMOGRTs("' + escExtend(safePath) + '")', function(res) {
             hideElement("st2-progress"); hideElement("st2-progress-header");
             enableBtn("btn-st2-create-graphics");
-            if (err) {
-                showToast("Error al crear gráficos: " + err.message, "error");
-                return;
-            }
-            if (data.error) {
-                if (window.EPLogger) EPLogger.error("supertexts", "mogrt-insert-complete", data.error);
-                showToast(data.error, "error");
-                return;
-            }
-            state.supertexts2Inserted = true;
-            if (window.EPLogger) EPLogger.log("supertexts", "mogrt-insert-complete", data.inserted + "/" + data.total + " inserted, textSet=" + (data.textSet || 0));
-            document.querySelectorAll(".st2-replace-btn").forEach(function(btn) { btn.classList.remove("hidden"); });
-            var msg = data.inserted + " de " + data.total + " gráficos insertados";
-            if (data.textSet > 0) msg += " (" + data.textSet + " con texto)";
-            var toastType = "success";
-            if (data.errors && data.errors.length > 0) {
-                msg += "\n" + data.errors.length + " advertencias:";
-                for (var ei = 0; ei < Math.min(data.errors.length, 3); ei++) {
-                    msg += "\n• " + data.errors[ei];
+            try {
+                var data = JSON.parse(res);
+                if (data.error) {
+                    if (window.EPLogger) EPLogger.error("supertexts", "mogrt-insert-complete", data.error);
+                    showToast(data.error, "error");
+                    return;
                 }
-                if (data.errors.length > 3) msg += "\n• ... +" + (data.errors.length - 3) + " más";
-                console.log("ST2 errors:", JSON.stringify(data.errors));
-                if (data.textSet === 0) toastType = "error";
+                state.supertexts2Inserted = true;
+                if (window.EPLogger) EPLogger.log("supertexts", "mogrt-insert-complete", data.inserted + "/" + data.total + " inserted, textSet=" + (data.textSet || 0));
+                document.querySelectorAll(".st2-replace-btn").forEach(function(btn) { btn.classList.remove("hidden"); });
+                var msg = data.inserted + " de " + data.total + " gráficos insertados";
+                if (data.textSet > 0) msg += " (" + data.textSet + " con texto)";
+                var toastType = "success";
+                if (data.errors && data.errors.length > 0) {
+                    msg += "\n" + data.errors.length + " advertencias:";
+                    for (var ei = 0; ei < Math.min(data.errors.length, 3); ei++) {
+                        msg += "\n• " + data.errors[ei];
+                    }
+                    if (data.errors.length > 3) msg += "\n• ... +" + (data.errors.length - 3) + " más";
+                    console.log("ST2 errors:", JSON.stringify(data.errors));
+                    if (data.textSet === 0) toastType = "error";
+                }
+                showToast(msg, data.inserted > 0 ? toastType : "error");
+                refreshSequenceInfo();
+            } catch(e) {
+                showToast("Error al crear gráficos: " + e.message, "error");
             }
-            showToast(msg, data.inserted > 0 ? toastType : "error");
-            refreshSequenceInfo();
         });
     }
 
@@ -2205,10 +2290,18 @@
         };
         if (st.term) payload.term = st.term;
 
-        evalScriptWithJson("replaceMOGRTClip", payload, function(err, data) {
-            if (err) { showToast("Error al reemplazar", "error"); return; }
-            if (data.error) { showToast(data.error, "error"); return; }
-            showToast("Clip reemplazado: " + st.text.substring(0, 30), "success");
+        var tmpFile = path.join(os.tmpdir(), "EditorPro_ST2_Replace.json");
+        fs.writeFileSync(tmpFile, JSON.stringify(payload), "utf8");
+        var safePath = tmpFile.replace(/\\/g, "/");
+
+        csInterface.evalScript('replaceMOGRTClip("' + escExtend(safePath) + '")', function(res) {
+            try {
+                var data = JSON.parse(res);
+                if (data.error) { showToast(data.error, "error"); return; }
+                showToast("Clip reemplazado: " + st.text.substring(0, 30), "success");
+            } catch(e) {
+                showToast("Error al reemplazar", "error");
+            }
         });
     }
 
@@ -2513,43 +2606,48 @@
                 schemasForES[key] = propMap;
             }
         }
-        console.log('[MOGRT] Writing schema for ES (' + Object.keys(schemasForES).length + ' types)');
+        var tmpSchema = path.join(os.tmpdir(), 'EditorPro_MogrtSchemas.json');
+        var schemasJSON = JSON.stringify(schemasForES);
+        console.log('[MOGRT] Writing schema for ES (' + Object.keys(schemasForES).length + ' types, ' + schemasJSON.length + ' bytes) to: ' + tmpSchema);
+        fs.writeFileSync(tmpSchema, schemasJSON, 'utf8');
+        var safeSchemaPath = tmpSchema.replace(/\\/g, '/');
 
-        evalScriptWithJson("scanMOGRTClips", schemasForES, function(err, data) {
-            if (err) {
-                showToast('Error: ' + err.message, 'error');
+        csInterface.evalScript('scanMOGRTClips("' + escExtend(safeSchemaPath) + '")', function(res) {
+            try {
+                var data = JSON.parse(res);
+                if (data.error) { showToast(data.error, 'error'); if (statusEl) statusEl.textContent = ''; return; }
+                _st2CtrlClips = data.clips || [];
+                // Enrich clips with schema info
+                _st2CtrlClips.forEach(function(c) {
+                    c.selected = true;
+                    var typeTag = _st2CtrlGetType(c);
+                    var schema = _st2GetSchemaForType(typeTag);
+                    if (schema) {
+                        // Merge schema info into clip properties
+                        (c.properties || []).forEach(function(p) {
+                            var schemaProp = schema.properties.find(function(sp) { return sp.name === p.name; });
+                            if (schemaProp) {
+                                if (schemaProp.type === 'slider') {
+                                    p.min = schemaProp.min;
+                                    p.max = schemaProp.max;
+                                }
+                                if (schemaProp.type === 'dropdown') {
+                                    p.options = schemaProp.options;
+                                }
+                                if (schemaProp.type === 'text') {
+                                    p.defaultFont = schemaProp.font;
+                                    p.defaultFontSize = schemaProp.fontSize;
+                                }
+                            }
+                        });
+                    }
+                });
+                if (statusEl) statusEl.textContent = _st2CtrlClips.length + ' clips MOGRT';
+                _st2CtrlRender();
+            } catch(e) {
+                showToast('Error: ' + e.message, 'error');
                 if (statusEl) statusEl.textContent = '';
-                return;
             }
-            if (data.error) { showToast(data.error, 'error'); if (statusEl) statusEl.textContent = ''; return; }
-            _st2CtrlClips = data.clips || [];
-            // Enrich clips with schema info
-            _st2CtrlClips.forEach(function(c) {
-                c.selected = true;
-                var typeTag = _st2CtrlGetType(c);
-                var schema = _st2GetSchemaForType(typeTag);
-                if (schema) {
-                    // Merge schema info into clip properties
-                    (c.properties || []).forEach(function(p) {
-                        var schemaProp = schema.properties.find(function(sp) { return sp.name === p.name; });
-                        if (schemaProp) {
-                            if (schemaProp.type === 'slider') {
-                                p.min = schemaProp.min;
-                                p.max = schemaProp.max;
-                            }
-                            if (schemaProp.type === 'dropdown') {
-                                p.options = schemaProp.options;
-                            }
-                            if (schemaProp.type === 'text') {
-                                p.defaultFont = schemaProp.font;
-                                p.defaultFontSize = schemaProp.fontSize;
-                            }
-                        }
-                    });
-                }
-            });
-            if (statusEl) statusEl.textContent = _st2CtrlClips.length + ' clips MOGRT';
-            _st2CtrlRender();
         });
     }
 
@@ -2994,21 +3092,29 @@
             })
         };
 
+        var tmpFile = path.join(os.tmpdir(), 'EditorPro_ST2_CtrlApply.json');
+        fs.writeFileSync(tmpFile, JSON.stringify(payload), 'utf8');
+        var safePath = tmpFile.replace(/\\/g, '/');
+
         showToast('Aplicando a ' + selected.length + ' clips...', 'info');
-        evalScriptWithJson("applyMOGRTProperties", payload, function(err, data) {
-            if (err) { showToast('Error: ' + err.message, 'error'); return; }
-            if (data.error) { showToast(data.error, 'error'); return; }
-            showToast(data.modified + ' clips modificados', 'success');
-            // Re-scan to refresh values, preserving current filter
-            var savedFilter = _st2CtrlTypeFilter;
-            _st2CtrlScan();
-            // Restore filter after scan completes
-            setTimeout(function() {
-                if (savedFilter) {
-                    _st2CtrlTypeFilter = savedFilter;
-                    _st2CtrlApplyFilter();
-                }
-            }, 500);
+        csInterface.evalScript('applyMOGRTProperties("' + escExtend(safePath) + '")', function(res) {
+            try {
+                var data = JSON.parse(res);
+                if (data.error) { showToast(data.error, 'error'); return; }
+                showToast(data.modified + ' clips modificados', 'success');
+                // Re-scan to refresh values, preserving current filter
+                var savedFilter = _st2CtrlTypeFilter;
+                _st2CtrlScan();
+                // Restore filter after scan completes
+                setTimeout(function() {
+                    if (savedFilter) {
+                        _st2CtrlTypeFilter = savedFilter;
+                        _st2CtrlApplyFilter();
+                    }
+                }, 500);
+            } catch(e) {
+                showToast('Error: ' + e.message, 'error');
+            }
         });
     }
 

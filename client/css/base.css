@@ -95,6 +95,7 @@ html, body {
 .header-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
     padding: 6px 10px;
     min-height: 30px;
@@ -234,6 +235,27 @@ html, body {
     background: var(--bg-hover);
     color: var(--text-primary);
     border-color: var(--border-light);
+}
+
+/* Header buttons with a visible text label (icon + label pill) */
+.hdr-btn {
+    width: auto;
+    gap: 4px;
+    padding: 0 8px;
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+}
+.hdr-btn .hdr-btn-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+/* Pulse for the "update available" state of the reload button */
+@keyframes pulse-update {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(10, 233, 141, 0.55); }
+    50%      { box-shadow: 0 0 0 5px rgba(10, 233, 141, 0); }
 }
 
 /* ─── Settings ─── */
@@ -377,13 +399,6 @@ html, body {
 }
 .btn-analyze-warn:hover {
     box-shadow: 0 6px 20px rgba(251, 191, 36, 0.35), inset 0 1px 0 rgba(255,255,255,0.15);
-}
-
-.btn-analyze-reel {
-    background: linear-gradient(135deg, #ec4899, #8b5cf6);
-}
-.btn-analyze-reel:hover {
-    box-shadow: 0 6px 20px rgba(236, 72, 153, 0.35), inset 0 1px 0 rgba(255,255,255,0.15);
 }
 
 .btn-analyze-cancel {
