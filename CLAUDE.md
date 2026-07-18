@@ -60,7 +60,7 @@ Editor-Pro/
 ├── CSXS/
 │   └── manifest.xml         # Manifiesto CEP: com.codigo.editorpro
 ├── whisper/                 # whisper.cpp: scripts de instalación + modelos .bin
-├── VERSION                  # Versión actual (2.2.2)
+├── VERSION                  # Versión actual (2.3.0)
 ├── dist/                    # ZXP empaquetado
 ├── build-zxp.sh             # Firma y empaqueta ZXP
 └── install.sh               # Symlink para desarrollo + habilita debug mode
@@ -199,6 +199,9 @@ Herramienta previa a Cortes Automáticos: valida cada marcador IN/OUT contra el 
 5. Los tiempos del LLM se **clampan a gaps de silencio** (`clampToWordGap`): nunca se corta a mitad de palabra; una palabra a medias se incluye en el bloque. Movimientos > 30s o deltas < 0.12s se descartan
 6. UI de revisión: propuestas con checkbox (razón del LLM, frase repetida, snippet del punto de corte) → "Aplicar seleccionados" mueve los marcadores vía `mrMoveMarkers()` (Premiere no permite cambiar `marker.start`: se borra y recrea conservando nombre/comentario/color/duración)
 7. **Transcript final**: concatena las palabras dentro de los bloques ajustados (`buildFinalTranscript`) → texto de la clase como quedaría cortada (guardable como `_final.txt` en Transcribe/, copiable) + **chequeo de coherencia** con el LLM (fluidez entre bloques, frases cortadas, repeticiones, saltos de tema)
+
+### Transcripción por ventanas (modo rápido, v2.3.0)
+Checkbox "Transcribir solo alrededor de los cortes" (por defecto ON): en vez de transcribir toda la clase, `computeAudioWindows()` genera ventanas `[in - margin, out + margin]` (margen 120s, fusionando solapes) y `stt.transcribeRegions()` corta el WAV con ffmpeg por ventana, transcribe cada trozo y desplaza los timestamps a tiempo de secuencia. El transcript resultante es parcial (`partial: true`, con `windows`); se guarda como `<seq>.review.json` si ya existe un `<seq>.json` completo, y solo se reutiliza de cache si sus ventanas cubren las fronteras actuales (`windowsCoverPairs`). Sin ffmpeg cae a transcribir todo.
 
 ### marker-reviewer.js (módulo puro, testeable en Node)
 `parsePairs`, `buildBoundaryUnits`, `contextForTime`/`formatContext`, `clampToWordGap`, `buildUnitPrompt`, `resolveUnitResponse` (valida/clampa la respuesta del LLM), `buildFinalTranscript`, `buildCoherencePrompt`.
@@ -377,12 +380,12 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 El header tiene 3 botones (además del dropdown de secuencia activa):
 
 1. **Log** (icono de descarga) — descarga el log de la sesión a la carpeta de Descargas.
-2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.2.2`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.2.1 → v2.2.2`).
+2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.3.0`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.2.2 → v2.3.0`).
 3. **Ajustes** — abre el panel de configuración (proveedor STT, proveedor de IA, API keys, modelo).
 
 > Nota histórica: los botones de debug de MOGRT (🔍/🔬) fueron removidos.
 
 ## Versión y auto-actualización
 
-- La versión vive en el archivo `VERSION` (actual: **2.2.2**) y en `CSXS/manifest.xml`.
+- La versión vive en el archivo `VERSION` (actual: **2.3.0**) y en `CSXS/manifest.xml`.
 - `updater.js` implementa un auto-updater basado en la GitHub API (no requiere git instalado) que descarga desde la rama **`workspace-daniel`**.
