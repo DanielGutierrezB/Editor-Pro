@@ -383,6 +383,38 @@ function run() {
         assert(!findClip(doc, "clipitem-remap"), "clip remapeado eliminado");
     }
 
+    section("stills estirados — no son time remap y sus in/out no se tocan");
+    {
+        // logo.png estirado: out=120 pero ocupa 300 frames en timeline.
+        // Antes esto disparaba el bloqueo de "time remapping".
+        const stillXml = simpleXml.replace(
+            "<in>0</in>\n                        <out>300</out>\n                        <file id=\"file-3\">",
+            "<in>0</in>\n                        <out>120</out>\n                        <file id=\"file-3\">"
+        );
+        assert(stillXml !== simpleXml, "fixture modificado (logo estirado)");
+
+        const info = engine.inspect(stillXml, OPTS);
+        assert(info.ok, "inspect ok");
+        assertEq(info.remappedClips.length, 0, "el still estirado NO se reporta como remap");
+
+        // Zona 12s–14s = frames 360–420: divide el logo (300–600)
+        const res = engine.applyCuts(stillXml, [{ start: 12, end: 14, label: "Z" }], OPTS);
+        assert(res.ok, "applyCuts ok sobre still estirado: " + (res.error || ""));
+        const doc = parseResult(res.xml);
+        const c3 = findClip(doc, "clipitem-3");
+        assertEq(childNum(c3, "end"), 360, "primera mitad del logo termina en el corte");
+        assertEq(childNum(c3, "in"), 0, "in del still intacto");
+        assertEq(childNum(c3, "out"), 120, "out del still intacto (no se recalcula)");
+        const clips = els(doc, "clipitem");
+        const logoClone = clips.find(c => (c.getAttribute("id") || "").indexOf("clipitem-3-ca2s") === 0);
+        assert(!!logoClone, "existe el clon del logo");
+        assertEq(childNum(logoClone, "start"), 360, "clon del logo arranca en el join");
+        assertEq(childNum(logoClone, "end"), 540, "clon del logo desplazado");
+        assertEq(childNum(logoClone, "in"), 0, "in del clon intacto");
+        assertEq(childNum(logoClone, "out"), 120, "out del clon intacto");
+        assertNoOverlaps(doc, "still estirado");
+    }
+
     section("parseo tolerante — BOM y whitespace antes de la declaración XML");
     {
         const withBom = "\uFEFF" + simpleXml;
