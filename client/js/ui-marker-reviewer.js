@@ -444,9 +444,8 @@
             for (i = 0; i < snaps.length; i++) {
                 var sn = snaps[i];
                 var kind = sn.field === "inTime" ? "IN" : "OUT";
-                var uKey;
-                if (sn.field === "inTime") uKey = sn.segPos === 0 ? "first" : "t" + (sn.segPos - 1);
-                else uKey = sn.segPos === segments.length - 1 ? "last" : "t" + sn.segPos;
+                // Indexado por bloque (unidades por bloque)
+                var uKey = "t" + sn.segPos;
                 hintsByUnit[uKey] = (hintsByUnit[uKey] ? hintsByUnit[uKey] + " " : "") +
                     "El gap de silencio sugiere " + kind + " en ~" + sn.proposed.toFixed(1) + "s.";
             }
@@ -454,42 +453,76 @@
         return hintsByUnit;
     }
 
-    function hintKeyForUnit(unit) {
-        if (unit.type === "first-in") return "first";
-        if (unit.type === "last-out") return "last";
-        return "t" + unit.outPairIdx;
-    }
-
     // ─── Análisis LLM por secuencia ──────────────────────────
 
     function analyzeSession(session, onProgress, callback) {
-        var units = MR.buildBoundaryUnits(session.pairs);
+        // Una unidad por bloque: el LLM evalúa IN y OUT del mismo bloque con foco
+        var units = MR.buildBlockUnits(session.pairs);
         var hints = buildHints(session.pairs, session.words);
         var proposals = [];
         var errors = [];
         var idx = 0;
 
+        function dedupePush(props, labelForLog) {
+            for (var i = 0; i < props.length; i++) {
+                var np = props[i];
+                var dup = false;
+                for (var q = 0; q < proposals.length; q++) {
+                    if (proposals[q].kind === np.kind && proposals[q].pairIdx === np.pairIdx) { dup = true; break; }
+                }
+                if (!dup) {
+                    np.selected = true;
+                    if (!np.unitLabel) np.unitLabel = labelForLog || "";
+                    proposals.push(np);
+                }
+            }
+        }
+
         function finalizeProposals() {
-            // Rellenar con propuestas determinísticas de IN (conteos "3,2,1" /
-            // cues de producción) los bloques que el LLM no ajustó — resuelve
-            // el caso de que ningún modelo mueva los INs.
+            // 1) Pickups determinísticos (frase del bloque N+1 repite el final
+            //    del bloque N) → retroceder el OUT de N. Fiable, ya testeado.
             try {
-                var leadIns = MR.detectLeadIns(session.words, session.pairs);
-                for (var d = 0; d < leadIns.length; d++) {
-                    var li = leadIns[d];
-                    var dup = false;
-                    for (var q = 0; q < proposals.length; q++) {
-                        if (proposals[q].kind === "IN" && proposals[q].pairIdx === li.pairIdx) { dup = true; break; }
-                    }
-                    if (!dup) {
-                        li.unitLabel = "conteo bloque " + (li.pairIdx + 1);
-                        li.selected = true;
-                        proposals.push(li);
-                        log(session, "Detector de conteo: IN bloque " + (li.pairIdx + 1) + " " +
-                            li.originalTime.toFixed(1) + "→" + li.newTime.toFixed(1) + "s");
+                if (global.EPCutValidator) {
+                    var segs = session.pairs.map(function(p) {
+                        return { inTime: p.inMarker.startSeconds, outTime: p.outMarker.startSeconds };
+                    });
+                    var pickups = global.EPCutValidator.detectPickups(session.words, segs);
+                    for (var k = 0; k < pickups.length; k++) {
+                        var pk = pickups[k];
+                        if (pk.type !== "pickup") continue;
+                        var pairIdx = pk.prevSegPos;
+                        var already = false;
+                        for (var z = 0; z < proposals.length; z++) {
+                            if (proposals[z].kind === "OUT" && proposals[z].pairIdx === pairIdx) { already = true; break; }
+                        }
+                        if (already) continue;
+                        proposals.push({
+                            kind: "OUT", pairIdx: pairIdx,
+                            marker: session.pairs[pairIdx].outMarker,
+                            originalTime: session.pairs[pairIdx].outMarker.startSeconds,
+                            newTime: pk.proposedOutTime,
+                            reason: "El bloque siguiente repite esta frase; el OUT retrocede para no duplicarla",
+                            repeatedPhrase: pk.matchText || "",
+                            selected: true,
+                            snippet: { before: "", after: pk.matchText || "" }
+                        });
                     }
                 }
             } catch(e) {}
+
+            // 2) Conteos "3,2,1"/cues al inicio de bloque → avanzar IN
+            try {
+                var leadIns = MR.detectLeadIns(session.words, session.pairs);
+                dedupePush(leadIns, "conteo");
+                for (var d = 0; d < leadIns.length; d++) {
+                    log(session, "Detector de conteo: IN bloque " + (leadIns[d].pairIdx + 1) + " " +
+                        leadIns[d].originalTime.toFixed(1) + "→" + leadIns[d].newTime.toFixed(1) + "s");
+                }
+            } catch(e2) {}
+
+            // 3) Evitar que un bloque se pise con el siguiente (prioriza IN)
+            try { MR.resolveOverlaps(proposals, session.pairs); } catch(e3) {}
+
             proposals.sort(function(a, b) { return a.originalTime - b.originalTime; });
         }
 
@@ -497,13 +530,11 @@
             if (mrState.cancelled) return callback("Revisión cancelada.", proposals);
             if (idx >= units.length) {
                 finalizeProposals();
-                return callback(errors.length === units.length ? "El LLM no respondió a ninguna consulta: " + errors[0] : null, proposals);
+                return callback(errors.length === units.length && units.length > 0 ? "El LLM no respondió a ninguna consulta: " + errors[0] : null, proposals);
             }
             var unit = units[idx];
-            unit.hints = hints[hintKeyForUnit(unit)] || "";
-            var label = unit.type === "first-in" ? "primer IN"
-                : unit.type === "last-out" ? "último OUT"
-                : "transición " + (unit.outPairIdx + 1) + "→" + (unit.inPairIdx + 1);
+            unit.hints = hints["t" + unit.pairIdx] || "";
+            var label = "bloque " + (unit.pairIdx + 1);
             onProgress(Math.round((idx / units.length) * 100), "Validando " + label + " (" + (idx + 1) + "/" + units.length + ")...");
 
             var built = MR.buildUnitPrompt(unit, session.pairs, session.words);
@@ -517,11 +548,7 @@
                 } else {
                     var debug = [];
                     var props = MR.resolveUnitResponse(unit, response, session.pairs, session.words, { _debug: debug });
-                    for (var i = 0; i < props.length; i++) {
-                        props[i].unitLabel = label;
-                        props[i].selected = true;
-                        proposals.push(props[i]);
-                    }
+                    dedupePush(props, label);
                     log(session, label + " (" + secs + "s): " + props.length + " ajuste(s) · decisión LLM → " + debug.join(" | "));
                 }
                 idx++;
