@@ -343,28 +343,43 @@
                     }
                     log(session, "Audio exportado: " + exp.path);
 
+                    var seqDur = exp.durationSeconds || 0;
                     var onTsDone = function(result) {
                         if (result.error) return callback("Error al transcribir: " + result.error);
                         if (!result.words || result.words.length === 0) return callback("La transcripción no devolvió palabras.");
+                        if (result.fellBackToFull) {
+                            log(session, "FFmpeg no disponible → se transcribió TODO el audio (instala ffmpeg para recortar por ventanas)");
+                            showToast("Sin ffmpeg: se transcribió toda la secuencia. Instala ffmpeg (brew install ffmpeg) para acelerar.", "info");
+                        }
                         log(session, "Transcripción: " + result.words.length + " palabras" + (result.partial ? " (ventanas alrededor de los cortes)" : " (completa)"));
                         saveWordsToDisk(session.seqName, result);
                         publishTranscript(result, session.seqName);
                         callback(null, result.words);
-                    };
-                    var onTsProgress = function(pct) {
-                        onProgress(15 + Math.round(pct * 0.5), "Transcribiendo \"" + session.seqName + "\"... " + pct + "%");
                     };
 
                     // Modo rápido: solo transcribir ventanas alrededor de cada IN/OUT
                     if (isWindowedMode() && stt.transcribeRegions) {
                         var windows = MR.computeAudioWindows(session.pairs);
                         session.windows = windows;
-                        log(session, "Modo rápido: " + windows.length + " ventana(s) alrededor de los cortes");
-                        onProgress(15, "Transcribiendo solo alrededor de los cortes...");
-                        stt.transcribeRegions(exp.path, windows, onTsProgress, onTsDone);
+                        var winSecs = 0;
+                        for (var wi = 0; wi < windows.length; wi++) winSecs += (windows[wi].end - windows[wi].start);
+                        var pctOfSeq = seqDur > 0 ? Math.round((winSecs / seqDur) * 100) : 0;
+                        log(session, "Modo rápido: " + windows.length + " ventana(s), ~" + Math.round(winSecs) + "s de " +
+                            Math.round(seqDur) + "s" + (pctOfSeq ? " (" + pctOfSeq + "% del total)" : ""));
+                        var winLabel = "Transcribiendo cortes: " + fmtClock(winSecs * 1000) +
+                            (seqDur > 0 ? " de " + fmtClock(seqDur * 1000) : "") + " (" + windows.length + " ventanas)";
+                        var onTsProgressWin = function(pct, info) {
+                            var reg = (info && info.region) ? " · ventana " + info.region + "/" + info.total : "";
+                            onProgress(15 + Math.round(pct * 0.5), winLabel + reg + "... " + pct + "%");
+                        };
+                        onProgress(15, winLabel + "...");
+                        stt.transcribeRegions(exp.path, windows, onTsProgressWin, onTsDone);
                     } else {
-                        onProgress(15, "Transcribiendo \"" + session.seqName + "\" (" + (stt.provider || "STT") + ")...");
-                        stt.transcribe(exp.path, onTsProgress, onTsDone);
+                        var onTsProgressFull = function(pct) {
+                            onProgress(15 + Math.round(pct * 0.5), "Transcribiendo secuencia completa... " + pct + "%");
+                        };
+                        onProgress(15, "Transcribiendo secuencia completa (" + (stt.provider || "STT") + ")...");
+                        stt.transcribe(exp.path, onTsProgressFull, onTsDone);
                     }
                 });
             }, delay);
@@ -470,13 +485,14 @@
                     errors.push(response.error);
                     log(session, "LLM error en " + label + " (" + secs + "s): " + response.error);
                 } else {
-                    var props = MR.resolveUnitResponse(unit, response, session.pairs, session.words);
+                    var debug = [];
+                    var props = MR.resolveUnitResponse(unit, response, session.pairs, session.words, { _debug: debug });
                     for (var i = 0; i < props.length; i++) {
                         props[i].unitLabel = label;
                         props[i].selected = true;
                         proposals.push(props[i]);
                     }
-                    log(session, label + " (" + secs + "s): " + props.length + " ajuste(s) propuesto(s)");
+                    log(session, label + " (" + secs + "s): " + props.length + " ajuste(s) · decisión LLM → " + debug.join(" | "));
                 }
                 idx++;
                 next();
