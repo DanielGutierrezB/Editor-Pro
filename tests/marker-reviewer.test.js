@@ -226,6 +226,61 @@ function run() {
         assertEq(proposals[0].newTime, 30, "recortado al IN siguiente");
     }
 
+    section("buildBatchPrompt() — un solo prompt con todos los bloques dudosos");
+    {
+        const w = mkWords("hola bienvenidos a la clase de hoy sobre el tema principal que veremos ahora en detalle con calma", 100, 0.3, 0.2);
+        const pairs = [
+            { inMarker: mkMarker(99.8, "1", ""), outMarker: mkMarker(lastEnd(w) + 0.5, "", "OUT: a") },
+            { inMarker: mkMarker(lastEnd(w) + 2, "2", ""), outMarker: mkMarker(lastEnd(w) + 20, "", "OUT: b") }
+        ];
+        const built = MR.buildBatchPrompt(pairs, w, [0, 1]);
+        assert(built.prompt.indexOf("BLOQUE 1") !== -1, "incluye bloque 1");
+        assert(built.prompt.indexOf("BLOQUE 2") !== -1, "incluye bloque 2");
+        assert(built.prompt.indexOf('"blocks"') !== -1, "pide array JSON blocks");
+        assert(built.systemMsg.indexOf("JSON") !== -1, "system pide JSON");
+    }
+
+    section("resolveBatchResponse() — mapea el array a proposals por bloque");
+    {
+        const w = mkWords("tres dos uno hola a todos bienvenidos a la clase sobre integrales y sus aplicaciones fin", 100, 0.3, 0.2);
+        const pairs = [
+            { inMarker: mkMarker(99.8, "1", ""), outMarker: mkMarker(lastEnd(w) + 0.5, "", "OUT: a") }
+        ];
+        const resp = { blocks: [
+            { block: 1, "in": { action: "move", time: w[3].start, reason: "quitar conteo" }, out: { action: "keep" } }
+        ] };
+        const res = MR.resolveBatchResponse(resp, pairs, w);
+        assertEq(res.proposals.length, 1, "una propuesta (IN)");
+        assertEq(res.proposals[0].kind, "IN", "es IN");
+        assertEq(res.proposals[0].pairIdx, 0, "del bloque 0");
+    }
+
+    section("resolveBatchResponse() — acepta array directo sin clave blocks");
+    {
+        const w = mkWords("contenido normal de la clase sin conteo aqui empieza y termina bien todo el bloque", 50);
+        const pairs = [
+            { inMarker: mkMarker(49.8, "1", ""), outMarker: mkMarker(lastEnd(w) + 0.4, "", "OUT: a") }
+        ];
+        const res = MR.resolveBatchResponse([{ block: 1, "in": { action: "keep" }, out: { action: "keep" } }], pairs, w);
+        assertEq(res.proposals.length, 0, "keep/keep no propone nada");
+    }
+
+    section("selectBlocksToReview() — separa limpios de dudosos");
+    {
+        const w = mkWords("tres dos uno hola a todos bienvenidos a la clase de hoy sobre el tema que veremos con detalle", 100, 0.3, 0.2);
+        const pairs = [
+            { inMarker: mkMarker(99.8, "1", ""), outMarker: mkMarker(lastEnd(w) + 0.5, "", "OUT: a") }
+        ];
+        // Con validador null: revisa todo por seguridad
+        const selNull = MR.selectBlocksToReview(pairs, w, null);
+        assertEq(selNull.review.length, 1, "sin validador revisa todo");
+
+        // El bloque tiene conteo → siempre a revisar
+        const fakeValidator = { validateBoundaries: function() { return [{ status: "ok" }]; } };
+        const sel = MR.selectBlocksToReview(pairs, w, fakeValidator);
+        assertEq(sel.review.indexOf(0) !== -1, true, "bloque con conteo va a revisión aunque el validador diga ok");
+    }
+
     section("contextForTime() y formatContext()");
     {
         const words = mkWords("uno dos tres cuatro cinco seis siete ocho", 10);
