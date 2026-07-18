@@ -174,6 +174,58 @@ function run() {
         assertEq(props.length, 0, "sin número no se considera conteo");
     }
 
+    section("buildBlockUnits() + resolveUnitResponse(block) — evalúa IN y OUT del bloque");
+    {
+        const w = mkWords("tres dos uno hola bienvenidos a la clase de hoy sobre integrales y derivadas fin del tema aqui pausa", 100, 0.3, 0.2);
+        const pairs = [
+            { inMarker: mkMarker(99.8, "1", ""), outMarker: mkMarker(lastEnd(w) + 0.5, "", "OUT: x") }
+        ];
+        const units = MR.buildBlockUnits(pairs);
+        assertEq(units.length, 1, "una unidad por bloque");
+        assertEq(units[0].type, "block", "tipo block");
+
+        // El LLM mueve el IN a 'hola' (idx 3) y el OUT a antes de 'pausa'
+        const outWordIdx = w.length - 1; // 'pausa'
+        const props = MR.resolveUnitResponse(units[0], {
+            "in": { action: "move", time: w[3].start, reason: "quitar conteo" },
+            "out": { action: "move", time: w[outWordIdx].start, reason: "cortar antes de pausa" }
+        }, pairs, w);
+        const inProp = props.find(p => p.kind === "IN");
+        const outProp = props.find(p => p.kind === "OUT");
+        assert(!!inProp, "propone IN");
+        assert(!!outProp, "propone OUT");
+        assert(inProp.newTime <= w[3].start, "IN antes de 'hola'");
+    }
+
+    section("resolveOverlaps() — recorta el OUT si se pisa con el IN siguiente");
+    {
+        const pairs = [
+            { inMarker: mkMarker(10, "1", ""), outMarker: mkMarker(30, "", "OUT: a") },
+            { inMarker: mkMarker(28, "2", ""), outMarker: mkMarker(50, "", "OUT: b") }
+        ];
+        // Propuesta: OUT del bloque 1 a 32 (se pasa del IN del bloque 2 = 28)
+        const proposals = [
+            { kind: "OUT", pairIdx: 0, marker: pairs[0].outMarker, originalTime: 30, newTime: 32, reason: "x" }
+        ];
+        MR.resolveOverlaps(proposals, pairs);
+        assertEq(proposals[0].newTime, 28, "OUT recortado al IN del bloque siguiente");
+        assert(proposals[0].reason.indexOf("pisar") !== -1, "razón menciona el recorte");
+    }
+
+    section("resolveOverlaps() — crea recorte si no había propuesta de OUT");
+    {
+        const pairs = [
+            { inMarker: mkMarker(10, "1", ""), outMarker: mkMarker(35, "", "OUT: a") },
+            { inMarker: mkMarker(30, "2", ""), outMarker: mkMarker(50, "", "OUT: b") }
+        ];
+        // Sin propuesta de OUT para el bloque 0; el OUT original (35) > IN(30)
+        const proposals = [];
+        MR.resolveOverlaps(proposals, pairs);
+        assertEq(proposals.length, 1, "se crea un recorte de OUT");
+        assertEq(proposals[0].kind, "OUT", "es OUT");
+        assertEq(proposals[0].newTime, 30, "recortado al IN siguiente");
+    }
+
     section("contextForTime() y formatContext()");
     {
         const words = mkWords("uno dos tres cuatro cinco seis siete ocho", 10);
