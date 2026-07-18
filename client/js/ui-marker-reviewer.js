@@ -526,7 +526,7 @@
                 }
                 idx++;
                 next();
-            }, null, { numPredict: 400, think: false });
+            }, null, { numPredict: 1500, think: false });
         }
         next();
     }
