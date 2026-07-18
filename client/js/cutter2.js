@@ -180,7 +180,15 @@
                 }
             } else {
                 if (currentIn !== null) {
-                    warnings.push("IN huérfano en " + formatTime(currentIn.startSeconds) + " (seguido de otro IN)");
+                    // INs iniciales consecutivos antes del primer bloque: con el
+                    // skip de claqueta activo son claquetas extra (p.ej. claqueta
+                    // que no era el primer marcador de la secuencia) — se ignoran
+                    // sin warning. El corte no cambia: solo cuenta el último IN.
+                    if (skipClapperboard && keepBlocks.length === 0) {
+                        log("Claqueta/IN inicial ignorado en " + formatTime(currentIn.startSeconds));
+                    } else {
+                        warnings.push("IN huérfano en " + formatTime(currentIn.startSeconds) + " (seguido de otro IN)");
+                    }
                 }
                 currentIn = m;
             }

@@ -220,6 +220,37 @@
         return false;
     }
 
+    var STILL_EXT_RE = /\.(png|jpe?g|gif|tiff?|psd|bmp|webp|ai|eps|heic|svg|tga|dpx|exr)$/i;
+
+    /**
+     * Detecta clips de imagen fija por la extensión del archivo fuente.
+     * Los stills se estiran a cualquier duración sin time remapping, así que
+     * el chequeo timeline-vs-source no aplica. Resuelve referencias vacías
+     * <file id="X"/> buscando la definición completa en el documento.
+     */
+    function isStillImageClip(clipEl) {
+        var fileEl = firstChildElement(clipEl, "file");
+        if (!fileEl) return false;
+        var pathurl = childText(fileEl, "pathurl");
+        var fname = childText(fileEl, "name");
+        if (!pathurl && !fname) {
+            // Referencia vacía: buscar la definición por id
+            var id = fileEl.getAttribute("id");
+            if (id && clipEl.ownerDocument) {
+                var all = clipEl.ownerDocument.getElementsByTagName("file");
+                for (var i = 0; i < all.length; i++) {
+                    if (all[i].getAttribute("id") === id && childElements(all[i]).length > 0) {
+                        pathurl = childText(all[i], "pathurl");
+                        fname = childText(all[i], "name");
+                        break;
+                    }
+                }
+            }
+        }
+        var ref = (pathurl || fname || "").replace(/\s+$/, "");
+        return STILL_EXT_RE.test(ref);
+    }
+
     /**
      * Un clip es "lineal" si su duración en timeline coincide con la de source.
      * Los clips no lineales (speed changes) no se pueden trimear/dividir con
@@ -229,6 +260,7 @@
         var inF = childInt(clipEl, "in", -1);
         var outF = childInt(clipEl, "out", -1);
         if (inF === -1 || outF === -1) return true; // sin source in/out (p.ej. generators): tratar como lineal
+        if (isStillImageClip(clipEl)) return true;  // stills: duración libre sin remap
         if (hasActiveTimeRemap(clipEl)) return false;
         // Tolerancia de 1 frame por redondeos del export
         return Math.abs((effEnd - effStart) - (outF - inF)) <= 1;
@@ -707,6 +739,11 @@
                     var inF = childInt(it.el, "in", -1);
                     var outF = childInt(it.el, "out", -1);
 
+                    // Stills estirados (duración timeline != source): no tocar
+                    // in/out — no mapean 1:1 al timeline y Premiere los ignora
+                    var freezeSource = inF !== -1 && outF !== -1 &&
+                        Math.abs((E - S) - (outF - inF)) > 1 && isStillImageClip(it.el);
+
                     if (E <= zone.start) continue; // antes de la zona
 
                     if (S >= zone.end) {
@@ -737,13 +774,13 @@
                         // Primera mitad (nodo original): termina en zone.start
                         setChildText(doc, it.el, "start", S);
                         setChildText(doc, it.el, "end", zone.start);
-                        if (outF !== -1 && inF !== -1) setSourcePoint(doc, it.el, "out", inF + (zone.start - S), ticksPerFrame);
+                        if (!freezeSource && outF !== -1 && inF !== -1) setSourcePoint(doc, it.el, "out", inF + (zone.start - S), ticksPerFrame);
 
                         // Segunda mitad (clon): empieza donde quedó el join
                         setChildText(doc, cloneEl, "start", zone.start);
                         setChildText(doc, cloneEl, "end", E - L);
-                        if (inF !== -1) setSourcePoint(doc, cloneEl, "in", inF + (zone.end - S), ticksPerFrame);
-                        if (outF !== -1) setSourcePoint(doc, cloneEl, "out", outF, ticksPerFrame);
+                        if (!freezeSource && inF !== -1) setSourcePoint(doc, cloneEl, "in", inF + (zone.end - S), ticksPerFrame);
+                        if (!freezeSource && outF !== -1) setSourcePoint(doc, cloneEl, "out", outF, ticksPerFrame);
 
                         if (it.el.nextSibling) trackEl.insertBefore(cloneEl, it.el.nextSibling);
                         else trackEl.appendChild(cloneEl);
@@ -755,13 +792,13 @@
                         // Solo la cola cae en la zona: trim del final
                         setChildText(doc, it.el, "start", S);
                         setChildText(doc, it.el, "end", zone.start);
-                        if (outF !== -1 && inF !== -1) setSourcePoint(doc, it.el, "out", inF + (zone.start - S), ticksPerFrame);
+                        if (!freezeSource && outF !== -1 && inF !== -1) setSourcePoint(doc, it.el, "out", inF + (zone.start - S), ticksPerFrame);
                         report.trimmedClips++;
                     } else {
                         // Solo la cabeza cae en la zona: trim del inicio + shift
                         setChildText(doc, it.el, "start", zone.start);
                         setChildText(doc, it.el, "end", E - L);
-                        if (inF !== -1) setSourcePoint(doc, it.el, "in", inF + (zone.end - S), ticksPerFrame);
+                        if (!freezeSource && inF !== -1) setSourcePoint(doc, it.el, "in", inF + (zone.end - S), ticksPerFrame);
                         report.trimmedClips++;
                     }
                 }
