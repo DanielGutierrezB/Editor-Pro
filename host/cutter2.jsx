@@ -80,11 +80,22 @@ function ca2ImportSequenceXML(xmlPath, binName, expectedSeqName) {
 
         // La secuencia principal es la que coincide con el nombre esperado.
         // Las demás secuencias nuevas son copias de anidaciones reimportadas.
+        // Fallback si el nombre no coincide (p.ej. Premiere renombró al
+        // importar): la de mayor duración — las copias de nests son siempre
+        // más cortas que la secuencia principal que las contiene.
         var mainSeq = null;
         for (var k = 0; k < newSeqs.length; k++) {
             if (newSeqs[k].name === expectedSeqName) { mainSeq = newSeqs[k]; break; }
         }
-        if (!mainSeq) mainSeq = newSeqs[0];
+        if (!mainSeq) {
+            var maxEnd = -1;
+            for (var m = 0; m < newSeqs.length; m++) {
+                var seqEnd = 0;
+                try { seqEnd = parseFloat(newSeqs[m].end); } catch(eDur) { seqEnd = 0; }
+                if (seqEnd > maxEnd) { maxEnd = seqEnd; mainSeq = newSeqs[m]; }
+            }
+            if (!mainSeq) mainSeq = newSeqs[0];
+        }
 
         var nestedCopies = [];
         for (var n = 0; n < newSeqs.length; n++) {

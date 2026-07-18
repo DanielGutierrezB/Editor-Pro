@@ -26,6 +26,7 @@
     var state = {
         seqName: "",
         seqDuration: 0,
+        seqMarkerCount: 0,
         keepBlocks: [],
         removeZones: [],
         warnings: [],
@@ -93,8 +94,15 @@
         return m + ":" + pad(sec);
     }
 
+    // Para paths: normaliza separadores de Windows a "/"
     function escExtend(p) {
         return String(p).replace(/\\/g, "/").replace(/'/g, "\\'");
+    }
+
+    // Para strings arbitrarios (nombres de secuencia/bin): NO tocar backslashes,
+    // solo escaparlos — cambiarlos por "/" rompería el match por nombre en JSX
+    function escExtendStr(s) {
+        return String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     }
 
     function escHtml(s) {
@@ -216,6 +224,10 @@
             showToast("Node.js no disponible en el panel — CA2 requiere acceso a archivos", "error");
             return;
         }
+        if (state.executing) {
+            showToast("Hay una ejecución en curso — espera a que termine", "info");
+            return;
+        }
         state.lastLog = [];
         state.analyzed = false;
         state.inspection = null;
@@ -233,7 +245,8 @@
             }
             state.seqName = info.name;
             state.seqDuration = info.durationSeconds || 0;
-            log("Secuencia: " + info.name + " (" + state.seqDuration.toFixed(2) + "s)");
+            state.seqMarkerCount = info.markerCount || 0;
+            log("Secuencia: " + info.name + " (" + state.seqDuration.toFixed(2) + "s, " + state.seqMarkerCount + " marcadores)");
 
             setProgress(30, "Leyendo marcadores...");
             evalScript("getSequenceMarkers()", function(data) {
@@ -316,13 +329,22 @@
         dom.removeDuration.textContent = formatTime(totalRemove);
         dom.removeBlocks.textContent = state.removeZones.length + " zonas";
 
-        var nests = state.inspection ? state.inspection.nestedClips.length : 0;
+        // Anidaciones únicas (un nest usado varias veces cuenta una vez)
+        var nests = 0;
+        var nestClipUses = 0;
+        if (state.inspection) {
+            nestClipUses = state.inspection.nestedClips.length;
+            nests = typeof state.inspection.nestedSequenceCount === "number"
+                ? state.inspection.nestedSequenceCount
+                : nestClipUses;
+        }
         dom.nestCount.textContent = String(nests);
         dom.nestDetail.textContent = nests === 1 ? "anidación" : "anidaciones";
 
         if (nests > 0) {
             dom.nestWarning.innerHTML =
-                "<strong>" + nests + " anidación(es) detectada(s).</strong> " +
+                "<strong>" + nests + " anidación(es) detectada(s)" +
+                (nestClipUses > nests ? " (" + nestClipUses + " clips en el timeline)" : "") + ".</strong> " +
                 "Al reimportar, Premiere crea <em>copias</em> de las secuencias anidadas en el bin CA2. " +
                 "Las originales no se tocan, pero la secuencia cortada referenciará las copias.";
             show(dom.nestWarning);
@@ -391,7 +413,11 @@
             totalRemove += state.removeZones[i].end - state.removeZones[i].start;
         }
         var pct = state.seqDuration > 0 ? Math.round((totalRemove / state.seqDuration) * 100) : 0;
-        var nests = state.inspection ? state.inspection.nestedClips.length : 0;
+        var nests = state.inspection
+            ? (typeof state.inspection.nestedSequenceCount === "number"
+                ? state.inspection.nestedSequenceCount
+                : state.inspection.nestedClips.length)
+            : 0;
 
         var msg = "Se creará una secuencia nueva \"" + state.seqName + " - CA2\" con " +
             state.removeZones.length + " zonas eliminadas (" + formatTime(totalRemove) + ", " + pct + "% del total). " +
@@ -403,11 +429,29 @@
         show(dom.confirmOverlay);
     }
 
+    // Archivos temporales de la ejecución en curso — se limpian siempre,
+    // también en las rutas de error (failExecute)
+    var _tmpFiles = [];
+
+    function _cleanupTmp() {
+        for (var i = 0; i < _tmpFiles.length; i++) {
+            try { fs.unlinkSync(_tmpFiles[i]); } catch(_e) {}
+        }
+        _tmpFiles = [];
+    }
+
     function execute() {
         hide(dom.confirmOverlay);
         if (state.executing) return;
         state.executing = true;
         var startedAt = Date.now();
+
+        // Snapshot en el momento de la confirmación: un re-análisis concurrente
+        // no puede sustituir las zonas entre la confirmación y el applyCuts
+        var removeZones = state.removeZones.slice(0);
+        var seqName = state.seqName;
+        var seqDuration = state.seqDuration;
+        var seqMarkerCount = state.seqMarkerCount;
 
         hide(dom.results);
         hide(dom.resultDone);
@@ -417,23 +461,28 @@
             function pad(n) { return n < 10 ? "0" + n : "" + n; }
             return pad(d.getHours()) + "-" + pad(d.getMinutes()) + "-" + pad(d.getSeconds());
         })();
-        var newName = state.seqName + " - CA2 " + timeTag;
+        var newName = seqName + " - CA2 " + timeTag;
         var binName = "CA2 - " + new Date().toISOString().slice(0, 10);
 
         setProgress(10, "Verificando secuencia activa...");
 
-        // Re-verificar que la secuencia activa siga siendo la analizada y su duración no cambió
+        // Re-verificar que la secuencia activa siga siendo la analizada y que
+        // ni la duración ni los marcadores cambiaron desde el análisis
         evalScript("getActiveSequenceInfo()", function(info) {
             if (info.error) return failExecute(info.error);
-            if (info.name !== state.seqName) {
+            if (info.name !== seqName) {
                 return failExecute("La secuencia activa cambió (\"" + info.name + "\"). Vuelve a analizar.");
             }
-            if (Math.abs((info.durationSeconds || 0) - state.seqDuration) > 0.5) {
+            if (Math.abs((info.durationSeconds || 0) - seqDuration) > 0.5) {
                 return failExecute("La duración de la secuencia cambió desde el análisis. Vuelve a analizar.");
+            }
+            if ((info.markerCount || 0) !== seqMarkerCount) {
+                return failExecute("Los marcadores cambiaron desde el análisis (" + seqMarkerCount + " → " + (info.markerCount || 0) + "). Vuelve a analizar.");
             }
 
             setProgress(25, "Exportando secuencia a XML...");
             var srcPath = tempXmlPath("_src");
+            _tmpFiles.push(srcPath);
             evalScript("ca2ExportSequenceXML('" + escExtend(srcPath) + "')", function(exp) {
                 if (exp.error) return failExecute("Error al exportar: " + exp.error);
                 log("Export OK: " + exp.path);
@@ -446,13 +495,12 @@
                     return failExecute("No se pudo leer el XML exportado: " + e.message);
                 }
 
-                var res = EPXmlCutEngine.applyCuts(xmlContent, state.removeZones, {
+                var res = EPXmlCutEngine.applyCuts(xmlContent, removeZones, {
                     newName: newName,
                     allowLargeRemoval: true // ya confirmado por el usuario en el diálogo
                 });
 
                 if (!res.ok) {
-                    try { fs.unlinkSync(srcPath); } catch(_e) {}
                     return failExecute(res.error);
                 }
 
@@ -461,19 +509,20 @@
                     rep.splitClips + " divididos, " + rep.shiftedClips + " desplazados, " +
                     rep.deletedTransitions + " transiciones fuera, " +
                     rep.deletedMarkers + " marcadores fuera. Nueva duración: " + rep.newDurationSeconds.toFixed(2) + "s");
+                if (rep.restoredDefinitions) log("Definiciones de media restauradas: " + rep.restoredDefinitions);
                 for (var w = 0; w < rep.warnings.length; w++) log("WARN: " + rep.warnings[w]);
 
                 var cutPath = tempXmlPath("_cut");
+                _tmpFiles.push(cutPath);
                 try {
                     fs.writeFileSync(cutPath, res.xml, "utf8");
                 } catch(e2) {
                     return failExecute("No se pudo escribir el XML editado: " + e2.message);
                 }
-                try { fs.unlinkSync(srcPath); } catch(_e2) {}
 
                 setProgress(75, "Importando secuencia cortada...");
-                evalScript("ca2ImportSequenceXML('" + escExtend(cutPath) + "', '" + escExtend(binName) + "', '" + escExtend(newName) + "')", function(imp) {
-                    try { fs.unlinkSync(cutPath); } catch(_e3) {}
+                evalScript("ca2ImportSequenceXML('" + escExtend(cutPath) + "', '" + escExtendStr(binName) + "', '" + escExtendStr(newName) + "')", function(imp) {
+                    _cleanupTmp();
                     if (imp.error) return failExecute("Error al importar: " + imp.error);
 
                     var elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
@@ -497,7 +546,7 @@
                     if (imp.nestedCopies && imp.nestedCopies.length > 0) {
                         detail.push("Anidaciones copiadas al bin CA2: " + imp.nestedCopies.join(", "));
                     }
-                    detail.push("La secuencia original \"" + state.seqName + "\" quedó intacta.");
+                    detail.push("La secuencia original \"" + seqName + "\" quedó intacta.");
                     dom.resultDetail.innerHTML = detail.map(function(d) { return "<div>" + escHtml(d) + "</div>"; }).join("");
                     show(dom.resultDone);
                     showToast("Cortes ejecutados en " + elapsed + "s", "success");
@@ -508,6 +557,7 @@
 
     function failExecute(msg) {
         state.executing = false;
+        _cleanupTmp();
         hideProgress();
         show(dom.results);
         showToast(msg, "error");
