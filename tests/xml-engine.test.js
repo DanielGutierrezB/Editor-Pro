@@ -127,6 +127,7 @@ function run() {
         const info = engine.inspect(nestedXml, OPTS);
         assert(info.ok, "inspect ok");
         assertEq(info.nestedClips.length, 2, "detecta 2 clips anidados (definición + referencia)");
+        assertEq(info.nestedSequenceCount, 1, "1 anidación única (mismo nest usado 2 veces)");
         assertEq(info.remappedClips.length, 1, "detecta 1 clip con time remap");
         assertEq(info.remappedClips[0].name, "slowmo.mp4", "nombre del clip remapeado");
     }
@@ -175,7 +176,16 @@ function run() {
         assertEq(childNum(clone, "end"), 750, "clon termina en 900-150");
         assertEq(childNum(clone, "in"), 330, "in del clon = 0 + (750-420)");
         assertEq(childNum(clone, "out"), 480, "out del clon conserva el original");
-        assert(!childTag(clone, "link"), "el clon no tiene <link>");
+
+        // Los <link> del clon apuntan a los clones correspondientes (no a las
+        // primeras mitades) — así el A/V del split sigue vinculado
+        const audioClone = clips.find(c => (c.getAttribute("id") || "").indexOf("clipitem-5-ca2s") === 0);
+        assert(!!audioClone, "existe el clon del audio (clipitem-5)");
+        const cloneLinkRefs = els(clone, "linkclipref").map(l => l.textContent.trim());
+        assert(cloneLinkRefs.indexOf(clone.getAttribute("id")) !== -1, "el clon se auto-referencia en <link>");
+        assert(cloneLinkRefs.indexOf(audioClone.getAttribute("id")) !== -1, "el clon de video linkea al clon de audio");
+        assert(cloneLinkRefs.indexOf("clipitem-2") === -1, "el clon NO linkea a la primera mitad");
+        assert(cloneLinkRefs.indexOf("clipitem-5") === -1, "el clon NO linkea al audio original");
 
         // logo (300-600) queda intacto; marcador M3 (800) → 650
         const c3 = findClip(doc, "clipitem-3");
@@ -313,6 +323,47 @@ function run() {
 
         assertNoOverlaps(doc, "nests");
         assertEq(res.report.newDurationFrames, 1350, "duración 1500-150");
+    }
+
+    section("applyCuts() — eliminar el clip con la definición del nest restaura la definición");
+    {
+        // fps 25. Zona 20s–40s = frames 500–1000: cubre clipitem-n2 (que contiene
+        // la definición completa de nested-seq-1) — clipitem-n3 sobrevive con
+        // una referencia <sequence id="nested-seq-1"/> que quedaría huérfana
+        const res = engine.applyCuts(nestedXml, [{ start: 20, end: 40, label: "Brecha" }],
+            Object.assign({ allowLargeRemoval: true }, OPTS));
+        assert(res.ok, "applyCuts ok: " + (res.error || ""));
+        assert(res.report.deletedClips >= 1, "clipitem-n2 eliminado");
+        assertEq(res.report.restoredDefinitions, 1, "1 definición restaurada");
+
+        const doc = parseResult(res.xml);
+        assert(!findClip(doc, "clipitem-n2"), "clipitem-n2 ya no existe");
+        const n3 = findClip(doc, "clipitem-n3");
+        assert(!!n3, "clipitem-n3 sobrevive");
+        assertEq(childNum(n3, "start"), 500, "n3 desplazado 500 frames");
+
+        // La referencia del n3 ahora contiene la definición completa del nest
+        const n3seq = childTag(n3, "sequence");
+        assert(!!n3seq, "n3 conserva su <sequence>");
+        assertEq(n3seq.getAttribute("id"), "nested-seq-1", "id del nest");
+        assert(els(n3seq, "clipitem").length >= 1, "la definición del nest fue restaurada (no es referencia vacía)");
+    }
+
+    section("applyCuts() — marcador de rango que cruza la zona ajusta su out");
+    {
+        // M1: in=60, out=700 → zona 10s–15s (frames 300–450, L=150):
+        // in queda intacto, out debe reducirse a 550
+        const rangeXml = simpleXml.replace(
+            "<name>M1</name>\n            <in>60</in>\n            <out>-1</out>",
+            "<name>M1</name>\n            <in>60</in>\n            <out>700</out>"
+        );
+        assert(rangeXml !== simpleXml, "fixture modificado para marcador de rango");
+        const res = engine.applyCuts(rangeXml, [{ start: 10, end: 15, label: "Z" }], OPTS);
+        assert(res.ok, "applyCuts ok: " + (res.error || ""));
+        const doc = parseResult(res.xml);
+        const m1 = els(doc, "marker").find(m => childTag(m, "name").textContent === "M1");
+        assertEq(childNum(m1, "in"), 60, "in del marcador intacto");
+        assertEq(childNum(m1, "out"), 550, "out del marcador reducido por la zona");
     }
 
     section("applyCuts() — remap en borde de corte → error claro");

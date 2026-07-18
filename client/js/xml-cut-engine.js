@@ -217,6 +217,66 @@
         return childText(clipEl, "name") || clipEl.getAttribute("id") || "(sin nombre)";
     }
 
+    // ─── Definiciones compartidas (file / sequence / multiclip) ───
+    //
+    // En xmeml la definición completa de <file id="X"> (o <sequence>/<multiclip>)
+    // vive solo en la PRIMERA aparición; el resto son referencias vacías
+    // <file id="X"/>. Si el corte elimina el clip que contenía la definición,
+    // las referencias supervivientes quedarían huérfanas (media offline al
+    // importar). Guardamos las definiciones antes de cortar y las restauramos
+    // en la primera referencia superviviente si hace falta.
+
+    var DEF_TAGS = ["file", "sequence", "multiclip"];
+
+    function hasElementChildren(el) {
+        return childElements(el).length > 0;
+    }
+
+    function collectDefinitions(doc) {
+        var defs = {};
+        for (var d = 0; d < DEF_TAGS.length; d++) {
+            var tag = DEF_TAGS[d];
+            var all = doc.getElementsByTagName(tag);
+            for (var i = 0; i < all.length; i++) {
+                var el = all[i];
+                var id = el.getAttribute ? el.getAttribute("id") : null;
+                if (!id) continue;
+                var key = tag + "#" + id;
+                if (!defs[key] && hasElementChildren(el)) defs[key] = el.cloneNode(true);
+            }
+        }
+        return defs;
+    }
+
+    function restoreLostDefinitions(doc, defs) {
+        var restored = 0;
+        for (var d = 0; d < DEF_TAGS.length; d++) {
+            var tag = DEF_TAGS[d];
+            var live = doc.getElementsByTagName(tag);
+            var arr = [];
+            var i;
+            for (i = 0; i < live.length; i++) arr.push(live[i]);
+            var hasFull = {};
+            var firstRef = {};
+            for (i = 0; i < arr.length; i++) {
+                var el = arr[i];
+                var id = el.getAttribute ? el.getAttribute("id") : null;
+                if (!id) continue;
+                if (hasElementChildren(el)) hasFull[id] = true;
+                else if (!firstRef[id]) firstRef[id] = el;
+            }
+            for (var lostId in firstRef) {
+                if (!firstRef.hasOwnProperty(lostId) || hasFull[lostId]) continue;
+                var def = defs[tag + "#" + lostId];
+                if (def && firstRef[lostId].parentNode) {
+                    firstRef[lostId].parentNode.replaceChild(def.cloneNode(true), firstRef[lostId]);
+                    restored++;
+                }
+            }
+        }
+        return restored;
+    }
+
     var TICKS_PER_SECOND = 254016000000;
 
     function computeTicksPerFrame(timebase, ntsc) {
@@ -370,8 +430,23 @@
                     startSec: it.effStart >= 0 ? it.effStart / rate.fps : -1,
                     endSec: it.effEnd >= 0 ? it.effEnd / rate.fps : -1
                 };
-                if (hasNestedSequence(it.el)) info.nestedClips.push(entry);
+                var nestedSeq = firstChildElement(it.el, "sequence");
+                if (nestedSeq) {
+                    entry.nestedSeqId = nestedSeq.getAttribute("id") || null;
+                    info.nestedClips.push(entry);
+                }
                 if (!isLinearClip(it.el, it.effStart, it.effEnd)) info.remappedClips.push(entry);
+            }
+        }
+
+        // Anidaciones únicas (un mismo nest usado N veces cuenta una vez)
+        var seenNestIds = {};
+        info.nestedSequenceCount = 0;
+        for (var nc = 0; nc < info.nestedClips.length; nc++) {
+            var nid = info.nestedClips[nc].nestedSeqId || ("__anon" + nc);
+            if (!seenNestIds[nid]) {
+                seenNestIds[nid] = true;
+                info.nestedSequenceCount++;
             }
         }
 
@@ -384,21 +459,44 @@
      * En clones (segunda mitad de un split), colapsa las definiciones con id
      * (file/sequence/multiclip) a referencias vacías <tag id="X"/> — la
      * definición completa ya existe en la primera mitad, que va antes en el
-     * documento. También elimina <link> (el linking se rehace en Premiere).
+     * documento. Los <link> se conservan: se reescriben después con los ids
+     * de los clones correspondientes (ver rewriteCloneLinks), porque Premiere
+     * NO re-vincula A/V automáticamente al importar.
      */
     function sanitizeClone(doc, cloneEl) {
         var collapseTags = { file: true, sequence: true, multiclip: true };
         var kids = childElements(cloneEl);
         for (var i = 0; i < kids.length; i++) {
             var k = kids[i];
-            if (k.nodeName === "link") {
-                cloneEl.removeChild(k);
-            } else if (collapseTags[k.nodeName]) {
+            if (collapseTags[k.nodeName]) {
                 var id = k.getAttribute("id");
                 if (id) {
                     var ref = doc.createElement(k.nodeName);
                     ref.setAttribute("id", id);
                     cloneEl.replaceChild(ref, k);
+                }
+            }
+        }
+    }
+
+    /**
+     * Reescribe los <link> de los clones de una zona: cada linkclipref que
+     * apunte a un clip que también se dividió en esta zona pasa a apuntar a
+     * su clon. Links a clips que NO se dividieron se eliminan del clon (ese
+     * clip sigue vinculado a la primera mitad; duplicar el link corrompería
+     * el grupo de sync).
+     */
+    function rewriteCloneLinks(doc, zoneClones, cloneIdMap) {
+        for (var c = 0; c < zoneClones.length; c++) {
+            var cloneEl = zoneClones[c];
+            var links = childElements(cloneEl, "link");
+            for (var li = 0; li < links.length; li++) {
+                var refEl = firstChildElement(links[li], "linkclipref");
+                var refId = refEl ? textOf(refEl).replace(/\s+/g, "") : "";
+                if (refId && cloneIdMap[refId]) {
+                    setText(doc, refEl, cloneIdMap[refId]);
+                } else {
+                    cloneEl.removeChild(links[li]);
                 }
             }
         }
@@ -516,11 +614,22 @@
             };
         }
 
+        // Snapshot de definiciones file/sequence/multiclip: si el corte elimina
+        // el clip que contenía la definición completa, se restaura después en
+        // la primera referencia superviviente.
+        var savedDefs = collectDefinitions(doc);
+
         // Procesar zonas de FIN a INICIO para que los shifts no afecten zonas anteriores
         for (var z = zonesF.length - 1; z >= 0; z--) {
             var zone = zonesF[z];
             var L = zone.end - zone.start;
             report.framesRemoved += L;
+
+            // Clones creados por splits en esta zona (todas las pistas se
+            // dividen en el mismo frame): id original → id del clon, para
+            // reescribir los <link> entre clones.
+            var zoneClones = [];
+            var cloneIdMap = {};
 
             for (t = 0; t < tracks.length; t++) {
                 var trackEl = tracks[t].el;
@@ -597,8 +706,12 @@
                     if (S < zone.start && E > zone.end) {
                         // El clip abarca la zona: dividir en dos
                         var cloneEl = it.el.cloneNode(true);
-                        cloneEl.setAttribute("id", makeSplitId(it.el.getAttribute("id")));
+                        var cloneId = makeSplitId(it.el.getAttribute("id"));
+                        cloneEl.setAttribute("id", cloneId);
                         sanitizeClone(doc, cloneEl);
+                        var origId = it.el.getAttribute("id");
+                        if (origId) cloneIdMap[origId] = cloneId;
+                        zoneClones.push(cloneEl);
 
                         // Primera mitad (nodo original): termina en zone.start
                         setChildText(doc, it.el, "start", S);
@@ -633,23 +746,35 @@
                 }
             }
 
+            // Reescribir los <link> entre los clones creados en esta zona
+            rewriteCloneLinks(doc, zoneClones, cloneIdMap);
+
             // 3) Marcadores de secuencia
             var seqMarkers = childElements(seq, "marker");
             for (var mk = 0; mk < seqMarkers.length; mk++) {
                 var mEl = seqMarkers[mk];
                 var mIn = childInt(mEl, "in", -1);
                 if (mIn < 0) continue;
+                var mOut = childInt(mEl, "out", -1);
                 if (mIn >= zone.start && mIn < zone.end) {
                     seq.removeChild(mEl);
                     report.deletedMarkers++;
                 } else if (mIn >= zone.end) {
                     setChildText(doc, mEl, "in", mIn - L);
-                    var mOut = childInt(mEl, "out", -1);
                     if (mOut >= zone.end) setChildText(doc, mEl, "out", mOut - L);
                     report.shiftedMarkers++;
+                } else if (mOut >= 0) {
+                    // Marcador de rango que empieza antes de la zona: ajustar su out
+                    if (mOut >= zone.end) setChildText(doc, mEl, "out", mOut - L);
+                    else if (mOut > zone.start) setChildText(doc, mEl, "out", zone.start);
                 }
             }
         }
+
+        // Restaurar definiciones file/sequence/multiclip cuya copia completa
+        // fue eliminada junto con su clip pero que aún tienen referencias vivas
+        var restoredDefs = restoreLostDefinitions(doc, savedDefs);
+        if (restoredDefs > 0) report.restoredDefinitions = restoredDefs;
 
         // Limpiar <link> que apunten a clips eliminados y recomputar duración
         var validIds = {};
