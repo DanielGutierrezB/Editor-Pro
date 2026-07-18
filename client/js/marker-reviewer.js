@@ -150,6 +150,18 @@
         return units;
     }
 
+    /**
+     * Una unidad por bloque [IN, OUT]. Cada llamada al LLM evalúa AMBOS bordes
+     * del mismo bloque, con foco (evita que el modelo descuide el IN como
+     * pasaba con el prompt de transición combinado).
+     */
+    function buildBlockUnits(pairs) {
+        var units = [];
+        if (!pairs) return units;
+        for (var i = 0; i < pairs.length; i++) units.push({ type: "block", pairIdx: i });
+        return units;
+    }
+
     // ─── Ventanas de audio a transcribir ────────────────────
 
     /**
@@ -434,6 +446,34 @@
         opts = mergeOpts(opts);
         var n = opts.contextWords;
 
+        if (unit.type === "block") {
+            var pair = pairs[unit.pairIdx];
+            var inT = pair.inMarker.startSeconds;
+            var outT = pair.outMarker.startSeconds;
+            var ctxInBefore = contextForTime(words, inT, n);
+            var ctxOutAfter = contextForTime(words, outT, n);
+            var num = unit.pairIdx + 1;
+            return {
+                systemMsg: SYSTEM_MSG,
+                prompt: "BLOQUE " + num + " de la clase. El editor marcó IN en t=" + inT.toFixed(1) +
+                    "s y OUT en t=" + outT.toFixed(1) + "s. Todo lo que queda dentro [IN, OUT] se conserva; " +
+                    "lo de fuera se elimina. Valida que ambos bordes caigan donde la frase tiene sentido.\n\n" +
+                    "ANTES del IN (se elimina):\n" + formatContext(ctxInBefore.before) + "\n\n" +
+                    "DESPUÉS del IN = inicio del bloque (se conserva):\n" + formatContext(ctxInBefore.after) + "\n\n" +
+                    "ANTES del OUT = final del bloque (se conserva):\n" + formatContext(ctxOutAfter.before) + "\n\n" +
+                    "DESPUÉS del OUT (se elimina):\n" + formatContext(ctxOutAfter.after) + "\n\n" +
+                    (unit.hints ? "Sugerencias automáticas: " + unit.hints + "\n\n" : "") +
+                    "Reglas:\n" +
+                    "- IN: debe caer donde ARRANCA la primera frase con sentido del bloque. Si empieza con un conteo " +
+                    "(\"3, 2, 1\"), un cue (\"listo\", \"grabando\", \"acción\") o una frase a medias, MUEVE el IN a la primera palabra de la frase real.\n" +
+                    "- OUT: debe caer justo DESPUÉS de la última frase completa con sentido. Si después hay una pausa, un error, " +
+                    "un comando al editor o una frase a medias, el OUT ya está bien; si el OUT corta una frase por la mitad, muévelo al final de esa frase.\n" +
+                    "Usa el tiempo (segundos) de la palabra correspondiente. Responde JSON:\n" +
+                    '{"in": {"action": "keep"|"move", "time": <segundos donde empieza la frase real>, "reason": "<breve, español>"}, ' +
+                    '"out": {"action": "keep"|"move", "time": <segundos de la palabra siguiente al final de la frase>, "reason": "<breve, español>"}}'
+            };
+        }
+
         if (unit.type === "first-in") {
             var inT = pairs[unit.pairIdx].inMarker.startSeconds;
             var ctx = contextForTime(words, inT, n);
@@ -557,7 +597,10 @@
             });
         }
 
-        if (unit.type === "first-in") {
+        if (unit.type === "block") {
+            consider("IN", unit.pairIdx, pairs[unit.pairIdx].inMarker, response["in"], "");
+            consider("OUT", unit.pairIdx, pairs[unit.pairIdx].outMarker, response.out, "");
+        } else if (unit.type === "first-in") {
             consider("IN", unit.pairIdx, pairs[unit.pairIdx].inMarker, response["in"], "");
         } else if (unit.type === "last-out") {
             consider("OUT", unit.pairIdx, pairs[unit.pairIdx].outMarker, response.out, "");
@@ -565,6 +608,52 @@
             var rep = String(response.repeatedPhrase || "");
             consider("OUT", unit.outPairIdx, pairs[unit.outPairIdx].outMarker, response.out, rep);
             consider("IN", unit.inPairIdx, pairs[unit.inPairIdx].inMarker, response["in"], rep);
+        }
+        return proposals;
+    }
+
+    /**
+     * Evita que, tras aplicar los ajustes, un bloque se pise con el siguiente:
+     * si el OUT propuesto del bloque N queda después del IN propuesto del
+     * bloque N+1, se recorta el OUT de N hasta el IN de N+1 (se prioriza el
+     * siguiente IN, como pidió el flujo). Muta la lista de proposals.
+     * `proposals`: array con {kind, pairIdx, newTime, originalTime, marker...}.
+     */
+    function resolveOverlaps(proposals, pairs) {
+        if (!pairs || pairs.length < 2) return proposals;
+        // Tiempo efectivo (propuesto o original) de cada borde por bloque
+        function effTime(kind, pairIdx) {
+            for (var i = 0; i < proposals.length; i++) {
+                if (proposals[i].kind === kind && proposals[i].pairIdx === pairIdx) return proposals[i].newTime;
+            }
+            return kind === "IN" ? pairs[pairIdx].inMarker.startSeconds : pairs[pairIdx].outMarker.startSeconds;
+        }
+        for (var p = 0; p < pairs.length - 1; p++) {
+            var outN = effTime("OUT", p);
+            var inNext = effTime("IN", p + 1);
+            if (outN > inNext) {
+                // Recortar el OUT del bloque N a inNext
+                var found = null;
+                for (var j = 0; j < proposals.length; j++) {
+                    if (proposals[j].kind === "OUT" && proposals[j].pairIdx === p) { found = proposals[j]; break; }
+                }
+                if (found) {
+                    found.newTime = inNext;
+                    found.reason = (found.reason ? found.reason + " " : "") + "(recortado para no pisar el IN del bloque " + (p + 2) + ")";
+                } else {
+                    proposals.push({
+                        kind: "OUT",
+                        pairIdx: p,
+                        marker: pairs[p].outMarker,
+                        originalTime: pairs[p].outMarker.startSeconds,
+                        newTime: inNext,
+                        reason: "Recortado para no pisar el IN del bloque " + (p + 2),
+                        repeatedPhrase: "",
+                        overlapFix: true,
+                        snippet: snippetAround((pairs[p]._words || []), inNext, 6)
+                    });
+                }
+            }
         }
         return proposals;
     }
@@ -644,6 +733,8 @@
     var EPMarkerReviewer = {
         parsePairs: parsePairs,
         buildBoundaryUnits: buildBoundaryUnits,
+        buildBlockUnits: buildBlockUnits,
+        resolveOverlaps: resolveOverlaps,
         computeAudioWindows: computeAudioWindows,
         windowsCoverPairs: windowsCoverPairs,
         detectLeadIns: detectLeadIns,
