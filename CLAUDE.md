@@ -60,7 +60,7 @@ Editor-Pro/
 ├── CSXS/
 │   └── manifest.xml         # Manifiesto CEP: com.codigo.editorpro
 ├── whisper/                 # whisper.cpp: scripts de instalación + modelos .bin
-├── VERSION                  # Versión actual (2.5.0)
+├── VERSION                  # Versión actual (2.5.1)
 ├── dist/                    # ZXP empaquetado
 ├── build-zxp.sh             # Firma y empaqueta ZXP
 └── install.sh               # Symlink para desarrollo + habilita debug mode
@@ -195,7 +195,7 @@ Herramienta previa a Cortes Automáticos: valida cada marcador IN/OUT contra el 
 1. Leer marcadores (`getSequenceMarkers` / `getMarkersForSequence(seqId)`) y parsear pares IN/OUT — misma convención del Cutter, claqueta reconocida por nombre/comentario (`clapper`/`claqueta`) o primer marcador como fallback
 2. Conseguir `words[]`: transcript ya guardado en `Transcribe/<seq>.json|.srt` (cache) o exportar audio + STT (pipeline existente). El resultado se guarda como JSON normalizado `{words, text, language}` para no re-transcribir
 3. Pre-pase determinístico con `EPCutValidator` (pickups + snapping) como *hints* para el LLM
-4. **Validación con el LLM en UNA sola consulta (batch)**: `selectBlocksToReview` descarta las fronteras ya limpias (sin conteo, sin corte a mitad de palabra) y `buildBatchPrompt` manda todos los bloques dudosos en una única petición que devuelve un array (`resolveBatchResponse`). Si el batch falla o viene malformado, hay **fallback** a una consulta por bloque (`buildBlockUnits`, cada bloque evalúa IN+OUT con foco). Las **repeticiones entre bloques** (pickups) y los **conteos "3,2,1"** al inicio se resuelven de forma **determinística** (`EPCutValidator.detectPickups` + `detectLeadIns`), y `resolveOverlaps` recorta el OUT si se pisa con el IN siguiente (prioriza el IN). Cada prompt lleva contexto compacto con timestamps `(12.3)palabra`, nunca el transcript completo. Las llamadas usan `think:false` (sin razonamiento de qwen3, `/no_think` en el mensaje de usuario) y `num_predict` acotado para respuestas rápidas
+4. **Una llamada al LLM por BLOQUE** (`buildBlockUnits`): cada bloque [IN, OUT] se evalúa con foco en ambos bordes en una sola consulta (evita que el modelo descuide el IN). Las **repeticiones entre bloques** (pickups) y los **conteos "3,2,1"** al inicio se resuelven de forma **determinística** (`EPCutValidator.detectPickups` + `detectLeadIns`), y `resolveOverlaps` recorta el OUT si se pisa con el IN siguiente (prioriza el IN). Cada prompt lleva solo ~60 palabras de contexto con timestamps `(12.3)palabra`, nunca el transcript completo. Las llamadas usan `think:false` (sin razonamiento de qwen3, `/no_think` en el mensaje de usuario) y `num_predict` acotado para respuestas en segundos
 5. Los tiempos del LLM se **clampan a gaps de silencio** (`clampToWordGap`): nunca se corta a mitad de palabra; una palabra a medias se incluye en el bloque. Movimientos > 30s o deltas < 0.12s se descartan
 6. UI de revisión: propuestas con checkbox (razón del LLM, frase repetida, snippet del punto de corte) → "Aplicar seleccionados" mueve los marcadores vía `mrMoveMarkers()` (Premiere no permite cambiar `marker.start`: se borra y recrea conservando nombre/comentario/color/duración)
 7. **Transcript final**: concatena las palabras dentro de los bloques ajustados (`buildFinalTranscript`) → texto de la clase como quedaría cortada (guardable como `_final.txt` en Transcribe/, copiable) + **chequeo de coherencia** con el LLM (fluidez entre bloques, frases cortadas, repeticiones, saltos de tema)
@@ -380,12 +380,12 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 El header tiene 3 botones (además del dropdown de secuencia activa):
 
 1. **Log** (icono de descarga) — descarga el log de la sesión a la carpeta de Descargas.
-2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.5.0`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.4.2 → v2.5.0`).
+2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.5.1`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.5.0 → v2.5.1`).
 3. **Ajustes** — abre el panel de configuración (proveedor STT, proveedor de IA, API keys, modelo).
 
 > Nota histórica: los botones de debug de MOGRT (🔍/🔬) fueron removidos.
 
 ## Versión y auto-actualización
 
-- La versión vive en el archivo `VERSION` (actual: **2.5.0**) y en `CSXS/manifest.xml`.
+- La versión vive en el archivo `VERSION` (actual: **2.5.1**) y en `CSXS/manifest.xml`.
 - `updater.js` implementa un auto-updater basado en la GitHub API (no requiere git instalado) que descarga desde la rama **`workspace-daniel`**.
