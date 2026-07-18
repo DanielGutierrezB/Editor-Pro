@@ -61,7 +61,7 @@ Editor-Pro/
 ├── CSXS/
 │   └── manifest.xml         # Manifiesto CEP: com.codigo.editorpro
 ├── whisper/                 # whisper.cpp: scripts de instalación + modelos .bin
-├── VERSION                  # Versión actual (2.0.2)
+├── VERSION                  # Versión actual (2.1.0)
 ├── dist/                    # ZXP empaquetado
 ├── build-zxp.sh             # Firma y empaqueta ZXP
 └── install.sh               # Symlink para desarrollo + habilita debug mode
@@ -377,12 +377,12 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 El header tiene 3 botones (además del dropdown de secuencia activa):
 
 1. **Log** (icono de descarga) — descarga el log de la sesión a la carpeta de Descargas.
-2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.0.2`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.0.1 → v2.0.2`).
+2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.1.0`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.0.2 → v2.1.0`).
 3. **Ajustes** — abre el panel de configuración (proveedor STT, proveedor de IA, API keys, modelo).
 
 > Nota histórica: los botones de debug de MOGRT (🔍/🔬) fueron removidos.
 
 ## Versión y auto-actualización
 
-- La versión vive en el archivo `VERSION` (actual: **2.0.2**) y en `CSXS/manifest.xml`.
+- La versión vive en el archivo `VERSION` (actual: **2.1.0**) y en `CSXS/manifest.xml`.
 - `updater.js` implementa un auto-updater basado en la GitHub API (no requiere git instalado) que descarga desde la rama **`workspace-daniel`**.
