@@ -40,7 +40,12 @@
         running: false,
         cancelled: false,
         sessions: [],       // [{seqId|null, seqName, words, pairs, warnings, skipped, proposals, applied, finalTranscript, coherence, log}]
-        currentIdx: -1
+        currentIdx: -1,
+        startTime: 0,       // inicio del run (ms) — timer total
+        stepStartTime: 0,   // inicio del paso actual (ms) — timer por paso
+        lastBaseText: "",   // texto de progreso sin el timer
+        lastPct: 0,
+        timerId: null
     };
 
     // ─── Helpers UI ──────────────────────────────────────────
@@ -86,14 +91,38 @@
         });
     }
 
+    function fmtClock(ms) {
+        var s = Math.max(0, Math.floor(ms / 1000));
+        var m = Math.floor(s / 60);
+        var sec = s % 60;
+        return m + ":" + (sec < 10 ? "0" : "") + sec;
+    }
+
     function setProgress(pct, text) {
+        if (text !== undefined && text !== mrState.lastBaseText) {
+            mrState.lastBaseText = text;
+            mrState.stepStartTime = Date.now(); // nuevo paso → reiniciar timer de paso
+        }
+        if (typeof pct === "number") mrState.lastPct = pct;
+        renderProgressLine();
+    }
+
+    function renderProgressLine() {
+        var pct = mrState.lastPct;
+        var base = mrState.lastBaseText;
+        var line = base;
+        if (mrState.running && mrState.startTime) {
+            var total = fmtClock(Date.now() - mrState.startTime);
+            var step = fmtClock(Date.now() - mrState.stepStartTime);
+            line = base + "  ·  ⏱ " + total + " (paso " + step + ")";
+        }
         var bar = $("mrv-progress");
         if (bar) bar.classList.remove("hidden");
         var fill = $("mrv-progress-fill");
         if (fill) fill.style.width = pct + "%";
         var txt = $("mrv-progress-text");
-        if (txt) txt.textContent = text;
-        // Barra en el header cuando la card está colapsada
+        if (txt) txt.textContent = line;
+
         var hdr = $("mrv-progress-header");
         var body = $("mrv-body");
         if (hdr) {
@@ -102,11 +131,23 @@
             var hFill = $("mrv-progress-header-fill");
             if (hFill) hFill.style.width = pct + "%";
             var hTxt = $("mrv-progress-header-text");
-            if (hTxt) hTxt.textContent = text;
+            if (hTxt) hTxt.textContent = line;
         }
     }
 
+    function startTimer() {
+        mrState.startTime = Date.now();
+        mrState.stepStartTime = Date.now();
+        if (mrState.timerId) clearInterval(mrState.timerId);
+        mrState.timerId = setInterval(renderProgressLine, 1000);
+    }
+
+    function stopTimer() {
+        if (mrState.timerId) { clearInterval(mrState.timerId); mrState.timerId = null; }
+    }
+
     function hideProgress() {
+        stopTimer();
         var bar = $("mrv-progress");
         if (bar) bar.classList.add("hidden");
         var hdr = $("mrv-progress-header");
@@ -140,9 +181,10 @@
 
     /**
      * Intenta cargar words[] desde los archivos de Transcribe/ sin tocar
-     * la UI de Notas de Grabación.
+     * la UI de Notas de Grabación. Si el transcript guardado es parcial
+     * (ventanas), solo se reutiliza si cubre las fronteras de `pairs`.
      */
-    function loadWordsFromDisk(seqName) {
+    function loadWordsFromDisk(seqName, pairs) {
         if (!fs || !path) return null;
         var folders = [];
         if (state && state.transcribeFolder) folders.push(state.transcribeFolder);
@@ -150,17 +192,25 @@
             var saved = localStorage.getItem("editorpro_transcript_folder");
             if (saved && folders.indexOf(saved) === -1) folders.push(saved);
         } catch(_e) {}
+
+        var candidates = [];
         if (state && state.transcriptCache && state.transcriptCache[seqName]) {
-            var cached = state.transcriptCache[seqName];
-            var r = readTranscriptFile(cached);
-            if (r) return r;
+            candidates.push(state.transcriptCache[seqName]);
         }
         var base = sanitizeBaseName(seqName);
         for (var f = 0; f < folders.length; f++) {
-            var jp = path.join(folders[f], base + ".json");
-            var sp = path.join(folders[f], base + ".srt");
-            var res = readTranscriptFile(jp) || readTranscriptFile(sp);
-            if (res) return res;
+            candidates.push(path.join(folders[f], base + ".json"));
+            candidates.push(path.join(folders[f], base + ".srt"));
+        }
+
+        for (var c = 0; c < candidates.length; c++) {
+            var r = readTranscriptFile(candidates[c]);
+            if (!r) continue;
+            // Transcript parcial: reutilizar solo si cubre los cortes actuales
+            if (r.partial && r.windows && pairs) {
+                if (!MR.windowsCoverPairs(r.windows, pairs)) continue;
+            }
+            return r;
         }
         return null;
     }
@@ -170,6 +220,14 @@
         try {
             if (!fs.existsSync(filePath)) return null;
             if (/\.json$/i.test(filePath)) {
+                // Formato propio: conserva partial/windows para la lógica de cobertura
+                try {
+                    var raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+                    if (raw && raw.words && raw.words.length > 5 && typeof raw.words[0].start === "number") {
+                        return { words: raw.words, text: raw.text || "", language: raw.language || "es",
+                            partial: !!raw.partial, windows: raw.windows || null };
+                    }
+                } catch(_re) {}
                 var parsed = global._epParseTranscriptJson ? global._epParseTranscriptJson(filePath) : null;
                 if (parsed && parsed.words && parsed.words.length > 5) return parsed;
             } else if (/\.srt$/i.test(filePath)) {
@@ -189,14 +247,32 @@
         var folder = state && state.transcribeFolder;
         if (!folder) return;
         try {
-            var dest = path.join(folder, sanitizeBaseName(seqName) + ".json");
+            // Un transcript parcial (ventanas) NO debe sobrescribir uno completo
+            // ya existente — se guarda aparte para no degradar otras herramientas
+            var base = sanitizeBaseName(seqName);
+            var fullPath = path.join(folder, base + ".json");
+            var dest;
+            if (result.partial) {
+                var fullExists = false;
+                try {
+                    if (fs.existsSync(fullPath)) {
+                        var existing = JSON.parse(fs.readFileSync(fullPath, "utf8"));
+                        fullExists = existing && !existing.partial && existing.words && existing.words.length > 5;
+                    }
+                } catch(_ee) {}
+                dest = fullExists ? path.join(folder, base + ".review.json") : fullPath;
+            } else {
+                dest = fullPath;
+            }
             fs.writeFileSync(dest, JSON.stringify({
                 words: result.words,
                 text: result.text || "",
                 language: result.language || "es",
+                partial: !!result.partial,
+                windows: result.windows || null,
                 savedBy: "marker-reviewer"
             }), "utf8");
-            if (state.transcriptCache) state.transcriptCache[seqName] = dest;
+            if (state.transcriptCache && !result.partial) state.transcriptCache[seqName] = dest;
         } catch(_e) {}
     }
 
@@ -218,7 +294,7 @@
     }
 
     function _getWordsInner(session, onProgress, callback) {
-        var cached = loadWordsFromDisk(session.seqName);
+        var cached = loadWordsFromDisk(session.seqName, session.pairs);
         if (cached) {
             log(session, "Transcript cargado de Transcribe/ (" + cached.words.length + " palabras)");
             publishTranscript(cached, session.seqName);
@@ -266,21 +342,38 @@
                         state.transcribeFolder = exp.transcribeFolder;
                     }
                     log(session, "Audio exportado: " + exp.path);
-                    onProgress(15, "Transcribiendo \"" + session.seqName + "\" (" + (stt.provider || "STT") + ")...");
 
-                    stt.transcribe(exp.path, function(pct) {
-                        onProgress(15 + Math.round(pct * 0.5), "Transcribiendo \"" + session.seqName + "\"... " + pct + "%");
-                    }, function(result) {
+                    var onTsDone = function(result) {
                         if (result.error) return callback("Error al transcribir: " + result.error);
                         if (!result.words || result.words.length === 0) return callback("La transcripción no devolvió palabras.");
-                        log(session, "Transcripción: " + result.words.length + " palabras");
+                        log(session, "Transcripción: " + result.words.length + " palabras" + (result.partial ? " (ventanas alrededor de los cortes)" : " (completa)"));
                         saveWordsToDisk(session.seqName, result);
                         publishTranscript(result, session.seqName);
                         callback(null, result.words);
-                    });
+                    };
+                    var onTsProgress = function(pct) {
+                        onProgress(15 + Math.round(pct * 0.5), "Transcribiendo \"" + session.seqName + "\"... " + pct + "%");
+                    };
+
+                    // Modo rápido: solo transcribir ventanas alrededor de cada IN/OUT
+                    if (isWindowedMode() && stt.transcribeRegions) {
+                        var windows = MR.computeAudioWindows(session.pairs);
+                        session.windows = windows;
+                        log(session, "Modo rápido: " + windows.length + " ventana(s) alrededor de los cortes");
+                        onProgress(15, "Transcribiendo solo alrededor de los cortes...");
+                        stt.transcribeRegions(exp.path, windows, onTsProgress, onTsDone);
+                    } else {
+                        onProgress(15, "Transcribiendo \"" + session.seqName + "\" (" + (stt.provider || "STT") + ")...");
+                        stt.transcribe(exp.path, onTsProgress, onTsDone);
+                    }
                 });
             }, delay);
         });
+    }
+
+    function isWindowedMode() {
+        var cb = $("mrv-windowed");
+        return cb ? cb.checked : true;
     }
 
     /**
@@ -370,10 +463,12 @@
             onProgress(Math.round((idx / units.length) * 100), "Validando " + label + " (" + (idx + 1) + "/" + units.length + ")...");
 
             var built = MR.buildUnitPrompt(unit, session.pairs, session.words);
+            var callStart = Date.now();
             aiAnalyzer._send(built.systemMsg, built.prompt, function(response) {
+                var secs = ((Date.now() - callStart) / 1000).toFixed(1);
                 if (response && response.error) {
                     errors.push(response.error);
-                    log(session, "LLM error en " + label + ": " + response.error);
+                    log(session, "LLM error en " + label + " (" + secs + "s): " + response.error);
                 } else {
                     var props = MR.resolveUnitResponse(unit, response, session.pairs, session.words);
                     for (var i = 0; i < props.length; i++) {
@@ -381,7 +476,7 @@
                         props[i].selected = true;
                         proposals.push(props[i]);
                     }
-                    log(session, label + ": " + props.length + " ajuste(s) propuesto(s)");
+                    log(session, label + " (" + secs + "s): " + props.length + " ajuste(s) propuesto(s)");
                 }
                 idx++;
                 next();
@@ -512,6 +607,9 @@
     function startRun() {
         mrState.running = true;
         mrState.cancelled = false;
+        mrState.lastBaseText = "";
+        mrState.lastPct = 0;
+        startTimer();
         var empty = $("mrv-empty");
         if (empty) empty.classList.add("hidden");
         var results = $("mrv-results");
@@ -532,6 +630,7 @@
     }
 
     function finishRun(err) {
+        var elapsed = mrState.startTime ? fmtClock(Date.now() - mrState.startTime) : "";
         mrState.running = false;
         hideProgress();
         var stopBtn = $("btn-mrv-stop");
@@ -548,12 +647,13 @@
             total += mrState.sessions[i].proposals.length;
             if (mrState.sessions[i].error) failed++;
         }
+        var suffix = elapsed ? " · ⏱ " + elapsed : "";
         if (failed > 0) {
-            showToast(failed + " secuencia(s) con error — revisa el detalle", "error");
+            showToast(failed + " secuencia(s) con error — revisa el detalle" + suffix, "error");
         } else {
-            showToast(total > 0
+            showToast((total > 0
                 ? total + " ajuste(s) propuesto(s) en " + mrState.sessions.length + " secuencia(s)"
-                : "Marcadores validados — sin ajustes necesarios", total > 0 ? "info" : "success");
+                : "Marcadores validados — sin ajustes necesarios") + suffix, total > 0 ? "info" : "success");
         }
     }
 

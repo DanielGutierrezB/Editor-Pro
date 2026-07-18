@@ -106,6 +106,32 @@ function run() {
         assertEq(MR.buildBoundaryUnits([{}]).length, 2, "1 par → first-in + last-out");
     }
 
+    section("computeAudioWindows() — ventanas alrededor de los cortes con merge");
+    {
+        const pairs = [
+            { inMarker: mkMarker(100, "1", ""), outMarker: mkMarker(200, "", "OUT: a") },
+            { inMarker: mkMarker(210, "2", ""), outMarker: mkMarker(300, "", "OUT: b") },
+            { inMarker: mkMarker(1000, "3", ""), outMarker: mkMarker(1100, "", "OUT: c") }
+        ];
+        // margin 120: [ -20→0,320 ] merge de los dos primeros; [880,1220] aparte
+        const wins = MR.computeAudioWindows(pairs, { windowMarginSec: 120 });
+        assertEq(wins.length, 2, "dos ventanas (las dos primeras se fusionan)");
+        assertEq(wins[0].start, 0, "primera ventana clampa a 0");
+        assertEq(wins[0].end, 300 + 120, "primera ventana hasta OUT del par 2 + margen");
+        assertEq(wins[1].start, 1000 - 120, "segunda ventana desde IN del par 3 - margen");
+        assertEq(wins[1].end, 1100 + 120, "segunda ventana hasta OUT del par 3 + margen");
+    }
+
+    section("windowsCoverPairs() — cobertura de fronteras");
+    {
+        const pairs = [
+            { inMarker: mkMarker(100, "1", ""), outMarker: mkMarker(200, "", "OUT: a") }
+        ];
+        assert(MR.windowsCoverPairs([{ start: 0, end: 400 }], pairs), "ventana amplia cubre");
+        assert(!MR.windowsCoverPairs([{ start: 0, end: 150 }], pairs), "ventana que no llega al OUT no cubre");
+        assert(!MR.windowsCoverPairs([], pairs), "sin ventanas no cubre");
+    }
+
     section("contextForTime() y formatContext()");
     {
         const words = mkWords("uno dos tres cuatro cinco seis siete ocho", 10);

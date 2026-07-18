@@ -989,6 +989,115 @@
     };
 
     // ═══════════════════════════════════════════════════════════════
+    // Transcripción por regiones (ahorro de tiempo)
+    // ═══════════════════════════════════════════════════════════════
+
+    SpeechToText.prototype._findFfmpeg = function(callback) {
+        if (!childProcess) { callback(null); return; }
+        var exec = childProcess.exec;
+        exec("ffmpeg -version", function(err) {
+            if (!err) { callback("ffmpeg"); return; }
+            if (process && process.platform !== "win32") {
+                exec("/opt/homebrew/bin/ffmpeg -version", function(err2) {
+                    callback(err2 ? null : "/opt/homebrew/bin/ffmpeg");
+                });
+            } else {
+                callback(null);
+            }
+        });
+    };
+
+    /**
+     * Transcribe solo ventanas [{start,end}] (segundos) del audio, cortando
+     * cada una con ffmpeg y desplazando los timestamps a tiempo de secuencia.
+     * Devuelve el mismo formato normalizado {words, text, language, partial,
+     * windows}. Si no hay ffmpeg, cae a transcribir el archivo completo.
+     */
+    SpeechToText.prototype.transcribeRegions = function(filePath, regions, onProgress, callback) {
+        var self = this;
+        if (!regions || regions.length === 0) {
+            this.transcribe(filePath, onProgress, callback);
+            return;
+        }
+        this._findFfmpeg(function(ffmpeg) {
+            if (!ffmpeg) {
+                // Sin ffmpeg no se puede cortar: transcribir todo
+                self.transcribe(filePath, onProgress, callback);
+                return;
+            }
+            var tmpDir = os ? os.tmpdir() : "/tmp";
+            var allWords = [];
+            var textParts = [];
+            var language = "es";
+            var idx = 0;
+            var totalDur = 0;
+            for (var r = 0; r < regions.length; r++) totalDur += Math.max(0, regions[r].end - regions[r].start);
+            var doneDur = 0;
+
+            function cleanup(slicePath) {
+                try { fs.unlinkSync(slicePath); } catch(e) {}
+            }
+
+            function nextRegion() {
+                if (idx >= regions.length) {
+                    if (allWords.length === 0) {
+                        callback({ error: "La transcripción por regiones no devolvió palabras." });
+                        return;
+                    }
+                    allWords.sort(function(a, b) { return a.start - b.start; });
+                    callback({
+                        words: allWords,
+                        text: textParts.join(" "),
+                        language: language,
+                        partial: true,
+                        windows: regions
+                    });
+                    return;
+                }
+                var reg = regions[idx];
+                var dur = Math.max(0, reg.end - reg.start);
+                var slicePath = (path ? path.join(tmpDir, "epmrv_slice_" + Date.now() + "_" + idx + ".wav") : tmpDir + "/epmrv_slice_" + idx + ".wav");
+                var cmd = '"' + ffmpeg + '" -y -ss ' + reg.start.toFixed(3) + ' -i "' + filePath +
+                    '" -t ' + dur.toFixed(3) + ' -ar 16000 -ac 1 -c:a pcm_s16le "' + slicePath + '"';
+
+                childProcess.exec(cmd, { maxBuffer: 8 * 1024 * 1024 }, function(err) {
+                    if (err) {
+                        // Si falla el corte de una ventana, seguir con las demás
+                        idx++;
+                        nextRegion();
+                        return;
+                    }
+                    var regStart = reg.start;
+                    self.transcribe(slicePath, function(pct) {
+                        var base = totalDur > 0 ? (doneDur / totalDur) : (idx / regions.length);
+                        var span = totalDur > 0 ? (dur / totalDur) : (1 / regions.length);
+                        onProgress(Math.min(99, Math.round((base + span * (pct / 100)) * 100)));
+                    }, function(result) {
+                        cleanup(slicePath);
+                        if (result && !result.error && result.words) {
+                            for (var w = 0; w < result.words.length; w++) {
+                                var wd = result.words[w];
+                                allWords.push({
+                                    text: wd.text,
+                                    start: wd.start + regStart,
+                                    end: wd.end + regStart,
+                                    type: wd.type || "word"
+                                });
+                            }
+                            if (result.text) textParts.push(result.text);
+                            if (result.language) language = result.language;
+                        }
+                        doneDur += dur;
+                        idx++;
+                        nextRegion();
+                    });
+                });
+            }
+            nextRegion();
+        });
+    };
+
+    // ═══════════════════════════════════════════════════════════════
     // Whisper API (OpenAI)
     // ═══════════════════════════════════════════════════════════════
 
