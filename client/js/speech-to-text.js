@@ -1021,8 +1021,11 @@
         }
         this._findFfmpeg(function(ffmpeg) {
             if (!ffmpeg) {
-                // Sin ffmpeg no se puede cortar: transcribir todo
-                self.transcribe(filePath, onProgress, callback);
+                // Sin ffmpeg no se puede cortar: transcribir todo (y avisar)
+                self.transcribe(filePath, onProgress, function(res) {
+                    if (res && !res.error) res.fellBackToFull = true;
+                    callback(res);
+                });
                 return;
             }
             var tmpDir = os ? os.tmpdir() : "/tmp";
@@ -1068,10 +1071,12 @@
                         return;
                     }
                     var regStart = reg.start;
+                    var regNum = idx + 1;
                     self.transcribe(slicePath, function(pct) {
                         var base = totalDur > 0 ? (doneDur / totalDur) : (idx / regions.length);
                         var span = totalDur > 0 ? (dur / totalDur) : (1 / regions.length);
-                        onProgress(Math.min(99, Math.round((base + span * (pct / 100)) * 100)));
+                        onProgress(Math.min(99, Math.round((base + span * (pct / 100)) * 100)),
+                            { region: regNum, total: regions.length, windowSeconds: totalDur });
                     }, function(result) {
                         cleanup(slicePath);
                         if (result && !result.error && result.words) {
