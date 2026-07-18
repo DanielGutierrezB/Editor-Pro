@@ -303,6 +303,30 @@
     color: var(--accent);
 }
 
+/* ─── Cortes Automáticos 2 (CA2) ─── */
+
+.cutter2-nest-warning {
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    border-left: 3px solid var(--warning);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 8px 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+.cutter2-nest-warning strong { color: var(--warning); }
+
+.cutter2-warnings {
+    margin: 6px 0;
+}
+.cutter2-warning-item {
+    font-size: 10px;
+    color: var(--warning);
+    padding: 2px 0;
+}
+
 .hidden { display: none !important; }
 
 [title] { position: relative; }
