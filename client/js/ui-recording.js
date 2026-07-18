@@ -251,6 +251,8 @@
 
         var whisperStatus = document.getElementById("whisper-local-status");
         if (whisperStatus) whisperStatus.classList.toggle("hidden", prov !== "whisper_local");
+        var whisperPickers = document.getElementById("whisper-local-pickers");
+        if (whisperPickers) whisperPickers.classList.toggle("hidden", prov !== "whisper_local");
         if (prov === "whisper_local") refreshWhisperLocalStatus();
 
         var sttStatus = document.getElementById("stt-status");
@@ -297,15 +299,60 @@
         if (!statusText) return;
         var status = stt.getWhisperLocalStatus();
         if (status.ready) {
-            statusText.innerHTML = '<span class="stt-connected">✓ whisper.cpp listo — ' +
-                esc(status.modelName || "modelo detectado") + '</span>';
+            var engineLabel = status.engine === "python" ? "Whisper (Python)" : "whisper.cpp";
+            statusText.innerHTML = '<span class="stt-connected">✓ ' + engineLabel + ' listo — ' +
+                esc(status.modelName || "modelo detectado") + '</span>' +
+                (status.modelPath ? '<br><span style="font-size:9px;color:var(--text-secondary);word-break:break-all;">' + esc(status.modelPath) + '</span>' : "");
         } else {
             var parts = [];
-            if (!status.binaryFound) parts.push("binario no encontrado");
+            if (!status.binaryFound) parts.push("binario no encontrado (whisper-cli / whisper)");
             if (!status.modelFound) parts.push("modelo no encontrado");
-            statusText.innerHTML = '<span class="stt-disconnected">✗ ' + parts.join(", ") +
-                '. Ejecuta whisper/setup-whisper.sh</span>';
+            var hint = status.binaryFound
+                ? "Usa \"Elegir modelo...\" para señalar tu modelo (ggml/gguf .bin), o instala uno con whisper/setup-whisper.sh"
+                : "Instala whisper.cpp (whisper/setup-whisper.sh) o usa \"Elegir binario...\"";
+            statusText.innerHTML = '<span class="stt-disconnected">✗ ' + parts.join(" · ") + '</span>' +
+                '<br><span style="font-size:9px;color:var(--text-secondary);">' + esc(hint) + '</span>';
         }
+        var clearBtn = document.getElementById("btn-whisper-clear-manual");
+        if (clearBtn) {
+            var hasManual = false;
+            try {
+                hasManual = !!(localStorage.getItem("editorpro_whisper_model") || localStorage.getItem("editorpro_whisper_binary"));
+            } catch(_e) {}
+            clearBtn.classList.toggle("hidden", !hasManual);
+        }
+    }
+
+    function handleWhisperModelPick(evt) {
+        var file = evt.target.files[0];
+        if (!file) return;
+        if (!/\.(bin|gguf)$/i.test(file.name)) {
+            showToast("El modelo debe ser un archivo .bin o .gguf (formato whisper.cpp). Los .pt de Python se detectan solos.", "error");
+            evt.target.value = "";
+            return;
+        }
+        try { localStorage.setItem("editorpro_whisper_model", file.path); } catch(_e) {}
+        evt.target.value = "";
+        refreshWhisperLocalStatus();
+        showToast("Modelo Whisper configurado: " + file.name, "success");
+    }
+
+    function handleWhisperBinaryPick(evt) {
+        var file = evt.target.files[0];
+        if (!file) return;
+        try { localStorage.setItem("editorpro_whisper_binary", file.path); } catch(_e) {}
+        evt.target.value = "";
+        refreshWhisperLocalStatus();
+        showToast("Binario Whisper configurado: " + file.name, "success");
+    }
+
+    function clearWhisperManualPaths() {
+        try {
+            localStorage.removeItem("editorpro_whisper_model");
+            localStorage.removeItem("editorpro_whisper_binary");
+        } catch(_e) {}
+        refreshWhisperLocalStatus();
+        showToast("Whisper: detección automática restaurada", "info");
     }
 
     function saveSTTKey() {
@@ -2543,6 +2590,9 @@
         refreshSttHeaderProgressVisibility: refreshSttHeaderProgressVisibility,
         expandSection: expandSection,
         refreshWhisperLocalStatus: refreshWhisperLocalStatus,
+        handleWhisperModelPick: handleWhisperModelPick,
+        handleWhisperBinaryPick: handleWhisperBinaryPick,
+        clearWhisperManualPaths: clearWhisperManualPaths,
         applyWhisperResultToTranscriptCard: applyWhisperResultToTranscriptCard,
         restoreRecCutBackup: restoreRecCutBackup,
         saveSRTFiles: saveSRTFiles,
