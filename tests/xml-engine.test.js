@@ -383,6 +383,22 @@ function run() {
         assert(!findClip(doc, "clipitem-remap"), "clip remapeado eliminado");
     }
 
+    section("parseo tolerante — BOM y whitespace antes de la declaración XML");
+    {
+        const withBom = "\uFEFF" + simpleXml;
+        const info = engine.inspect(withBom, OPTS);
+        assert(info.ok, "inspect acepta XML con BOM: " + (info.error || ""));
+        const res = engine.applyCuts(withBom, [{ start: 20, end: 25 }], OPTS);
+        assert(res.ok, "applyCuts acepta XML con BOM: " + (res.error || ""));
+
+        const withJunk = "\n  \uFEFF" + simpleXml;
+        assert(engine.inspect(withJunk, OPTS).ok, "inspect acepta whitespace + BOM inicial");
+
+        const bad = engine.inspect("no soy xml", OPTS);
+        assert(!bad.ok, "contenido no-XML sigue fallando");
+        assert((bad.error || "").indexOf("no soy xml") !== -1, "el error incluye el inicio del archivo para diagnóstico");
+    }
+
     section("applyCuts() — renombrado de secuencia");
     {
         const res = engine.applyCuts(simpleXml, [{ start: 20, end: 25 }],
