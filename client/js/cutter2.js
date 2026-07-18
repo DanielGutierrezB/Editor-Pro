@@ -212,6 +212,10 @@
     }
 
     function analyze() {
+        if (!fs) {
+            showToast("Node.js no disponible en el panel — CA2 requiere acceso a archivos", "error");
+            return;
+        }
         state.lastLog = [];
         state.analyzed = false;
         state.inspection = null;
