@@ -332,11 +332,14 @@
     function _exportAndTranscribe(session, onProgress, callback) {
         onProgress(5, "Exportando audio de \"" + session.seqName + "\"...");
         evalScript("findOrCreateAudioPreset()", function(preset) {
+            if (mrState.cancelled) return;
             if (preset.error) return callback(preset.error);
             var delay = preset.cached ? 100 : 2000;
             setTimeout(function() {
+                if (mrState.cancelled) return;
                 var presetPath = String(preset.path).replace(/\\/g, "/");
                 evalScript('exportSequenceAudio("' + escExtend(presetPath) + '")', function(exp) {
+                    if (mrState.cancelled) return;
                     if (exp.error) return callback("Error al exportar audio: " + exp.error);
                     if (state && exp.transcribeFolder) {
                         state.transcribeFolder = exp.transcribeFolder;
@@ -345,6 +348,7 @@
 
                     var seqDur = exp.durationSeconds || 0;
                     var onTsDone = function(result) {
+                        if (mrState.cancelled) return;
                         if (result.error) return callback("Error al transcribir: " + result.error);
                         if (!result.words || result.words.length === 0) return callback("La transcripción no devolvió palabras.");
                         if (result.fellBackToFull) {
@@ -465,9 +469,34 @@
         var errors = [];
         var idx = 0;
 
+        function finalizeProposals() {
+            // Rellenar con propuestas determinísticas de IN (conteos "3,2,1" /
+            // cues de producción) los bloques que el LLM no ajustó — resuelve
+            // el caso de que ningún modelo mueva los INs.
+            try {
+                var leadIns = MR.detectLeadIns(session.words, session.pairs);
+                for (var d = 0; d < leadIns.length; d++) {
+                    var li = leadIns[d];
+                    var dup = false;
+                    for (var q = 0; q < proposals.length; q++) {
+                        if (proposals[q].kind === "IN" && proposals[q].pairIdx === li.pairIdx) { dup = true; break; }
+                    }
+                    if (!dup) {
+                        li.unitLabel = "conteo bloque " + (li.pairIdx + 1);
+                        li.selected = true;
+                        proposals.push(li);
+                        log(session, "Detector de conteo: IN bloque " + (li.pairIdx + 1) + " " +
+                            li.originalTime.toFixed(1) + "→" + li.newTime.toFixed(1) + "s");
+                    }
+                }
+            } catch(e) {}
+            proposals.sort(function(a, b) { return a.originalTime - b.originalTime; });
+        }
+
         function next() {
             if (mrState.cancelled) return callback("Revisión cancelada.", proposals);
             if (idx >= units.length) {
+                finalizeProposals();
                 return callback(errors.length === units.length ? "El LLM no respondió a ninguna consulta: " + errors[0] : null, proposals);
             }
             var unit = units[idx];
@@ -480,6 +509,7 @@
             var built = MR.buildUnitPrompt(unit, session.pairs, session.words);
             var callStart = Date.now();
             aiAnalyzer._send(built.systemMsg, built.prompt, function(response) {
+                if (mrState.cancelled) return; // abortado: no continuar el bucle
                 var secs = ((Date.now() - callStart) / 1000).toFixed(1);
                 if (response && response.error) {
                     errors.push(response.error);
@@ -496,18 +526,35 @@
                 }
                 idx++;
                 next();
-            });
+            }, null, { numPredict: 400, think: false });
         }
         next();
     }
 
     // ─── Flujo principal ─────────────────────────────────────
 
+    /**
+     * Avisa (una vez por sesión de panel) si el modelo de IA seleccionado es
+     * de visión (-vl) o muy grande: para esta tarea de texto basta uno ligero.
+     */
+    function warnHeavyModel() {
+        if (warnHeavyModel._done) return;
+        if (!aiAnalyzer || aiAnalyzer.provider !== "ollama") return;
+        var model = (aiAnalyzer.model || "").toLowerCase();
+        var isVision = model.indexOf("-vl") !== -1 || model.indexOf("llava") !== -1 || model.indexOf("vision") !== -1;
+        var isBig = /:(\d+)b/.test(model) && parseInt(model.match(/:(\d+)b/)[1], 10) >= 20;
+        if (isVision || isBig) {
+            warnHeavyModel._done = true;
+            showToast("Modelo pesado (" + aiAnalyzer.model + ") para una tarea de texto. Un modelo ligero (p.ej. qwen3:4b) será mucho más rápido con calidad similar.", "info");
+        }
+    }
+
     function reviewActive() {
         if (mrState.running) { showToast("Ya hay una revisión en curso", "info"); return; }
         if (!fs) { showToast("Node.js no disponible en el panel", "error"); return; }
         if (!aiAnalyzer) { showToast("El proveedor de IA no está inicializado", "error"); return; }
 
+        warnHeavyModel();
         startRun();
         evalScript("getActiveSequenceInfo()", function(info) {
             if (info.error) return failRun(info.error);
@@ -526,6 +573,7 @@
         if (!fs) { showToast("Node.js no disponible en el panel", "error"); return; }
         if (!aiAnalyzer) { showToast("El proveedor de IA no está inicializado", "error"); return; }
 
+        warnHeavyModel();
         startRun();
         setProgress(2, "Buscando secuencias abiertas...");
         evalScript("getAllProjectSequences()", function(data) {
@@ -594,6 +642,7 @@
             : "getSequenceMarkers()";
 
         evalScript(markersCall, function(data) {
+            if (mrState.cancelled) return;
             if (data.error) return done(data.error);
             var parsed = MR.parsePairs(data.markers, { skipClapperboard: true });
             if (parsed.error) return done(parsed.error);
@@ -636,6 +685,7 @@
     }
 
     function failRun(msg) {
+        if (mrState.cancelled) return; // stopRun ya finalizó la UI
         mrState.running = false;
         hideProgress();
         var stopBtn = $("btn-mrv-stop");
@@ -646,6 +696,7 @@
     }
 
     function finishRun(err) {
+        if (mrState.cancelled) return; // stopRun ya finalizó la UI
         var elapsed = mrState.startTime ? fmtClock(Date.now() - mrState.startTime) : "";
         mrState.running = false;
         hideProgress();
@@ -674,8 +725,20 @@
     }
 
     function stopRun() {
+        if (!mrState.running) return;
         mrState.cancelled = true;
-        showToast("Deteniendo revisión...", "info");
+        // Abortar de inmediato la petición en vuelo (LLM y/o transcripción)
+        try { if (aiAnalyzer && aiAnalyzer.abort) aiAnalyzer.abort(); } catch(e) {}
+        try { if (stt && stt.abort) stt.abort(); } catch(e) {}
+        // Como tras abort() el callback de _send no se dispara, finalizamos aquí
+        mrState.running = false;
+        hideProgress();
+        var stopBtn = $("btn-mrv-stop");
+        if (stopBtn) stopBtn.classList.add("hidden");
+        // Mostrar lo que se haya calculado hasta el momento
+        if (mrState.sessions.length > 0) renderResults();
+        else { var empty = $("mrv-empty"); if (empty) empty.classList.remove("hidden"); }
+        showToast("Revisión detenida", "info");
     }
 
     // ─── Transcript final + coherencia ───────────────────────
@@ -713,6 +776,7 @@
         var btn = $("btn-mrv-coherence");
         if (btn) { btn.disabled = true; btn.textContent = "Analizando coherencia..."; }
         aiAnalyzer._send(built.systemMsg, built.prompt, function(response) {
+            if (mrState.cancelled) { if (btn) { btn.disabled = false; btn.textContent = "Validar coherencia con IA"; } return; }
             if (btn) { btn.disabled = false; btn.textContent = "Validar coherencia con IA"; }
             if (response && response.error) {
                 showToast("Coherencia: " + response.error, "error");
@@ -863,7 +927,7 @@
                 var dir = p.newTime < p.originalTime ? "◀" : "▶";
                 var delta = Math.abs(p.newTime - p.originalTime).toFixed(1);
                 html.push(
-                    "<div class='mrv-item" + (p.applied ? " applied" : "") + "'>" +
+                    "<div class='mrv-item mrv-item-clickable" + (p.applied ? " applied" : "") + "' data-nav-idx='" + i + "' title='Ir a este marcador en la secuencia'>" +
                         (p.applied
                             ? "<span class='mrv-applied-badge'>✓</span>"
                             : "<input type='checkbox' class='mrv-check' data-idx='" + i + "'" + (p.selected ? " checked" : "") + ">") +
@@ -882,10 +946,11 @@
 
         body.innerHTML = html.join("");
 
-        // Bind checkboxes
+        // Bind checkboxes (el clic en el checkbox no debe navegar)
         var checks = body.querySelectorAll(".mrv-check");
         for (var c = 0; c < checks.length; c++) {
             (function(cb) {
+                cb.addEventListener("click", function(ev) { ev.stopPropagation(); });
                 cb.addEventListener("change", function() {
                     var idx = parseInt(cb.getAttribute("data-idx"), 10);
                     if (session.proposals[idx]) {
@@ -896,6 +961,20 @@
                     }
                 });
             })(checks[c]);
+        }
+
+        // Clic en una fila → llevar el playhead a ese marcador en la secuencia
+        var rows = body.querySelectorAll(".mrv-item-clickable");
+        for (var rr = 0; rr < rows.length; rr++) {
+            (function(row) {
+                row.addEventListener("click", function() {
+                    var idx = parseInt(row.getAttribute("data-nav-idx"), 10);
+                    var prop = session.proposals[idx];
+                    if (prop && global._epNavigateToTime) {
+                        global._epNavigateToTime(Math.max(0, prop.marker.startSeconds));
+                    }
+                });
+            })(rows[rr]);
         }
 
         updateApplyButton(session);

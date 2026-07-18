@@ -386,6 +386,8 @@
     font-size: 11px;
 }
 .mrv-item.applied { opacity: 0.65; }
+.mrv-item-clickable { cursor: pointer; }
+.mrv-item-clickable:hover { border-color: var(--accent); }
 .mrv-item .mrv-check { margin-top: 3px; flex-shrink: 0; }
 .mrv-item-body { flex: 1; min-width: 0; }
 .mrv-item-head { margin-bottom: 2px; }
