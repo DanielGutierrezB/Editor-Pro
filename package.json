@@ -1,5 +1,11 @@
 {
+  "scripts": {
+    "test": "node tests/run-node-tests.js"
+  },
   "dependencies": {
     "zxp-provider": "^2.0.0"
+  },
+  "devDependencies": {
+    "@xmldom/xmldom": "^0.9.10"
   }
 }

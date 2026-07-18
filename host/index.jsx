@@ -7,6 +7,7 @@
 
 #include "common.jsx"
 #include "cutter.jsx"
+#include "cutter2.jsx"
 #include "spellcheck.jsx"
 #include "supertexts.jsx"
 #include "recording.jsx"
