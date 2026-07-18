@@ -352,6 +352,17 @@
     color: var(--warning);
     padding: 2px 0;
 }
+.mrv-error {
+    font-size: 11px;
+    color: var(--error, #ff5c5c);
+    background: rgba(255, 92, 92, 0.08);
+    border: 1px solid rgba(255, 92, 92, 0.3);
+    border-left: 3px solid var(--error, #ff5c5c);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    line-height: 1.5;
+}
 .mrv-note {
     font-size: 10px;
     color: var(--text-secondary);

@@ -517,12 +517,23 @@
      * luego escaneo de carpetas conocidas (cualquier nombre, no solo ggml-*),
      * incluida la cache de Hugging Face. Devuelve el de mayor calidad.
      */
+    var WHISPER_MODEL_AUTO_KEY = "editorpro_whisper_model_auto";
+
     SpeechToText.prototype._findWhisperModel = function() {
         if (!fs) return null;
 
         var manual = _lsGet(WHISPER_MODEL_KEY);
         if (manual && /\.(bin|gguf)$/i.test(manual)) {
             try { if (fs.existsSync(manual)) return manual; } catch(e) {}
+        }
+
+        // Resultado de una búsqueda profunda anterior (Spotlight)
+        var auto = _lsGet(WHISPER_MODEL_AUTO_KEY);
+        if (auto) {
+            try {
+                if (fs.existsSync(auto)) return auto;
+                localStorage.removeItem(WHISPER_MODEL_AUTO_KEY);
+            } catch(e) {}
         }
 
         var best = null;
@@ -563,6 +574,54 @@
         }
 
         return best;
+    };
+
+    /**
+     * Búsqueda profunda del modelo con Spotlight (mdfind, solo macOS): busca
+     * archivos ggml/gguf en TODO el disco indexado, sin depender de carpetas
+     * conocidas. El resultado se persiste para no repetir la búsqueda.
+     * callback(modelPath | null)
+     */
+    SpeechToText.prototype.deepSearchWhisperModel = function(callback) {
+        if (!childProcess || !fs || (typeof process !== "undefined" && process.platform === "win32")) {
+            callback(null);
+            return;
+        }
+        var queries = [
+            "mdfind -name ggml 2>/dev/null",
+            "mdfind -name gguf 2>/dev/null"
+        ];
+        var lines = [];
+        var pending = queries.length;
+
+        function finish() {
+            var best = null;
+            var bestScore = -1;
+            for (var i = 0; i < lines.length; i++) {
+                var p = lines[i].trim();
+                if (!p || !/\.(bin|gguf)$/i.test(p)) continue;
+                var name = p.replace(/\\/g, "/").split("/").pop();
+                if (!_isGgmlModelFile(name)) continue;
+                try {
+                    var st = fs.statSync(p);
+                    if (!st.isFile() || st.size < 50 * 1024 * 1024) continue;
+                } catch(e) { continue; }
+                var score = _whisperModelScore(name);
+                if (score > bestScore) { bestScore = score; best = p; }
+            }
+            if (best) {
+                try { localStorage.setItem(WHISPER_MODEL_AUTO_KEY, best); } catch(e) {}
+            }
+            callback(best);
+        }
+
+        for (var q = 0; q < queries.length; q++) {
+            childProcess.exec(queries[q], { timeout: 20000, maxBuffer: 20 * 1024 * 1024 }, function(err, stdout) {
+                if (!err && stdout) lines = lines.concat(String(stdout).split("\n"));
+                pending--;
+                if (pending === 0) finish();
+            });
+        }
     };
 
     /**
@@ -665,13 +724,29 @@
             return;
         }
 
+        var self = this;
         var status = this.getWhisperLocalStatus();
+
+        if (!status.ready && !status.modelFound) {
+            // Último intento: búsqueda profunda del modelo en todo el disco
+            onProgress(2);
+            this.deepSearchWhisperModel(function() {
+                var retry = self.getWhisperLocalStatus();
+                if (!retry.ready) {
+                    var missing = [];
+                    if (!retry.binaryFound) missing.push("binario (whisper-cli / whisper)");
+                    if (!retry.modelFound) missing.push("modelo (busqué en carpetas conocidas y con Spotlight)");
+                    callback({ error: "Whisper local no disponible: falta " + missing.join(" y ") +
+                        ". Instala whisper.cpp (whisper/setup-whisper.sh) o usa \"Elegir modelo...\" en Ajustes." });
+                    return;
+                }
+                self._transcribeWhisperLocal(filePath, onProgress, callback);
+            });
+            return;
+        }
+
         if (!status.ready) {
-            var missing = [];
-            if (!status.binaryFound) missing.push("binario (whisper-cli / whisper)");
-            if (!status.modelFound) missing.push("modelo");
-            callback({ error: "Whisper local no disponible: falta " + missing.join(" y ") +
-                ". Instala whisper.cpp (whisper/setup-whisper.sh) o selecciona el modelo manualmente en Ajustes." });
+            callback({ error: "Whisper local no disponible: falta el binario (whisper-cli / whisper). Instala whisper.cpp (whisper/setup-whisper.sh) o usa \"Elegir binario...\" en Ajustes." });
             return;
         }
 

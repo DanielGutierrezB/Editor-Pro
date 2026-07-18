@@ -294,10 +294,27 @@
         el.textContent = "STT: " + statusParts.join(" — ");
     }
 
+    var _whisperDeepSearchState = "idle"; // idle | running | done
+
     function refreshWhisperLocalStatus() {
         var statusText = document.getElementById("whisper-local-status-text");
         if (!statusText) return;
         var status = stt.getWhisperLocalStatus();
+
+        // Si no hay modelo, buscarlo automáticamente en todo el disco
+        // (Spotlight) una vez — sin pedirle la ruta al usuario
+        if (!status.ready && !status.modelFound && _whisperDeepSearchState === "idle" && stt.deepSearchWhisperModel) {
+            _whisperDeepSearchState = "running";
+            statusText.innerHTML = '<span class="stt-connecting">⏳ Buscando el modelo Whisper en el disco...</span>';
+            stt.deepSearchWhisperModel(function(found) {
+                _whisperDeepSearchState = "done";
+                refreshWhisperLocalStatus();
+                if (found) showToast("Modelo Whisper encontrado: " + found.split("/").pop(), "success");
+            });
+            return;
+        }
+        if (_whisperDeepSearchState === "running") return;
+
         if (status.ready) {
             var engineLabel = status.engine === "python" ? "Whisper (Python)" : "whisper.cpp";
             statusText.innerHTML = '<span class="stt-connected">✓ ' + engineLabel + ' listo — ' +
@@ -350,7 +367,9 @@
         try {
             localStorage.removeItem("editorpro_whisper_model");
             localStorage.removeItem("editorpro_whisper_binary");
+            localStorage.removeItem("editorpro_whisper_model_auto");
         } catch(_e) {}
+        _whisperDeepSearchState = "idle"; // re-buscar en el disco
         refreshWhisperLocalStatus();
         showToast("Whisper: detección automática restaurada", "info");
     }
