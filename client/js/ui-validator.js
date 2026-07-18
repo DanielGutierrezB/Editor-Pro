@@ -18,10 +18,45 @@
     var state, recorder;
 
     var _session = null; // { segments, pickups, snaps, report }
+    var _applying = false; // evita que el refresh post-apply borre la sesión
 
     function _initRefs() {
         state = global._epState;
         recorder = global._epRecorder;
+    }
+
+    /**
+     * Descarta la sesión de validación. Se llama cuando las tomas cambian
+     * (re-detección, re-transcripción, toggle manual): las propuestas viejas
+     * apuntan a objetos/tiempos que ya no existen.
+     */
+    function reset() {
+        if (_applying) return;
+        if (!_session) return;
+        _session = null;
+        var container = document.getElementById("validator-results");
+        if (container) container.innerHTML = "";
+        var summary = document.getElementById("validator-summary");
+        if (summary) summary.classList.add("hidden");
+        var applyAllBtn = document.getElementById("btn-validator-apply-all");
+        if (applyAllBtn) applyAllBtn.classList.add("hidden");
+    }
+
+    /**
+     * Verifica que el segmento de una propuesta siga vivo en el recorder.
+     * Si la detección se re-corrió, los objetos son nuevos y la propuesta
+     * mutaría un segmento huérfano.
+     */
+    function _segAlive(seg) {
+        if (!recorder || !recorder.segments) return false;
+        return recorder.segments.indexOf(seg) !== -1;
+    }
+
+    function _staleGuard(seg) {
+        if (_segAlive(seg)) return true;
+        showToast("Las tomas cambiaron desde la validación — vuelve a validar", "info");
+        reset();
+        return false;
     }
 
     function escHtml(s) {
@@ -38,10 +73,11 @@
     }
 
     function fmt(t) {
-        var s = Math.max(0, t);
+        // Redondear a décimas ANTES de dividir en min/seg para evitar "1:60.0"
+        var s = Math.round(Math.max(0, t) * 10) / 10;
         var m = Math.floor(s / 60);
-        var sec = (s % 60).toFixed(1);
-        return m + ":" + (parseFloat(sec) < 10 ? "0" : "") + sec;
+        var sec = s - m * 60;
+        return m + ":" + (sec < 10 ? "0" : "") + sec.toFixed(1);
     }
 
     // ─── Run ─────────────────────────────────────────────────
@@ -82,41 +118,50 @@
     // ─── Aplicar ajustes ─────────────────────────────────────
 
     function _refreshAfterApply() {
-        // Regenerar marcadores y refrescar la lista de tomas con los tiempos nuevos
-        try { recorder.generateSimpleMarkers(); } catch(e) {}
+        // Invalidar marcadores y zonas de corte calculadas con los tiempos
+        // viejos (mismo flujo que al activar/desactivar una toma) y refrescar
+        // la UI del paso 3.
+        _applying = true;
         try {
-            if (EP.recording && EP.recording.renderSegmentList) {
-                EP.recording.renderSegmentList(recorder.segments, recorder.takeGroups || []);
+            if (EP.recording && EP.recording.onSegmentSelectionChanged) {
+                EP.recording.onSegmentSelectionChanged();
+            } else {
+                recorder.generateSimpleMarkers();
+                if (EP.recording && EP.recording.renderSegmentList) {
+                    EP.recording.renderSegmentList(recorder.segments, recorder.takeGroups || []);
+                }
+                if (state) state.markersPlaced = false;
             }
-        } catch(e2) {}
-
-        if (state && state.markersPlaced) {
-            showToast("Ajuste aplicado — vuelve a colocar los marcadores para actualizarlos", "info");
+        } catch(e) {
+        } finally {
+            _applying = false;
         }
     }
 
-    function applyPickup(idx) {
-        if (!_session) return;
-        var p = _session.pickups[idx];
-        if (!p || p.type !== "pickup" || p._applied) return;
-
+    /**
+     * Aplica un pickup: retrocede el OUT de la toma previa. Los snaps de OUT
+     * pendientes de esa misma toma quedan descartados — fueron calculados con
+     * la última palabra vieja y re-aplicarlos desharía el pickup.
+     */
+    function _doApplyPickup(p) {
         var seg = _session.segments[p.prevSegPos];
         seg.outTime = p.proposedOutTime;
         seg.duration = seg.outTime - seg.inTime;
         try {
             seg.lastPhrase = global.EPCutValidator.phraseBefore(recorder.words, seg.outTime, 10);
         } catch(e) {}
-
         p._applied = true;
-        _refreshAfterApply();
-        render();
+
+        for (var i = 0; i < _session.snaps.length; i++) {
+            var sn = _session.snaps[i];
+            if (!sn._applied && !sn._stale && sn.field === "outTime" &&
+                _session.segments[sn.segPos] === seg) {
+                sn._stale = true;
+            }
+        }
     }
 
-    function applySnap(idx) {
-        if (!_session) return;
-        var sn = _session.snaps[idx];
-        if (!sn || sn._applied) return;
-
+    function _doApplySnap(sn) {
         var seg = _session.segments[sn.segPos];
         seg[sn.field] = sn.proposed;
         seg.duration = seg.outTime - seg.inTime;
@@ -125,37 +170,48 @@
                 seg.lastPhrase = global.EPCutValidator.phraseBefore(recorder.words, seg.outTime, 10);
             } catch(e) {}
         }
-
         sn._applied = true;
+    }
+
+    function applyPickup(idx) {
+        if (!_session) return;
+        var p = _session.pickups[idx];
+        if (!p || p.type !== "pickup" || p._applied) return;
+        if (!_staleGuard(_session.segments[p.prevSegPos])) return;
+
+        _doApplyPickup(p);
+        _refreshAfterApply();
+        render();
+    }
+
+    function applySnap(idx) {
+        if (!_session) return;
+        var sn = _session.snaps[idx];
+        if (!sn || sn._applied || sn._stale) return;
+        if (!_staleGuard(_session.segments[sn.segPos])) return;
+
+        _doApplySnap(sn);
         _refreshAfterApply();
         render();
     }
 
     function applyAll() {
         if (!_session) return;
+        if (_session.segments.length > 0 && !_staleGuard(_session.segments[0])) return;
+
         var count = 0;
         var i;
         for (i = 0; i < _session.pickups.length; i++) {
             var p = _session.pickups[i];
             if (p.type === "pickup" && !p._applied) {
-                var seg = _session.segments[p.prevSegPos];
-                seg.outTime = p.proposedOutTime;
-                seg.duration = seg.outTime - seg.inTime;
-                try { seg.lastPhrase = global.EPCutValidator.phraseBefore(recorder.words, seg.outTime, 10); } catch(e) {}
-                p._applied = true;
+                _doApplyPickup(p);
                 count++;
             }
         }
         for (i = 0; i < _session.snaps.length; i++) {
             var sn = _session.snaps[i];
-            if (!sn._applied) {
-                var seg2 = _session.segments[sn.segPos];
-                seg2[sn.field] = sn.proposed;
-                seg2.duration = seg2.outTime - seg2.inTime;
-                if (sn.field === "outTime") {
-                    try { seg2.lastPhrase = global.EPCutValidator.phraseBefore(recorder.words, seg2.outTime, 10); } catch(e) {}
-                }
-                sn._applied = true;
+            if (!sn._applied && !sn._stale) {
+                _doApplySnap(sn);
                 count++;
             }
         }
@@ -220,16 +276,22 @@
             html.push("<div class='validator-group-title'>Ajustes de borde a silencio</div>");
             for (i = 0; i < snaps.length; i++) {
                 var sn = snaps[i];
-                if (!sn._applied) pendingCount++;
+                if (!sn._applied && !sn._stale) pendingCount++;
+                var snAction;
+                if (sn._applied) {
+                    snAction = "<span class='validator-applied-badge'>✓ aplicado</span>";
+                } else if (sn._stale) {
+                    snAction = "<span class='validator-applied-badge'>— descartado (sustituido por el ajuste de repetición)</span>";
+                } else {
+                    snAction = "<button class='btn btn-sm btn-ghost validator-apply-btn' data-kind='snap' data-idx='" + i + "'>Aplicar</button>";
+                }
                 html.push(
-                    "<div class='validator-item" + (sn._applied ? " applied" : "") + "'>" +
+                    "<div class='validator-item" + (sn._applied ? " applied" : "") + (sn._stale ? " applied" : "") + "'>" +
                         "<div class='validator-item-text'>" +
                             "<strong>" + escHtml(segLabel(sn.segPos)) + "</strong> — " + escHtml(sn.reason) + "<br>" +
                             (sn.field === "inTime" ? "IN" : "OUT") + ": " + fmt(sn.original) + " → <strong>" + fmt(sn.proposed) + "</strong>" +
                         "</div>" +
-                        (sn._applied
-                            ? "<span class='validator-applied-badge'>✓ aplicado</span>"
-                            : "<button class='btn btn-sm btn-ghost validator-apply-btn' data-kind='snap' data-idx='" + i + "'>Aplicar</button>") +
+                        snAction +
                     "</div>"
                 );
             }
@@ -301,7 +363,8 @@
     EP.validator = {
         init: _initRefs,
         run: runValidation,
-        applyAll: applyAll
+        applyAll: applyAll,
+        reset: reset
     };
 
 })(window);

@@ -68,13 +68,17 @@
 
     /**
      * Palabras habladas (type "word") dentro de [start, end], con índice original.
+     * Una palabra que cruza el borde cuenta como "dentro" si su punto medio
+     * cae en el rango — así el snap/pickup no trata como externa una palabra
+     * que el corte actual parte por la mitad.
      */
     function wordsInRange(words, start, end) {
         var out = [];
         for (var i = 0; i < words.length; i++) {
             var w = words[i];
             if (w.type && w.type !== "word") continue;
-            if (w.start >= start - 0.01 && w.end <= end + 0.01) {
+            var mid = (w.start + w.end) / 2;
+            if (mid >= start - 0.01 && mid <= end + 0.01) {
                 out.push({ word: w, index: i });
             }
         }
@@ -119,8 +123,12 @@
 
     /**
      * Busca el match contiguo más largo entre la cola de tailTokens y la
-     * cabeza de headTokens, exigiendo que el match empiece dentro de las
-     * primeras maxHeadOffset palabras de la cabeza.
+     * cabeza de headTokens, exigiendo que:
+     *   - el match empiece dentro de las primeras maxHeadOffset palabras de
+     *     la cabeza, y
+     *   - el match termine en las últimas 2 palabras de la cola (anclado al
+     *     final de la toma previa). Sin este anclaje, una muletilla repetida
+     *     a mitad de la cola generaría un pickup que borra contenido único.
      * Devuelve { tailStart, headStart, length } o null.
      * Ante empates de longitud prefiere el match más tardío en la cola
      * (corta lo mínimo necesario de la toma previa).
@@ -128,15 +136,15 @@
     function findOverlap(tailTokens, headTokens, opts) {
         var best = null;
         for (var i = 0; i < tailTokens.length; i++) {
-            for (var j = 0; j < headTokens.length && j <= opts.maxHeadOffset; j++) {
+            for (var j = 0; j < headTokens.length && j < opts.maxHeadOffset; j++) {
                 var len = 0;
                 while (i + len < tailTokens.length &&
                        j + len < headTokens.length &&
-                       tailTokens[i + len] !== "" &&
                        tailTokens[i + len] === headTokens[j + len]) {
                     len++;
                 }
                 if (len === 0) continue;
+                if (i + len < tailTokens.length - 2) continue; // no anclado al final de la cola
                 if (!best || len > best.length || (len === best.length && i > best.tailStart)) {
                     best = { tailStart: i, headStart: j, length: len };
                 }
@@ -158,14 +166,24 @@
             var nextWords = wordsInRange(words, next.inTime, next.outTime);
             if (prevWords.length === 0 || nextWords.length === 0) continue;
 
-            var tail = prevWords.slice(-opts.tailWords);
-            var head = nextWords.slice(0, opts.headWords);
-
+            // Tokens de puntuación pura (p.ej. "—", "...") se descartan antes
+            // del match para no romper la contigüidad de frases legítimas.
+            var tail = [];
+            var head = [];
             var tailTokens = [];
             var headTokens = [];
-            var i;
-            for (i = 0; i < tail.length; i++) tailTokens.push(normToken(tail[i].word.text));
-            for (i = 0; i < head.length; i++) headTokens.push(normToken(head[i].word.text));
+            var i, tk;
+            var tailRaw = prevWords.slice(-opts.tailWords);
+            var headRaw = nextWords.slice(0, opts.headWords);
+            for (i = 0; i < tailRaw.length; i++) {
+                tk = normToken(tailRaw[i].word.text);
+                if (tk !== "") { tail.push(tailRaw[i]); tailTokens.push(tk); }
+            }
+            for (i = 0; i < headRaw.length; i++) {
+                tk = normToken(headRaw[i].word.text);
+                if (tk !== "") { head.push(headRaw[i]); headTokens.push(tk); }
+            }
+            if (tail.length === 0 || head.length === 0) continue;
 
             var match = findOverlap(tailTokens, headTokens, opts);
             if (!match || match.length < opts.minMatchWords) continue;
@@ -191,7 +209,12 @@
                 }
             }
 
-            var proposedOutTime = Math.max(boundWordEnd + 0.05, matchFirstWord.start - 0.15);
+            // OUT propuesto: dentro del gap de silencio previo a la frase
+            // repetida, nunca por encima del inicio de su primera palabra
+            // (cortaría dentro de la palabra) ni por debajo del final de la
+            // palabra anterior.
+            var gapLen = Math.max(0, matchFirstWord.start - boundWordEnd);
+            var proposedOutTime = matchFirstWord.start - Math.min(0.15, gapLen / 2);
             if (proposedOutTime >= prev.outTime) continue; // no gana nada
 
             // No dejar la toma previa prácticamente vacía
@@ -207,10 +230,10 @@
                 continue;
             }
 
-            // Confianza: match anclado al final de la cola y al inicio de la cabeza = alta
-            var tailEndsAtBoundary = (match.tailStart + match.length) >= tail.length - 2;
+            // El match siempre viene anclado al final de la cola (findOverlap);
+            // confianza alta si además arranca al inicio de la cabeza y es largo
             var headStartsAtBoundary = match.headStart <= 2;
-            var confidence = (tailEndsAtBoundary && headStartsAtBoundary && match.length >= 4) ? "alta" : "media";
+            var confidence = (headStartsAtBoundary && match.length >= 4) ? "alta" : "media";
 
             proposals.push({
                 type: "pickup",

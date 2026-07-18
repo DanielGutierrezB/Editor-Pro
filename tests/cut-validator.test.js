@@ -75,11 +75,13 @@ function run() {
         assert(p.matchText.toLowerCase().indexOf("resultado") !== -1, "el texto duplicado incluye la frase");
 
         // El OUT propuesto debe retroceder al inicio de "el" (índice 11 de w1),
-        // acotado por el final de la palabra anterior ("lineal") + 0.05
+        // dentro del gap de silencio previo, sin pasar del inicio de la palabra
         const matchStart = w1[11].start;
-        const bound = w1[10].end + 0.05;
-        const expectedOut = Math.max(bound, matchStart - 0.15);
+        const bound = w1[10].end;
+        const gapLen = Math.max(0, matchStart - bound);
+        const expectedOut = matchStart - Math.min(0.15, gapLen / 2);
         assert(p.proposedOutTime < p.originalOutTime, "el OUT retrocede");
+        assert(p.proposedOutTime <= matchStart + 1e-9, "el OUT no invade la primera palabra repetida");
         assertClose(p.proposedOutTime, expectedOut, 0.01, "OUT propuesto al inicio de la frase repetida");
         assertEq(p.confidence, "alta", "confianza alta (match anclado a ambos bordes)");
     }
@@ -137,6 +139,69 @@ function run() {
         const proposals = validator.detectPickups(words, segments);
         assertEq(proposals.length, 1, "genera una propuesta");
         assertEq(proposals[0].type, "pickup-warning", "es warning de re-toma, no ajuste de OUT");
+    }
+
+    section("detectPickups() — frase común a mitad de la cola → NO propone (match no anclado)");
+    {
+        // "vamos a ver el tema" aparece a mitad de la toma 1 y al inicio de la
+        // toma 2, pero la toma 1 sigue con contenido único después. Un pickup
+        // aquí borraría ese contenido único.
+        const w1 = mkWords("empecemos entonces vamos a ver el tema de hoy con este contenido unico muy importante que no se repite", 5);
+        const w2 = mkWords("vamos a ver el tema de derivadas que es distinto", lastEnd(w1) + 4);
+        const words = w1.concat(w2);
+        const segments = [
+            { inTime: w1[0].start - 0.3, outTime: lastEnd(w1) + 0.3 },
+            { inTime: w2[0].start - 0.3, outTime: lastEnd(w2) + 0.3 }
+        ];
+        const proposals = validator.detectPickups(words, segments);
+        assertEq(proposals.length, 0, "sin propuesta cuando el match no llega al final de la toma previa");
+    }
+
+    section("detectPickups() — habla continua: el OUT no invade la palabra repetida");
+    {
+        // Sin gap entre palabras (gap=0): el OUT propuesto debe quedar <= inicio
+        // de la primera palabra repetida (no cortar dentro de ella)
+        const w1 = mkWords("introduccion al tema principal la formula general de segundo grado", 5, 0.3, 0);
+        const w2 = mkWords("la formula general de segundo grado se aplica directamente aqui", lastEnd(w1) + 4);
+        const words = w1.concat(w2);
+        const segments = [
+            { inTime: w1[0].start - 0.3, outTime: lastEnd(w1) + 0.3 },
+            { inTime: w2[0].start - 0.3, outTime: lastEnd(w2) + 0.3 }
+        ];
+        const proposals = validator.detectPickups(words, segments);
+        assertEq(proposals.length, 1, "detecta el pickup");
+        const matchStart = w1[4].start; // "la"
+        assert(proposals[0].proposedOutTime <= matchStart + 1e-9,
+            "OUT propuesto (" + proposals[0].proposedOutTime + ") no pasa del inicio de la palabra (" + matchStart + ")");
+    }
+
+    section("detectPickups() — tokens de puntuación pura no rompen el match");
+    {
+        // El STT emite "—" como palabra entre frases: no debe fragmentar el match
+        const w1 = mkWords("cerramos con la conclusion del ejercicio completo", 5);
+        w1.splice(2, 0, { text: "—", start: w1[1].end, end: w1[1].end + 0.05, type: "word" });
+        const w2 = mkWords("la conclusion del ejercicio completo nos lleva al siguiente paso", lastEnd(w1) + 4);
+        const words = w1.concat(w2);
+        const segments = [
+            { inTime: w1[0].start - 0.3, outTime: lastEnd(w1) + 0.3 },
+            { inTime: w2[0].start - 0.3, outTime: lastEnd(w2) + 0.3 }
+        ];
+        const proposals = validator.detectPickups(words, segments);
+        assertEq(proposals.length, 1, "match a pesar del token de puntuación");
+        assert(proposals[0].matchWordCount >= 5, "match completo de la frase");
+    }
+
+    section("snapBoundaries() — palabra cortada por el OUT cuenta como interna");
+    {
+        // La última palabra cruza el OUT (empieza dentro, termina fuera):
+        // el snap debe proponer OUT DESPUÉS de esa palabra, no antes
+        const content = mkWords("esta toma termina con una palabra cortada", 10);
+        const lastW = content[content.length - 1];
+        const seg = { inTime: content[0].start - 0.3, outTime: (lastW.start + lastW.end) / 2 + 0.05 };
+        const proposals = validator.snapBoundaries(content, [seg]);
+        const outProp = proposals.find(p => p.field === "outTime");
+        assert(!!outProp, "propone ajuste de OUT");
+        assert(outProp.proposed > lastW.end, "el OUT propuesto queda después de la palabra cortada");
     }
 
     section("snapBoundaries() — ajusta bordes con gap grande");

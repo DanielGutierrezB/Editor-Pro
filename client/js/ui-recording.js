@@ -726,6 +726,7 @@
 
         var detection = recorder.detectSegments();
         state.detectionResult = detection;
+        if (EP.validator && EP.validator.reset) EP.validator.reset();
         if (window.EPLogger) EPLogger.log("recording", "segments-detected", detection.segments.length + " segments, " + detection.inPoints.length + " IN, " + detection.outPoints.length + " OUT");
 
         renderRecordingTranscriptPreview(result.words, detection);
@@ -1081,6 +1082,8 @@
         updateMarkersActiveCount();
         state.markersPlaced = false;
         hideElement("rec-cut-section");
+        // Las propuestas del validador quedan obsoletas al cambiar las tomas
+        if (EP.validator && EP.validator.reset) EP.validator.reset();
         var ac = getActiveSegmentCount();
         setRecStepHint(3, ac + " activas / " + (recorder.segments || []).length + " tomas");
     }
@@ -2518,6 +2521,7 @@
         startViewClassification: startViewClassification,
         applyViewClassification: applyViewClassification,
         renderSegmentList: renderSegmentList,
+        onSegmentSelectionChanged: onSegmentSelectionChanged,
         handleAudioFileSelect: handleAudioFileSelect,
         loadAudioFile: loadAudioFile,
         clearAudio: clearAudio,
