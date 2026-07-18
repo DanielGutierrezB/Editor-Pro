@@ -539,117 +539,6 @@
         };
     }
 
-    // ─── Batch: una sola llamada para todos los bloques ──────
-
-    /**
-     * Prompt único con TODOS los bloques a revisar. `blockIdxs` es la lista de
-     * índices de pares que se van a validar (los limpios ya se filtraron).
-     * Devuelve { systemMsg, prompt }. El modelo responde
-     * {"blocks":[{"block":N,"in":{...},"out":{...}}, ...]}.
-     */
-    function buildBatchPrompt(pairs, words, blockIdxs, opts) {
-        opts = mergeOpts(opts);
-        var n = Math.min(40, opts.contextWords); // contexto más corto por bloque
-        var parts = [];
-        for (var b = 0; b < blockIdxs.length; b++) {
-            var idx = blockIdxs[b];
-            var pair = pairs[idx];
-            var inT = pair.inMarker.startSeconds;
-            var outT = pair.outMarker.startSeconds;
-            var ci = contextForTime(words, inT, n);
-            var co = contextForTime(words, outT, n);
-            parts.push(
-                "== BLOQUE " + (idx + 1) + " == IN=" + inT.toFixed(1) + "s OUT=" + outT.toFixed(1) + "s\n" +
-                "antes-del-IN(se elimina): " + formatContext(ci.before) + "\n" +
-                "inicio-del-bloque(se conserva): " + formatContext(ci.after) + "\n" +
-                "final-del-bloque(se conserva): " + formatContext(co.before) + "\n" +
-                "despues-del-OUT(se elimina): " + formatContext(co.after)
-            );
-        }
-        return {
-            systemMsg: SYSTEM_MSG,
-            prompt: "Valida los marcadores IN/OUT de estos bloques de una clase. Cada bloque conserva lo que queda entre su IN y su OUT.\n" +
-                "Cada palabra va precedida de su tiempo en segundos: (12.3)palabra.\n\n" +
-                parts.join("\n\n") + "\n\n" +
-                "Para CADA bloque decide:\n" +
-                "- IN: dónde ARRANCA la primera frase con sentido. Si empieza con conteo (\"3,2,1\"), cue (\"listo\",\"grabando\",\"acción\") " +
-                "o frase a medias, MUEVE el IN a la primera palabra de la frase real.\n" +
-                "- OUT: justo DESPUÉS de la última frase completa. Si corta una frase por la mitad, muévelo al final de la frase.\n" +
-                "Usa el tiempo (segundos) de la palabra. Si el borde ya está bien, action \"keep\".\n" +
-                "Responde ÚNICAMENTE este JSON:\n" +
-                '{"blocks":[{"block":<N>,"in":{"action":"keep"|"move","time":<seg>,"reason":"<breve>"},' +
-                '"out":{"action":"keep"|"move","time":<seg>,"reason":"<breve>"}}]}'
-        };
-    }
-
-    /**
-     * Procesa la respuesta batch. Devuelve { proposals, debug }.
-     * Reutiliza resolveUnitResponse por bloque (clamp, descartes, etc.).
-     */
-    function resolveBatchResponse(response, pairs, words, opts) {
-        opts = opts || {};
-        var out = { proposals: [], debug: [] };
-        if (!response || response.error) { out.debug.push("sin respuesta"); return out; }
-        var blocks = response.blocks;
-        if (!blocks || !blocks.length) {
-            // Algunos modelos devuelven el array directo o con otra clave
-            if (Array.isArray(response)) blocks = response;
-            else { out.debug.push("respuesta sin 'blocks'"); return out; }
-        }
-        for (var i = 0; i < blocks.length; i++) {
-            var entry = blocks[i];
-            if (!entry) continue;
-            var num = parseInt(entry.block, 10);
-            var pairIdx = isNaN(num) ? i : (num - 1);
-            if (pairIdx < 0 || pairIdx >= pairs.length) continue;
-            var dbg = [];
-            var props = resolveUnitResponse(
-                { type: "block", pairIdx: pairIdx },
-                { "in": entry["in"], out: entry.out },
-                pairs, words, { _debug: dbg }
-            );
-            for (var j = 0; j < props.length; j++) out.proposals.push(props[j]);
-            out.debug.push("B" + (pairIdx + 1) + ": " + dbg.join(", "));
-        }
-        return out;
-    }
-
-    /**
-     * Selecciona qué bloques necesitan revisión del LLM y cuáles ya están
-     * limpios (ambos bordes en silencio, sin conteo, sin frontera a mitad de
-     * palabra). Devuelve { review: [idx...], clean: [idx...] }.
-     * Requiere EPCutValidator opcional para el chequeo de mid-word/márgenes.
-     */
-    function selectBlocksToReview(pairs, words, validator, opts) {
-        opts = mergeOpts(opts);
-        var review = [];
-        var clean = [];
-        var leadIns = {};
-        try {
-            var lis = detectLeadIns(words, pairs, opts);
-            for (var l = 0; l < lis.length; l++) leadIns[lis[l].pairIdx] = true;
-        } catch(e) {}
-
-        var report = null;
-        if (validator && validator.validateBoundaries) {
-            try {
-                var segs = pairs.map(function(p) {
-                    return { inTime: p.inMarker.startSeconds, outTime: p.outMarker.startSeconds };
-                });
-                report = validator.validateBoundaries(words, segs);
-            } catch(e2) {}
-        }
-
-        for (var i = 0; i < pairs.length; i++) {
-            var needs = false;
-            if (leadIns[i]) needs = true;              // conteo al inicio
-            if (report && report[i] && report[i].status !== "ok") needs = true; // mid-word / margen justo
-            if (!report) needs = true;                 // sin validador: revisar por seguridad
-            if (needs) review.push(i); else clean.push(i);
-        }
-        return { review: review, clean: clean };
-    }
-
     // ─── Resolución de respuestas del LLM ────────────────────
 
     function _num(v) {
@@ -845,9 +734,6 @@
         parsePairs: parsePairs,
         buildBoundaryUnits: buildBoundaryUnits,
         buildBlockUnits: buildBlockUnits,
-        buildBatchPrompt: buildBatchPrompt,
-        resolveBatchResponse: resolveBatchResponse,
-        selectBlocksToReview: selectBlocksToReview,
         resolveOverlaps: resolveOverlaps,
         computeAudioWindows: computeAudioWindows,
         windowsCoverPairs: windowsCoverPairs,

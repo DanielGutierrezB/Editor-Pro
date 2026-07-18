@@ -526,77 +526,36 @@
             proposals.sort(function(a, b) { return a.originalTime - b.originalTime; });
         }
 
-        // Filtrar fronteras claramente limpias (Fase 3): solo se consulta al
-        // LLM por los bloques dudosos. Los pickups/conteos van deterministas.
-        var sel = { review: null, clean: [] };
-        try { sel = MR.selectBlocksToReview(session.pairs, session.words, global.EPCutValidator); } catch(e) {}
-        var reviewIdxs = sel.review || units.map(function(u) { return u.pairIdx; });
-        if (sel.clean && sel.clean.length) {
-            log(session, "Fronteras ya limpias (sin LLM): bloques " + sel.clean.map(function(i){return i+1;}).join(", "));
-        }
-
-        // Bucle por-bloque (fallback si el batch falla)
-        function runPerBlock(idxs, done) {
-            var j = 0;
-            function step() {
-                if (mrState.cancelled) return done("Revisión cancelada.");
-                if (j >= idxs.length) return done(null);
-                var pairIdx = idxs[j];
-                var unit = { type: "block", pairIdx: pairIdx, hints: hints["t" + pairIdx] || "" };
-                var label = "bloque " + (pairIdx + 1);
-                onProgress(Math.round((j / idxs.length) * 100), "Validando " + label + " (" + (j + 1) + "/" + idxs.length + ")...");
-                var built = MR.buildUnitPrompt(unit, session.pairs, session.words);
-                var callStart = Date.now();
-                aiAnalyzer._send(built.systemMsg, built.prompt, function(response) {
-                    if (mrState.cancelled) return;
-                    var secs = ((Date.now() - callStart) / 1000).toFixed(1);
-                    if (response && response.error) {
-                        errors.push(response.error);
-                        log(session, "LLM error en " + label + " (" + secs + "s): " + response.error);
-                    } else {
-                        var debug = [];
-                        var props = MR.resolveUnitResponse(unit, response, session.pairs, session.words, { _debug: debug });
-                        dedupePush(props, label);
-                        log(session, label + " (" + secs + "s): " + props.length + " ajuste(s) · " + debug.join(" | "));
-                    }
-                    j++;
-                    step();
-                }, null, { numPredict: 1500, think: false });
+        function next() {
+            if (mrState.cancelled) return callback("Revisión cancelada.", proposals);
+            if (idx >= units.length) {
+                finalizeProposals();
+                return callback(errors.length === units.length && units.length > 0 ? "El LLM no respondió a ninguna consulta: " + errors[0] : null, proposals);
             }
-            step();
-        }
+            var unit = units[idx];
+            unit.hints = hints["t" + unit.pairIdx] || "";
+            var label = "bloque " + (unit.pairIdx + 1);
+            onProgress(Math.round((idx / units.length) * 100), "Validando " + label + " (" + (idx + 1) + "/" + units.length + ")...");
 
-        function finishAll() {
-            finalizeProposals();
-            callback(errors.length && errors.length >= reviewIdxs.length && reviewIdxs.length > 0
-                ? "El LLM no respondió a ninguna consulta: " + errors[0] : null, proposals);
+            var built = MR.buildUnitPrompt(unit, session.pairs, session.words);
+            var callStart = Date.now();
+            aiAnalyzer._send(built.systemMsg, built.prompt, function(response) {
+                if (mrState.cancelled) return; // abortado: no continuar el bucle
+                var secs = ((Date.now() - callStart) / 1000).toFixed(1);
+                if (response && response.error) {
+                    errors.push(response.error);
+                    log(session, "LLM error en " + label + " (" + secs + "s): " + response.error);
+                } else {
+                    var debug = [];
+                    var props = MR.resolveUnitResponse(unit, response, session.pairs, session.words, { _debug: debug });
+                    dedupePush(props, label);
+                    log(session, label + " (" + secs + "s): " + props.length + " ajuste(s) · decisión LLM → " + debug.join(" | "));
+                }
+                idx++;
+                next();
+            }, null, { numPredict: 1500, think: false });
         }
-
-        if (reviewIdxs.length === 0) {
-            // Nada dudoso: solo ajustes determinísticos (pickups/conteos)
-            log(session, "Sin bloques dudosos — solo revisión determinística");
-            finishAll();
-            return;
-        }
-
-        // Batch: UNA sola llamada para todos los bloques dudosos
-        onProgress(5, "Validando " + reviewIdxs.length + " bloque(s) en una consulta...");
-        var built = MR.buildBatchPrompt(session.pairs, session.words, reviewIdxs);
-        var callStart = Date.now();
-        aiAnalyzer._send(built.systemMsg, built.prompt, function(response) {
-            if (mrState.cancelled) return;
-            var secs = ((Date.now() - callStart) / 1000).toFixed(1);
-            var res = MR.resolveBatchResponse(response, session.pairs, session.words);
-            if ((response && response.error) || res.proposals.length === 0 && (!response || !response.blocks)) {
-                // Fallback: consultar bloque por bloque
-                log(session, "Batch falló (" + secs + "s: " + ((response && response.error) || "sin 'blocks'") + ") → fallback por bloque");
-                runPerBlock(reviewIdxs, function() { finishAll(); });
-                return;
-            }
-            dedupePush(res.proposals, "batch");
-            log(session, "Batch OK (" + secs + "s): " + res.proposals.length + " ajuste(s) · " + res.debug.join(" · "));
-            finishAll();
-        }, null, { numPredict: Math.min(4096, 500 + reviewIdxs.length * 250), think: false });
+        next();
     }
 
     // ─── Flujo principal ─────────────────────────────────────
