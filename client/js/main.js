@@ -84,6 +84,7 @@
         if (window.EditorProUI && window.EditorProUI.supertexts && window.EditorProUI.supertexts.init) window.EditorProUI.supertexts.init();
         if (window.EditorProUI && window.EditorProUI.editSuggestions && window.EditorProUI.editSuggestions.init) window.EditorProUI.editSuggestions.init();
         if (window.EditorProUI && window.EditorProUI.recording && window.EditorProUI.recording.init) window.EditorProUI.recording.init();
+        if (window.EditorProUI && window.EditorProUI.validator && window.EditorProUI.validator.init) window.EditorProUI.validator.init();
 
         loadSavedSettings();
         loadCustomDictionary();
@@ -303,6 +304,12 @@
         on("btn-analyze-takes", "click", startTakeAnalysis);
 
         on("btn-add-supplement-markers", "click", addSupplementaryMarkers);
+        on("btn-validate-cuts", "click", function() {
+            if (window.EditorProUI && window.EditorProUI.validator) window.EditorProUI.validator.run();
+        });
+        on("btn-validator-apply-all", "click", function() {
+            if (window.EditorProUI && window.EditorProUI.validator) window.EditorProUI.validator.applyAll();
+        });
         on("btn-place-markers", "click", placeRecordingMarkers);
         on("btn-export-markers", "click", exportRecordingMarkers);
         on("btn-rec-cut", "click", executeRecCuts);
