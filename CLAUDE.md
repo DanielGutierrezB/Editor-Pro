@@ -35,25 +35,33 @@ Editor-Pro/
 │       ├── transcript-cache.js  # Pre-cache de transcripts por secuencia
 │       ├── transcript-manager.js # Carga, búsqueda, y UI de transcripts
 │       ├── cutter.js        # Cortes automáticos por marcadores
+│       ├── xml-cut-engine.js # Motor de cortes por reconstrucción FCPXML (puro, testeable en Node)
+│       ├── cut-validator.js # Validador de cortes: pickups, snapping, reporte (puro, testeable en Node)
+│       ├── cutter2.js       # Cortes Automáticos 2 — cortes vía export/edición/reimport XML
 │       ├── updater.js       # Auto-updater vía GitHub API (branch workspace-daniel)
 │       ├── main.js          # Orquestador delgado: init, bindings, proxies
 │       ├── ui-spellcheck.js # UI de SpellCheck
 │       ├── ui-supertexts.js # UI de Smart Supertexts + MOGRT
 │       ├── ui-edit-suggestions.js # UI de Sugerencias de Edición
-│       └── ui-recording.js  # UI de Notas de Grabación + STT + Vistas
+│       ├── ui-recording.js  # UI de Notas de Grabación + STT + Vistas
+│       └── ui-validator.js  # UI del Validador de cortes (paso 5 de Notas de Grabación)
 ├── host/                    # ExtendScript — API de Premiere Pro (ES3)
 │   ├── index.jsx            # Entry point (#include de módulos)
 │   ├── common.jsx           # Helpers comunes, polyfills, JSON
 │   ├── cutter.jsx           # Cortes, marcadores, backup/restore
+│   ├── cutter2.jsx          # CA2: export/import de secuencia vía FCPXML
 │   ├── spellcheck.jsx       # Exportación XML para spellcheck
 │   ├── supertexts.jsx       # MOGRT insertion, Smart Supertexts
 │   └── recording.jsx        # Audio export, backup+cut, marcadores, vistas
+├── tests/                   # Tests Node de módulos puros: `npm test`
+│   ├── run-node-tests.js    # Runner (xml-cut-engine + cut-validator)
+│   └── fixtures/            # Fixtures xmeml (simple y con anidaciones)
 ├── Prompts/                 # Plantillas de prompts (.md) por herramienta
 ├── mogrts/                  # MOGRTs por defecto incluidos con Editor-Pro
 ├── CSXS/
 │   └── manifest.xml         # Manifiesto CEP: com.codigo.editorpro
 ├── whisper/                 # whisper.cpp: scripts de instalación + modelos .bin
-├── VERSION                  # Versión actual (2.0.2)
+├── VERSION                  # Versión actual (2.1.0)
 ├── dist/                    # ZXP empaquetado
 ├── build-zxp.sh             # Firma y empaqueta ZXP
 └── install.sh               # Symlink para desarrollo + habilita debug mode
@@ -172,12 +180,46 @@ SpellCheck con Hunspell (typo-js) + reglas contextuales para español.
 
 | # | ID data-tool | Título | Función |
 |---|-------------|--------|---------|
-| 0 | `cutter` | Cortes Automáticos | Marcadores → IN/OUT → preview → cortar |
+| 0 | `cutter` | Cortes Automáticos | Marcadores → IN/OUT → preview → cortar (QE extract in-place) |
+| 0b | `cutter2` | Cortes Automáticos 2 | Mismos marcadores → cortes por reconstrucción FCPXML → secuencia nueva (original intacta) |
 | 1 | `transcript` | Transcripción | Cargar/exportar audio, transcribir, importar SRT/JSON |
 | 2 | `spellcheck` | SpellCheck IA | Analizar clips de texto (Essential Graphics) |
 | 3 | `supertexts2` | Smart Supertexts | Supertextos como gráficos MOGRT en timeline |
 | 4 | `editsuggestions2` | Sugerencias de Edición | Analizar transcripción → cortes/highlights/errores |
-| 5 | `recording` | Notas de Grabación | STT → IN/OUT → tomas → marcadores → cortar → vistas |
+| 5 | `recording` | Notas de Grabación | STT → IN/OUT → tomas → validación → marcadores → cortar → vistas |
+
+## Cortes Automáticos 2 (CA2) — cortes por reconstrucción FCPXML
+
+Alternativa al Cutter clásico: en vez de QE extract con sleeps por zona, reconstruye la secuencia vía XML en segundos. **La secuencia original nunca se modifica.**
+
+### Flujo
+1. `cutter2.js` lee marcadores (misma convención IN/OUT que el Cutter, mismo skip de claqueta vía `editorpro_skip_clapperboard`)
+2. `ca2ExportSequenceXML()` (JSX) exporta la secuencia activa con `exportAsFinalCutProXML()`
+3. `EPXmlCutEngine.applyCuts()` edita el xmeml en el panel: elimina zonas con ripple en todas las pistas, procesando de fin a inicio
+4. `ca2ImportSequenceXML()` (JSX) importa el XML editado a un bin `CA2 - <fecha>` y abre la secuencia nueva `<nombre> - CA2 <hora>`
+
+### xml-cut-engine.js (módulo puro, testeable en Node)
+- `inspect(xml)` — fps/timebase/ntsc, conteo de clips, detección de **anidaciones** (clipitem con `<sequence>` embebida) y **time remaps** activos
+- `applyCuts(xml, zones, opts)` — por zona: clips dentro → eliminados; solapados → trim (ajustando `in`/`out` y `pproTicksIn/Out`); que abarcan → split (clon con id `-ca2sN`, sin `<link>`, definiciones `file`/`sequence`/`multiclip` colapsadas a referencia por id); posteriores → shift. Transiciones sobre un corte se eliminan materializando los bordes `-1` de sus vecinos al centro. Marcadores de secuencia se eliminan/desplazan. `<duration>` recalculada
+- `normalizeZones(zones, duration)` — guardas de sanidad: zonas invertidas (error), solapadas (merge+warning), fuera de rango (clamp/descarte), >90% de la secuencia (requiere confirmación), 100% (error)
+- **Política de redondeo a frames**: inicio de zona hacia arriba, fin hacia abajo — ante ambigüedad se conserva un frame, nunca se pierde contenido
+- **Clips con time remapping**: si un borde de corte cae sobre uno, la ejecución falla con error claro (la aritmética lineal de frames no aplica). Eliminarlos completos sí es válido
+
+### Comportamiento con anidaciones (importante)
+- El interior de los nests nunca se toca; solo se recortan sus puntos in/out en la timeline exterior
+- Al reimportar, Premiere crea **copias** de las secuencias anidadas en el bin CA2 (las originales quedan intactas, pero la secuencia cortada referencia las copias). CA2 lo detecta en el preview y avisa antes de ejecutar
+
+## Validador de cortes (cut-validator.js + ui-validator.js)
+
+Módulo puro NLE-agnóstico que opera sobre `words[]` del STT + segmentos de Notas de Grabación. UI en el paso 5 (antes de colocar marcadores): botón "Validar cortes", propuestas con aceptar/rechazar individual y "Aplicar todos". Los ajustes aceptados modifican `seg.inTime/outTime` (y recalculan `lastPhrase`) antes de `generateSimpleMarkers()`.
+
+- `detectPickups(words, segments)` — detecta cuando una toma re-entra repitiendo la frase final de la anterior (pickup): match contiguo de tokens normalizados (sin acentos/puntuación, mínimo 3 palabras / 12 chars) entre la cola de la toma N y la cabeza de la N+1. Propone retroceder el OUT de N al inicio de la frase repetida para que la frase completa quede en la toma nueva. Si la repetición cubre casi toda la toma previa → warning de re-toma en vez de ajuste
+- `snapBoundaries(words, segments)` — propone IN/OUT en los gaps reales de silencio entre palabras (reemplaza los PRE_ROLL/POST_ROLL fijos), sin invadir la palabra trigger
+- `validateBoundaries(words, segments)` — reporte por toma: fronteras a mitad de palabra, márgenes justos, contexto de frases antes/después de cada IN/OUT
+
+## Tests (`npm test`)
+
+`tests/run-node-tests.js` corre en Node las suites de `xml-cut-engine` (fixtures xmeml en `tests/fixtures/`: simple con transición/links/markers, y con anidaciones + time remap) y `cut-validator` (transcripts sintéticos). Los módulos puros exponen `module.exports` además de `window.*`; los tests usan `@xmldom/xmldom` como DOMParser (devDependency).
 
 ## Workflow: Notas de Grabación (7 pasos)
 
@@ -185,7 +227,7 @@ SpellCheck con Hunspell (typo-js) + reglas contextuales para español.
 2. **Transcripción** — Transcribir con ElevenLabs/Whisper. Produce `{words[], text, language}`
 3. **Detección de tomas** — `detectSegments()` identifica IN/OUT, filtra, agrupa retomas. Toggle manual por toma
 4. **Revisión con IA** — Compara tomas activas vs inactivas (contenido único faltante) y busca "tomas ocultas" en el transcript fuera de las tomas detectadas
-5. **Colocar marcadores** — Genera y coloca marcadores `[RN]` IN/OUT en la secuencia. Incluye marcadores IA aceptados (color 6 azul). Re-colocar limpia los anteriores
+5. **Colocar marcadores** — Antes de colocar: **Validador de cortes** (opcional, botón "Validar cortes") detecta pickups (frases repetidas entre tomas) y ajusta IN/OUT a silencios reales. Luego genera y coloca marcadores `[RN]` IN/OUT en la secuencia. Incluye marcadores IA aceptados (color 6 azul). Re-colocar limpia los anteriores
 6. **Cortar secuencia** — Backup + extract de zonas no activas. Restore disponible
 7. **Vistas** — Clasifica cada toma como CAM/PC usando Ollama con modelo de visión. Requiere FFmpeg para extraer 3 frames por toma. Etiqueta marcadores con `[CAM]`/`[PC]` y genera preset de vista para Cortes Automáticos
 
@@ -256,6 +298,8 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 | `getActiveSequenceInfo()` | Info de secuencia activa |
 | `getSequenceMarkers()` | Leer marcadores para Cutter |
 | `executeCuts(filePath)` | Ejecutar cortes desde JSON (In/Out + Extract, con fallbacks) |
+| `ca2ExportSequenceXML(outPath)` | CA2: exportar secuencia activa a FCPXML (solo lectura) |
+| `ca2ImportSequenceXML(xmlPath, binName, expectedName)` | CA2: importar XML editado a bin dedicado, detectar secuencia nueva y abrirla |
 | `addMarkersFromFile(path, seqId)` | Colocar marcadores (por ID o secuencia activa) |
 | `clearMarkersByPrefix(prefix, seqId)` | Limpiar marcadores por prefijo |
 | `exportSequenceAudio()` | Exportar audio WAV de la secuencia |
@@ -333,12 +377,12 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 El header tiene 3 botones (además del dropdown de secuencia activa):
 
 1. **Log** (icono de descarga) — descarga el log de la sesión a la carpeta de Descargas.
-2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.0.2`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.0.1 → v2.0.2`).
+2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.1.0`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.0.2 → v2.1.0`).
 3. **Ajustes** — abre el panel de configuración (proveedor STT, proveedor de IA, API keys, modelo).
 
 > Nota histórica: los botones de debug de MOGRT (🔍/🔬) fueron removidos.
 
 ## Versión y auto-actualización
 
-- La versión vive en el archivo `VERSION` (actual: **2.0.2**) y en `CSXS/manifest.xml`.
+- La versión vive en el archivo `VERSION` (actual: **2.1.0**) y en `CSXS/manifest.xml`.
 - `updater.js` implementa un auto-updater basado en la GitHub API (no requiere git instalado) que descarga desde la rama **`workspace-daniel`**.
