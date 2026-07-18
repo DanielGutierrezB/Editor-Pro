@@ -137,6 +137,10 @@
             <div class="tool-card-body hidden" id="mrv-body">
                 <p class="tool-description">Antes de cortar: transcribe la secuencia, valida cada marcador IN/OUT contra el transcript con la IA configurada y mueve los marcadores a donde la frase tiene sentido. Detecta frases repetidas entre bloques (retomas) y corrige el OUT anterior. Al final construye el transcript de la clase como quedaría cortada.</p>
 
+                <label class="cutter-option" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);margin-bottom:6px;cursor:pointer;">
+                    <input type="checkbox" id="mrv-windowed" checked> Transcribir solo alrededor de los cortes (más rápido)
+                </label>
+
                 <div class="btn-row">
                     <button id="btn-mrv-review-active" class="btn-analyze">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
