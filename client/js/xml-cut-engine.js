@@ -85,10 +85,31 @@
 
     function parseDoc(xmlString, opts) {
         var p = getParsers(opts);
-        var doc = p.parser.parseFromString(xmlString, "text/xml");
-        var root = doc.documentElement;
+        // Quitar BOM y bytes basura antes de la declaración <?xml — el
+        // DOMParser de Chromium es estricto y falla si hay cualquier cosa
+        // antes de la declaración (Premiere exporta con BOM UTF-8).
+        var clean = String(xmlString).replace(/^[\s\uFEFF\u0000]+/, "");
+        var doc;
+        try {
+            doc = p.parser.parseFromString(clean, "text/xml");
+        } catch(eParse) {
+            // @xmldom lanza en errores fatales; el DOMParser del browser no
+            throw new Error("XML inválido: " + eParse.message +
+                " Inicio del archivo: \"" + clean.slice(0, 80) + "\"");
+        }
+        var root = doc ? doc.documentElement : null;
         if (!root || root.nodeName !== "xmeml") {
-            throw new Error("El archivo no es un XML de Final Cut Pro (xmeml).");
+            var rootName = root ? root.nodeName : "(sin raíz)";
+            var detail = "";
+            if (root && (rootName === "parsererror" || rootName === "html")) {
+                // Chromium envuelve los errores de parseo en <parsererror>
+                try {
+                    var errEls = doc.getElementsByTagName("parsererror");
+                    if (errEls.length > 0) detail = " Parser: " + String(errEls[0].textContent || "").slice(0, 160);
+                } catch(_e) {}
+            }
+            throw new Error("El archivo no es un XML de Final Cut Pro (xmeml). Raíz: <" + rootName + ">." + detail +
+                " Inicio del archivo: \"" + clean.slice(0, 80) + "\"");
         }
         var seq = firstChildElement(root, "sequence");
         if (!seq) {
