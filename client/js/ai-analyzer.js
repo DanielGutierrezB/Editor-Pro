@@ -289,9 +289,11 @@
         self._aborted = false;
         opts = opts || {};
         // Desactivar el "thinking" de qwen3/deepseek para respuestas cortas y
-        // rápidas: por prompt (/no_think, compatible con todas las versiones)
+        // rápidas. Qwen espera el switch "/no_think" en el ÚLTIMO mensaje de
+        // usuario (no en el system); en el system no surte efecto y el modelo
+        // gastaría los tokens pensando (respuesta vacía).
         var noThink = opts.think === false;
-        if (noThink && systemMsg) systemMsg = "/no_think\n" + systemMsg;
+        if (noThink && userPrompt) userPrompt = userPrompt + "\n\n/no_think";
         var numPredict = (typeof opts.numPredict === "number" && opts.numPredict > 0) ? opts.numPredict : this.maxTokens;
 
         // Auto-correct provider/model before sending
@@ -700,12 +702,27 @@
                     break;
             }
 
+            // Si el modelo de razonamiento devolvió solo "thinking" y el
+            // contenido quedó vacío, intentar usar ese campo como último recurso
+            if (!content && this.provider === "ollama" && response.message && response.message.thinking) {
+                content = response.message.thinking;
+            }
+
             if (!content) {
-                callback({ error: "Respuesta vacía de " + PROVIDERS[this.provider].name });
+                callback({ error: "Respuesta vacía de " + PROVIDERS[this.provider].name +
+                    ". Si es un modelo de razonamiento (qwen3/deepseek), prueba un modelo de texto simple (p.ej. qwen3:4b) o súbelo de tamaño." });
                 return;
             }
 
-            var cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+            // Quitar bloques de pensamiento que se filtren en el contenido
+            var cleaned = content.replace(/<think>[\s\S]*?<\/think>/gi, "")
+                .replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+            // Aislar el objeto JSON si viene con texto alrededor
+            var firstBrace = cleaned.indexOf("{");
+            var lastBrace = cleaned.lastIndexOf("}");
+            if (firstBrace > 0 && lastBrace > firstBrace) {
+                cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+            }
             var result = JSON.parse(cleaned);
             callback(result);
 
