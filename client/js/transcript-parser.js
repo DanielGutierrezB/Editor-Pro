@@ -256,6 +256,13 @@
 
             if (data.segmentList) return parsePrTranscript(filePath);
 
+            // Formato normalizado propio: {words: [{text,start,end,type}], text, language}
+            // (lo guardan Notas de Grabación y Revisar Marcadores tras transcribir)
+            if (data.words && Array.isArray(data.words) && data.words.length > 0 &&
+                data.words[0] && typeof data.words[0].start === "number" && data.words[0].text !== undefined) {
+                return { words: data.words, text: data.text || "", language: data.language || "es" };
+            }
+
             if (data.segments && Array.isArray(data.segments) && data.segments.length > 0 &&
                 data.segments[0].words && typeof data.segments[0].start === "number") {
                 return parsePremiereTextPanelJson(data);

@@ -1,14 +1,14 @@
 /**
  * Runner de tests Node para los módulos puros de Editor-Pro
- * (motor de cortes XML y validador de cortes).
+ * (validador de cortes y revisor de marcadores).
  *
  * Uso: node tests/run-node-tests.js
  */
 "use strict";
 
 const suites = [
-    { name: "xml-cut-engine", mod: require("./xml-engine.test.js") },
-    { name: "cut-validator", mod: require("./cut-validator.test.js") }
+    { name: "cut-validator", mod: require("./cut-validator.test.js") },
+    { name: "marker-reviewer", mod: require("./marker-reviewer.test.js") }
 ];
 
 let totalPassed = 0;

@@ -85,6 +85,7 @@
         if (window.EditorProUI && window.EditorProUI.editSuggestions && window.EditorProUI.editSuggestions.init) window.EditorProUI.editSuggestions.init();
         if (window.EditorProUI && window.EditorProUI.recording && window.EditorProUI.recording.init) window.EditorProUI.recording.init();
         if (window.EditorProUI && window.EditorProUI.validator && window.EditorProUI.validator.init) window.EditorProUI.validator.init();
+        if (window.EditorProUI && window.EditorProUI.markerReviewer && window.EditorProUI.markerReviewer.init) window.EditorProUI.markerReviewer.init();
 
         loadSavedSettings();
         loadCustomDictionary();
@@ -275,6 +276,28 @@
         });
         on("btn-save-stt-key", "click", saveSTTKey);
         on("btn-whisper-refresh", "click", refreshWhisperLocalStatus);
+        on("btn-whisper-pick-model", "click", function() {
+            var input = document.getElementById("whisper-model-file");
+            if (input) input.click();
+        });
+        on("btn-whisper-pick-binary", "click", function() {
+            var input = document.getElementById("whisper-binary-file");
+            if (input) input.click();
+        });
+        on("btn-whisper-clear-manual", "click", function() {
+            var rec = window.EditorProUI && window.EditorProUI.recording;
+            if (rec && rec.clearWhisperManualPaths) rec.clearWhisperManualPaths();
+        });
+        var whisperModelInput = document.getElementById("whisper-model-file");
+        if (whisperModelInput) whisperModelInput.addEventListener("change", function(evt) {
+            var rec = window.EditorProUI && window.EditorProUI.recording;
+            if (rec && rec.handleWhisperModelPick) rec.handleWhisperModelPick(evt);
+        });
+        var whisperBinaryInput = document.getElementById("whisper-binary-file");
+        if (whisperBinaryInput) whisperBinaryInput.addEventListener("change", function(evt) {
+            var rec = window.EditorProUI && window.EditorProUI.recording;
+            if (rec && rec.handleWhisperBinaryPick) rec.handleWhisperBinaryPick(evt);
+        });
         on("stt-model-select", "change", function() {
             state.settings.sttModel = this.value;
             stt.setModel(this.value);
@@ -542,6 +565,7 @@
     function refreshAllHeaderProgress() {
         if (window.EditorProUI && window.EditorProUI.recording) window.EditorProUI.recording.refreshSttHeaderProgressVisibility();
         if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.refreshES2HeaderProgressVisibility();
+        if (window.EditorProUI && window.EditorProUI.markerReviewer && window.EditorProUI.markerReviewer.refreshHeaderProgress) window.EditorProUI.markerReviewer.refreshHeaderProgress();
     }
 
     // ─── Expose remaining bindings for UI modules ────────────────
