@@ -79,6 +79,35 @@ function findOrCreateAudioPreset() {
         return JSON.stringify({ success: true, path: cachedPreset, cached: true });
     }
 
+    // 1) Preset .epr de WAV que Adobe ya deja en disco (AME y Premiere) —
+    //    NO requiere abrir Media Encoder. Cubre macOS y Windows.
+    var presetBases = [];
+    var years = ["2026", "2025", "2024", "2023", "2022"];
+    var y;
+    for (y = 0; y < years.length; y++) {
+        // macOS
+        presetBases.push("/Applications/Adobe Media Encoder " + years[y] +
+            "/Adobe Media Encoder " + years[y] + ".app/Contents/MediaIO/systempresets");
+        presetBases.push("/Applications/Adobe Premiere Pro " + years[y] +
+            "/Adobe Premiere Pro " + years[y] + ".app/Contents/MediaIO/systempresets");
+        // Windows
+        presetBases.push("C:/Program Files/Adobe/Adobe Media Encoder " + years[y] + "/MediaIO/systempresets");
+        presetBases.push("C:/Program Files/Adobe/Adobe Premiere Pro " + years[y] + "/MediaIO/systempresets");
+    }
+    for (var b = 0; b < presetBases.length; b++) {
+        var presetFolder = new Folder(presetBases[b]);
+        if (!presetFolder.exists) continue;
+        // Los .epr suelen estar en subcarpetas; recorrer un nivel también
+        var found = _scanEprFolder(presetFolder);
+        if (found) return JSON.stringify({ success: true, path: found, cached: false });
+        var subs = presetFolder.getFiles(function(f) { return f instanceof Folder; });
+        for (var s = 0; s < subs.length; s++) {
+            found = _scanEprFolder(subs[s]);
+            if (found) return JSON.stringify({ success: true, path: found, cached: false });
+        }
+    }
+
+    // 2) Último recurso: pedirle el preset a Media Encoder (abre AME una vez)
     try {
         app.encoder.launchEncoder();
         $.sleep(500);
@@ -96,26 +125,24 @@ function findOrCreateAudioPreset() {
         }
     } catch(ex1) {}
 
-    var years = ["2026", "2025", "2024", "2023", "2022"];
-    for (var y = 0; y < years.length; y++) {
-        var amePath = "/Applications/Adobe Media Encoder " + years[y];
-        var presetBase = amePath + "/Adobe Media Encoder " + years[y] + ".app/Contents/MediaIO/systempresets";
-        var presetFolder = new Folder(presetBase);
-        if (presetFolder.exists) {
-            var files = presetFolder.getFiles("*.epr");
-            for (var f = 0; f < files.length; f++) {
-                var fname = files[f].name.toLowerCase();
-                if (fname.indexOf("wav") >= 0 || fname.indexOf("48") >= 0 || fname.indexOf("uncompressed") >= 0) {
-                    return JSON.stringify({ success: true, path: files[f].fsName, cached: false });
-                }
-            }
-        }
-    }
-
     return JSON.stringify({
         error: "No se encontró un preset de exportación WAV. " +
                "Asegúrate de que Adobe Media Encoder esté instalado."
     });
+}
+
+// Busca en una carpeta un .epr de audio WAV (sin abrir AME).
+function _scanEprFolder(folder) {
+    if (!folder || !folder.exists) return null;
+    var files = folder.getFiles("*.epr");
+    for (var f = 0; f < files.length; f++) {
+        var fname = files[f].name.toLowerCase();
+        if (fname.indexOf("wav") >= 0 || fname.indexOf("waveform") >= 0 ||
+            fname.indexOf("uncompressed") >= 0) {
+            return files[f].fsName;
+        }
+    }
+    return null;
 }
 
 // ─── Export Sequence Audio ────────────────────────────────────

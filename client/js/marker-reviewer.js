@@ -150,6 +150,58 @@
         return units;
     }
 
+    // ─── Ventanas de audio a transcribir ────────────────────
+
+    /**
+     * Para ahorrar tiempo, en vez de transcribir toda la clase solo se
+     * transcriben ventanas alrededor de cada bloque IN/OUT: [in - margin,
+     * out + margin]. Ventanas que se solapan se fusionan. Cubre el contexto
+     * del IN, del OUT y de las transiciones (el margen suele solapar bloques
+     * cercanos). Devuelve [{start, end}] en segundos, ordenadas.
+     */
+    function computeAudioWindows(pairs, opts) {
+        opts = mergeOpts(opts);
+        var margin = typeof opts.windowMarginSec === "number" ? opts.windowMarginSec : 120;
+        var wins = [];
+        for (var i = 0; i < pairs.length; i++) {
+            var s = Math.max(0, pairs[i].inMarker.startSeconds - margin);
+            var e = pairs[i].outMarker.startSeconds + margin;
+            if (e > s) wins.push({ start: s, end: e });
+        }
+        wins.sort(function(a, b) { return a.start - b.start; });
+        var merged = [];
+        for (var w = 0; w < wins.length; w++) {
+            var last = merged[merged.length - 1];
+            if (last && wins[w].start <= last.end) {
+                if (wins[w].end > last.end) last.end = wins[w].end;
+            } else {
+                merged.push({ start: wins[w].start, end: wins[w].end });
+            }
+        }
+        return merged;
+    }
+
+    /**
+     * ¿Las ventanas cubren todas las fronteras relevantes de los pares?
+     * Un transcript parcial guardado solo se reutiliza si cubre lo que se va
+     * a validar ahora (con un pequeño colchón).
+     */
+    function windowsCoverPairs(windows, pairs, pad) {
+        if (!windows || windows.length === 0) return false;
+        pad = pad || 5;
+        function covered(t) {
+            for (var w = 0; w < windows.length; w++) {
+                if (t >= windows[w].start - pad && t <= windows[w].end + pad) return true;
+            }
+            return false;
+        }
+        for (var i = 0; i < pairs.length; i++) {
+            if (!covered(pairs[i].inMarker.startSeconds)) return false;
+            if (!covered(pairs[i].outMarker.startSeconds)) return false;
+        }
+        return true;
+    }
+
     // ─── Contexto de palabras ────────────────────────────────
 
     /**
@@ -485,6 +537,8 @@
     var EPMarkerReviewer = {
         parsePairs: parsePairs,
         buildBoundaryUnits: buildBoundaryUnits,
+        computeAudioWindows: computeAudioWindows,
+        windowsCoverPairs: windowsCoverPairs,
         contextForTime: contextForTime,
         formatContext: formatContext,
         snippetAround: snippetAround,
