@@ -284,9 +284,15 @@
         return { provider: p, model: m };
     };
 
-    AIAnalyzer.prototype._send = function(systemMsg, userPrompt, callback, images) {
+    AIAnalyzer.prototype._send = function(systemMsg, userPrompt, callback, images, opts) {
         var self = this;
         self._aborted = false;
+        opts = opts || {};
+        // Desactivar el "thinking" de qwen3/deepseek para respuestas cortas y
+        // rápidas: por prompt (/no_think, compatible con todas las versiones)
+        var noThink = opts.think === false;
+        if (noThink && systemMsg) systemMsg = "/no_think\n" + systemMsg;
+        var numPredict = (typeof opts.numPredict === "number" && opts.numPredict > 0) ? opts.numPredict : this.maxTokens;
 
         // Auto-correct provider/model before sending
         var resolved = self._resolveProviderModel();
@@ -328,18 +334,23 @@
                 var userMsg = { role: "system", content: systemMsg };
                 var userContent = { role: "user", content: userPrompt };
                 if (images && images.length > 0) userContent.images = images;
-                body = JSON.stringify({
+                var ollamaBody = {
                     model: this.model,
                     messages: [userMsg, userContent],
                     stream: false,
                     format: "json",
-                    options: { temperature: 0.2, num_predict: this.maxTokens }
-                });
+                    keep_alive: "10m",
+                    options: { temperature: 0.2, num_predict: numPredict }
+                };
+                // Desactivar razonamiento también vía el flag nativo de Ollama
+                // (versiones recientes lo soportan; las viejas lo ignoran)
+                if (noThink) ollamaBody.think = false;
+                body = JSON.stringify(ollamaBody);
                 break;
             case "anthropic":
                 body = JSON.stringify({
                     model: this.model,
-                    max_tokens: this.maxTokens,
+                    max_tokens: numPredict,
                     system: systemMsg,
                     messages: [{ role: "user", content: userPrompt }]
                 });
@@ -348,7 +359,7 @@
             case "openrouter":
                 body = JSON.stringify({
                     model: this.model,
-                    max_tokens: this.maxTokens,
+                    max_tokens: numPredict,
                     temperature: 0.2,
                     messages: [
                         { role: "system", content: systemMsg },
@@ -361,7 +372,7 @@
                     contents: [{ parts: [{ text: systemMsg + "\n\n" + userPrompt }] }],
                     generationConfig: {
                         temperature: 0.2,
-                        maxOutputTokens: this.maxTokens,
+                        maxOutputTokens: numPredict,
                         responseMimeType: "application/json"
                     }
                 });
