@@ -46,6 +46,10 @@ function mkMarker(startSeconds, name, comments) {
     return { name: name || "", comments: comments || "", startSeconds: startSeconds, colorIndex: -1 };
 }
 
+function lastEnd(words) {
+    return words[words.length - 1].end;
+}
+
 function run() {
 
     section("parsePairs() — pares básicos con claqueta por nombre");
@@ -130,6 +134,44 @@ function run() {
         assert(MR.windowsCoverPairs([{ start: 0, end: 400 }], pairs), "ventana amplia cubre");
         assert(!MR.windowsCoverPairs([{ start: 0, end: 150 }], pairs), "ventana que no llega al OUT no cubre");
         assert(!MR.windowsCoverPairs([], pairs), "sin ventanas no cubre");
+    }
+
+    section("detectLeadIns() — conteo '3,2,1' al inicio del bloque mueve el IN");
+    {
+        // Bloque arranca con conteo "tres dos uno" y luego contenido real
+        const w = mkWords("tres dos uno hola a todos bienvenidos a la clase de hoy sobre integrales", 100, 0.3, 0.2);
+        const pairs = [
+            { inMarker: mkMarker(99.8, "1", ""), outMarker: mkMarker(lastEnd(w) + 0.5, "", "OUT: x") }
+        ];
+        const props = MR.detectLeadIns(w, pairs);
+        assertEq(props.length, 1, "detecta el conteo");
+        assertEq(props[0].kind, "IN", "es un IN");
+        assertEq(props[0].pairIdx, 0, "del bloque 0");
+        assert(props[0].deterministic === true, "marcado como determinístico");
+        // El IN debe avanzar hasta "hola" (índice 3)
+        assert(props[0].newTime <= w[3].start, "IN clampado antes de 'hola'");
+        assert(props[0].newTime > w[2].end, "IN después del final de 'uno'");
+    }
+
+    section("detectLeadIns() — sin conteo → sin propuesta");
+    {
+        const w = mkWords("bienvenidos a la clase de hoy vamos a ver un tema importante", 50);
+        const pairs = [
+            { inMarker: mkMarker(49.8, "1", ""), outMarker: mkMarker(lastEnd(w) + 0.5, "", "OUT: x") }
+        ];
+        const props = MR.detectLeadIns(w, pairs);
+        assertEq(props.length, 0, "no propone sin conteo");
+    }
+
+    section("detectLeadIns() — cue sin número no dispara solo");
+    {
+        // "vamos" es contenido, no debe tratarse como conteo sin un número
+        const w = mkWords("vamos a empezar con la primera parte del tema de hoy sobre derivadas", 50);
+        const pairs = [
+            { inMarker: mkMarker(49.8, "1", ""), outMarker: mkMarker(lastEnd(w) + 0.5, "", "OUT: x") }
+        ];
+        const props = MR.detectLeadIns(w, pairs);
+        assertEq(props.length, 0, "sin número no se considera conteo");
     }
 
     section("contextForTime() y formatContext()");
