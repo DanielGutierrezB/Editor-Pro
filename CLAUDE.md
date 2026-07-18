@@ -35,33 +35,32 @@ Editor-Pro/
 │       ├── transcript-cache.js  # Pre-cache de transcripts por secuencia
 │       ├── transcript-manager.js # Carga, búsqueda, y UI de transcripts
 │       ├── cutter.js        # Cortes automáticos por marcadores
-│       ├── xml-cut-engine.js # Motor de cortes por reconstrucción FCPXML (puro, testeable en Node)
 │       ├── cut-validator.js # Validador de cortes: pickups, snapping, reporte (puro, testeable en Node)
-│       ├── cutter2.js       # Cortes Automáticos 2 — cortes vía export/edición/reimport XML
+│       ├── marker-reviewer.js # Revisar Marcadores: parseo de pares, prompts LLM, clamp, transcript final (puro)
 │       ├── updater.js       # Auto-updater vía GitHub API (branch workspace-daniel)
 │       ├── main.js          # Orquestador delgado: init, bindings, proxies
 │       ├── ui-spellcheck.js # UI de SpellCheck
 │       ├── ui-supertexts.js # UI de Smart Supertexts + MOGRT
 │       ├── ui-edit-suggestions.js # UI de Sugerencias de Edición
 │       ├── ui-recording.js  # UI de Notas de Grabación + STT + Vistas
-│       └── ui-validator.js  # UI del Validador de cortes (paso 5 de Notas de Grabación)
+│       ├── ui-validator.js  # UI del Validador de cortes (paso 5 de Notas de Grabación)
+│       └── ui-marker-reviewer.js # UI/orquestación de Revisar Marcadores
 ├── host/                    # ExtendScript — API de Premiere Pro (ES3)
 │   ├── index.jsx            # Entry point (#include de módulos)
 │   ├── common.jsx           # Helpers comunes, polyfills, JSON
 │   ├── cutter.jsx           # Cortes, marcadores, backup/restore
-│   ├── cutter2.jsx          # CA2: export/import de secuencia vía FCPXML
+│   ├── marker-reviewer.jsx  # Revisar Marcadores: mrMoveMarkers (mover = borrar + recrear)
 │   ├── spellcheck.jsx       # Exportación XML para spellcheck
 │   ├── supertexts.jsx       # MOGRT insertion, Smart Supertexts
 │   └── recording.jsx        # Audio export, backup+cut, marcadores, vistas
 ├── tests/                   # Tests Node de módulos puros: `npm test`
-│   ├── run-node-tests.js    # Runner (xml-cut-engine + cut-validator)
-│   └── fixtures/            # Fixtures xmeml (simple y con anidaciones)
+│   └── run-node-tests.js    # Runner (cut-validator + marker-reviewer)
 ├── Prompts/                 # Plantillas de prompts (.md) por herramienta
 ├── mogrts/                  # MOGRTs por defecto incluidos con Editor-Pro
 ├── CSXS/
 │   └── manifest.xml         # Manifiesto CEP: com.codigo.editorpro
 ├── whisper/                 # whisper.cpp: scripts de instalación + modelos .bin
-├── VERSION                  # Versión actual (2.1.3)
+├── VERSION                  # Versión actual (2.2.0)
 ├── dist/                    # ZXP empaquetado
 ├── build-zxp.sh             # Firma y empaqueta ZXP
 └── install.sh               # Symlink para desarrollo + habilita debug mode
@@ -180,34 +179,35 @@ SpellCheck con Hunspell (typo-js) + reglas contextuales para español.
 
 | # | ID data-tool | Título | Función |
 |---|-------------|--------|---------|
+| 0a | `markerreviewer` | Revisar Marcadores | Transcript + LLM validan cada IN/OUT y mueven los marcadores antes de cortar |
 | 0 | `cutter` | Cortes Automáticos | Marcadores → IN/OUT → preview → cortar (QE extract in-place) |
-| 0b | `cutter2` | Cortes Automáticos 2 | Mismos marcadores → cortes por reconstrucción FCPXML → secuencia nueva (original intacta) |
 | 1 | `transcript` | Transcripción | Cargar/exportar audio, transcribir, importar SRT/JSON |
 | 2 | `spellcheck` | SpellCheck IA | Analizar clips de texto (Essential Graphics) |
 | 3 | `supertexts2` | Smart Supertexts | Supertextos como gráficos MOGRT en timeline |
 | 4 | `editsuggestions2` | Sugerencias de Edición | Analizar transcripción → cortes/highlights/errores |
 | 5 | `recording` | Notas de Grabación | STT → IN/OUT → tomas → validación → marcadores → cortar → vistas |
 
-## Cortes Automáticos 2 (CA2) — cortes por reconstrucción FCPXML
+## Revisar Marcadores (marker-reviewer.js + ui-marker-reviewer.jsx/js)
 
-Alternativa al Cutter clásico: en vez de QE extract con sleeps por zona, reconstruye la secuencia vía XML en segundos. **La secuencia original nunca se modifica.**
+Herramienta previa a Cortes Automáticos: valida cada marcador IN/OUT contra el transcript con el LLM configurado y **mueve los marcadores** a donde la frase tiene sentido. El corte sigue siendo el del Cutter clásico (la vía CA2 de reconstrucción XML fue retirada en v2.2.0 porque el reimport duplicaba las anidaciones).
 
-### Flujo
-1. `cutter2.js` lee marcadores (misma convención IN/OUT que el Cutter, mismo skip de claqueta vía `editorpro_skip_clapperboard`)
-2. `ca2ExportSequenceXML()` (JSX) exporta la secuencia activa con `exportAsFinalCutProXML()`
-3. `EPXmlCutEngine.applyCuts()` edita el xmeml en el panel: elimina zonas con ripple en todas las pistas, procesando de fin a inicio
-4. `ca2ImportSequenceXML()` (JSX) importa el XML editado a un bin `CA2 - <fecha>` y abre la secuencia nueva `<nombre> - CA2 <hora>`
+### Flujo (por secuencia: activa o todas las abiertas)
+1. Leer marcadores (`getSequenceMarkers` / `getMarkersForSequence(seqId)`) y parsear pares IN/OUT — misma convención del Cutter, claqueta reconocida por nombre/comentario (`clapper`/`claqueta`) o primer marcador como fallback
+2. Conseguir `words[]`: transcript ya guardado en `Transcribe/<seq>.json|.srt` (cache) o exportar audio + STT (pipeline existente). El resultado se guarda como JSON normalizado `{words, text, language}` para no re-transcribir
+3. Pre-pase determinístico con `EPCutValidator` (pickups + snapping) como *hints* para el LLM
+4. **Una llamada al LLM por unidad** (pares + 1): primer IN ("¿dónde arranca la frase con sentido?"), cada transición OUT→IN (valida ambos y detecta si el bloque siguiente **repite** la frase final del anterior → retrocede el OUT), y último OUT. Cada prompt lleva solo ~60 palabras de contexto con timestamps `(12.3)palabra`, nunca el transcript completo
+5. Los tiempos del LLM se **clampan a gaps de silencio** (`clampToWordGap`): nunca se corta a mitad de palabra; una palabra a medias se incluye en el bloque. Movimientos > 30s o deltas < 0.12s se descartan
+6. UI de revisión: propuestas con checkbox (razón del LLM, frase repetida, snippet del punto de corte) → "Aplicar seleccionados" mueve los marcadores vía `mrMoveMarkers()` (Premiere no permite cambiar `marker.start`: se borra y recrea conservando nombre/comentario/color/duración)
+7. **Transcript final**: concatena las palabras dentro de los bloques ajustados (`buildFinalTranscript`) → texto de la clase como quedaría cortada (guardable como `_final.txt` en Transcribe/, copiable) + **chequeo de coherencia** con el LLM (fluidez entre bloques, frases cortadas, repeticiones, saltos de tema)
 
-### xml-cut-engine.js (módulo puro, testeable en Node)
-- `inspect(xml)` — fps/timebase/ntsc, conteo de clips, detección de **anidaciones** (clipitem con `<sequence>` embebida) y **time remaps** activos
-- `applyCuts(xml, zones, opts)` — por zona: clips dentro → eliminados; solapados → trim (ajustando `in`/`out` y `pproTicksIn/Out`); que abarcan → split (clon con id `-ca2sN`, sin `<link>`, definiciones `file`/`sequence`/`multiclip` colapsadas a referencia por id); posteriores → shift. Transiciones sobre un corte se eliminan materializando los bordes `-1` de sus vecinos al centro. Marcadores de secuencia se eliminan/desplazan. `<duration>` recalculada
-- `normalizeZones(zones, duration)` — guardas de sanidad: zonas invertidas (error), solapadas (merge+warning), fuera de rango (clamp/descarte), >90% de la secuencia (requiere confirmación), 100% (error)
-- **Política de redondeo a frames**: inicio de zona hacia arriba, fin hacia abajo — ante ambigüedad se conserva un frame, nunca se pierde contenido
-- **Clips con time remapping**: si un borde de corte cae sobre uno, la ejecución falla con error claro (la aritmética lineal de frames no aplica). Eliminarlos completos sí es válido
+### marker-reviewer.js (módulo puro, testeable en Node)
+`parsePairs`, `buildBoundaryUnits`, `contextForTime`/`formatContext`, `clampToWordGap`, `buildUnitPrompt`, `resolveUnitResponse` (valida/clampa la respuesta del LLM), `buildFinalTranscript`, `buildCoherencePrompt`.
 
-### Comportamiento con anidaciones (importante)
-- El interior de los nests nunca se toca; solo se recortan sus puntos in/out en la timeline exterior
-- Al reimportar, Premiere crea **copias** de las secuencias anidadas en el bin CA2 (las originales quedan intactas, pero la secuencia cortada referencia las copias). CA2 lo detecta en el preview y avisa antes de ejecutar
+### Whisper Local — detección ampliada (v2.2.0)
+- Modelos ggml/gguf con cualquier nombre en: `<plugin>/whisper/`, `~/.cache/whisper/`, `~/.whisper`, `~/models`, `~/whisper.cpp/models`, Homebrew share, Application Support de MacWhisper y cache de Hugging Face (`models--*whisper*/snapshots/`). Se elige el de mayor calidad (large-v3 > turbo > medium > ...)
+- Binarios: `whisper-cli`/`whisper-cpp`/`main` en plugin, Homebrew, `~/whisper.cpp/build/bin/` y PATH
+- **Backend Python (openai-whisper)**: si no hay whisper.cpp pero existe el comando `whisper` con modelos `.pt` en `~/.cache/whisper/`, se transcribe con `whisper <wav> --output_format json --word_timestamps True` (timestamps reales por palabra)
+- **Override manual en Ajustes**: "Elegir modelo..." / "Elegir binario..." persistidos en localStorage (`editorpro_whisper_model`/`_binary`), botón "✕ auto" para volver a detección automática
 
 ## Validador de cortes (cut-validator.js + ui-validator.js)
 
@@ -219,7 +219,7 @@ Módulo puro NLE-agnóstico que opera sobre `words[]` del STT + segmentos de Not
 
 ## Tests (`npm test`)
 
-`tests/run-node-tests.js` corre en Node las suites de `xml-cut-engine` (fixtures xmeml en `tests/fixtures/`: simple con transición/links/markers, y con anidaciones + time remap) y `cut-validator` (transcripts sintéticos). Los módulos puros exponen `module.exports` además de `window.*`; los tests usan `@xmldom/xmldom` como DOMParser (devDependency).
+`tests/run-node-tests.js` corre en Node las suites de `cut-validator` y `marker-reviewer` (transcripts y marcadores sintéticos; el LLM se valida a nivel de prompts/respuestas mockeadas). Los módulos puros exponen `module.exports` además de `window.*`.
 
 ## Workflow: Notas de Grabación (7 pasos)
 
@@ -298,8 +298,7 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 | `getActiveSequenceInfo()` | Info de secuencia activa |
 | `getSequenceMarkers()` | Leer marcadores para Cutter |
 | `executeCuts(filePath)` | Ejecutar cortes desde JSON (In/Out + Extract, con fallbacks) |
-| `ca2ExportSequenceXML(outPath)` | CA2: exportar secuencia activa a FCPXML (solo lectura) |
-| `ca2ImportSequenceXML(xmlPath, binName, expectedName)` | CA2: importar XML editado a bin dedicado, detectar secuencia nueva y abrirla |
+| `mrMoveMarkers(jsonPath, seqId?)` | Revisar Marcadores: mover marcadores (borrar + recrear conservando nombre/comentario/color/duración) |
 | `addMarkersFromFile(path, seqId)` | Colocar marcadores (por ID o secuencia activa) |
 | `clearMarkersByPrefix(prefix, seqId)` | Limpiar marcadores por prefijo |
 | `exportSequenceAudio()` | Exportar audio WAV de la secuencia |
@@ -377,12 +376,12 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 El header tiene 3 botones (además del dropdown de secuencia activa):
 
 1. **Log** (icono de descarga) — descarga el log de la sesión a la carpeta de Descargas.
-2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.1.3`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.1.2 → v2.1.3`).
+2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.2.0`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.1.3 → v2.2.0`).
 3. **Ajustes** — abre el panel de configuración (proveedor STT, proveedor de IA, API keys, modelo).
 
 > Nota histórica: los botones de debug de MOGRT (🔍/🔬) fueron removidos.
 
 ## Versión y auto-actualización
 
-- La versión vive en el archivo `VERSION` (actual: **2.1.3**) y en `CSXS/manifest.xml`.
+- La versión vive en el archivo `VERSION` (actual: **2.2.0**) y en `CSXS/manifest.xml`.
 - `updater.js` implementa un auto-updater basado en la GitHub API (no requiere git instalado) que descarga desde la rama **`workspace-daniel`**.
