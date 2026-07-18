@@ -161,7 +161,7 @@
      */
     function computeAudioWindows(pairs, opts) {
         opts = mergeOpts(opts);
-        var margin = typeof opts.windowMarginSec === "number" ? opts.windowMarginSec : 120;
+        var margin = typeof opts.windowMarginSec === "number" ? opts.windowMarginSec : 60;
         var wins = [];
         for (var i = 0; i < pairs.length; i++) {
             var s = Math.max(0, pairs[i].inMarker.startSeconds - margin);
