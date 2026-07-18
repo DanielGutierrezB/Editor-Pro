@@ -142,6 +142,13 @@
         return c.indexOf("OUT:") === 0;
     }
 
+    // La claqueta se reconoce por nombre/comentario (p.ej. "K - Clapperboard"),
+    // sin importar su posición entre los marcadores
+    function isClapperboardMarker(marker) {
+        var txt = ((marker.name || "") + " " + (marker.comments || "")).toLowerCase();
+        return txt.indexOf("clapper") !== -1 || txt.indexOf("claqueta") !== -1;
+    }
+
     function parseMarkers(markers, seqDuration) {
         if (!markers || markers.length === 0) {
             return { keepBlocks: [], removeZones: [], warnings: [], error: "No se encontraron marcadores." };
@@ -154,7 +161,30 @@
             var stored = localStorage.getItem(SKIP_CLAPPERBOARD_KEY);
             if (stored !== null) skipClapperboard = stored !== "false";
         } catch(_e) {}
-        var working = skipClapperboard ? markers.slice(1) : markers.slice(0);
+
+        // Con el skip activo: eliminar los marcadores reconocidos como claqueta
+        // por nombre/comentario, estén donde estén. Si ninguno se reconoce,
+        // caer al comportamiento clásico (descartar el primero por tiempo).
+        var working;
+        if (skipClapperboard) {
+            working = [];
+            var clapsFound = 0;
+            for (var c = 0; c < markers.length; c++) {
+                if (isClapperboardMarker(markers[c])) {
+                    clapsFound++;
+                    log("Claqueta ignorada por nombre en " + formatTime(markers[c].startSeconds) +
+                        " (\"" + (markers[c].name || "") + " " + (markers[c].comments || "").trim() + "\")");
+                } else {
+                    working.push(markers[c]);
+                }
+            }
+            if (clapsFound === 0) {
+                log("Sin claqueta reconocible por nombre — se ignora el primer marcador");
+                working = markers.slice(1);
+            }
+        } else {
+            working = markers.slice(0);
+        }
 
         if (working.length === 0) {
             return { keepBlocks: [], removeZones: [], warnings: [], error: "Solo se encontró el marcador de claqueta." };
