@@ -219,6 +219,28 @@
         return dir.replace(/\\/g, "/") + "/editorpro_ca2_" + Date.now() + (suffix || "") + ".xml";
     }
 
+    /**
+     * Lee el XML exportado por Premiere detectando la codificación real:
+     * UTF-16 LE/BE (por BOM) o UTF-8, y elimina el BOM del string resultante.
+     * Premiere exporta con BOM según versión/plataforma y el DOMParser es
+     * estricto — un BOM antes de <?xml rompe el parseo.
+     */
+    function readXmlFile(path) {
+        var buf = fs.readFileSync(path);
+        var content;
+        if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
+            content = buf.toString("utf16le");
+        } else if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
+            var swapped = Buffer.from(buf);
+            swapped.swap16();
+            content = swapped.toString("utf16le");
+        } else {
+            content = buf.toString("utf8");
+        }
+        if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+        return content;
+    }
+
     function analyze() {
         if (!fs) {
             showToast("Node.js no disponible en el panel — CA2 requiere acceso a archivos", "error");
@@ -285,7 +307,8 @@
 
                     var inspection = null;
                     try {
-                        var xmlContent = fs.readFileSync(xmlPath, "utf8");
+                        var xmlContent = readXmlFile(xmlPath);
+                        log("XML leído: " + xmlContent.length + " chars. Inicio: " + xmlContent.slice(0, 60).replace(/\n/g, " "));
                         inspection = EPXmlCutEngine.inspect(xmlContent);
                     } catch(e) {
                         log("Inspección ERROR: " + e.message);
@@ -490,7 +513,7 @@
                 setProgress(50, "Aplicando cortes al XML...");
                 var xmlContent;
                 try {
-                    xmlContent = fs.readFileSync(srcPath, "utf8");
+                    xmlContent = readXmlFile(srcPath);
                 } catch(e) {
                     return failExecute("No se pudo leer el XML exportado: " + e.message);
                 }
