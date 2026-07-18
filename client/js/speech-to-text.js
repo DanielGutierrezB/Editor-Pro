@@ -411,16 +411,38 @@
     // Whisper Local (whisper.cpp)
     // ═══════════════════════════════════════════════════════════════
 
+    var WHISPER_BIN_KEY = "editorpro_whisper_binary";
+    var WHISPER_MODEL_KEY = "editorpro_whisper_model";
+
+    function _lsGet(key) {
+        try { return (typeof localStorage !== "undefined") ? localStorage.getItem(key) : null; } catch(e) { return null; }
+    }
+
     SpeechToText.prototype._findWhisperBinary = function() {
         if (!fs) return { binary: null };
+
+        // Override manual desde Ajustes
+        var manual = _lsGet(WHISPER_BIN_KEY);
+        if (manual) {
+            try { if (fs.existsSync(manual)) return { binary: manual, manual: true }; } catch(e) {}
+        }
 
         var candidates = [];
         if (this._pluginDir) {
             candidates.push(this._pluginDir + "/whisper/whisper-cli");
             candidates.push(this._pluginDir + "/whisper/main");
         }
+        // Homebrew instala el binario como whisper-cli o whisper-cpp según versión
         candidates.push("/opt/homebrew/bin/whisper-cli");
+        candidates.push("/opt/homebrew/bin/whisper-cpp");
         candidates.push("/usr/local/bin/whisper-cli");
+        candidates.push("/usr/local/bin/whisper-cpp");
+        // Builds locales típicos de whisper.cpp
+        var home = (typeof process !== "undefined" && process.env) ? (process.env.HOME || "") : "";
+        if (home) {
+            candidates.push(home + "/whisper.cpp/build/bin/whisper-cli");
+            candidates.push(home + "/whisper.cpp/main");
+        }
         // Windows common locations
         if (process && process.env && process.env.LOCALAPPDATA) {
             candidates.push(process.env.LOCALAPPDATA + "\\whisper-cli\\whisper-cli.exe");
@@ -434,68 +456,189 @@
         }
 
         if (childProcess) {
-            try {
-                // Use 'which' on Mac/Linux, 'where' on Windows
-                var whichCmd = (process && process.platform === 'win32') ? 'where whisper-cli 2>NUL' : 'which whisper-cli 2>/dev/null';
-                var found = childProcess.execSync(whichCmd, { encoding: "utf8" }).trim();
-                if (found) {
-                    // 'where' on Windows may return multiple lines
-                    found = found.split(/\r?\n/)[0];
-                    return { binary: found };
-                }
-            } catch(e) {}
+            var names = ["whisper-cli", "whisper-cpp"];
+            for (var n = 0; n < names.length; n++) {
+                try {
+                    var whichCmd = (process && process.platform === 'win32') ? ('where ' + names[n] + ' 2>NUL') : ('which ' + names[n] + ' 2>/dev/null');
+                    var found = childProcess.execSync(whichCmd, { encoding: "utf8" }).trim();
+                    if (found) return { binary: found.split(/\r?\n/)[0] };
+                } catch(e) {}
+            }
         }
 
         return { binary: null };
     };
 
+    // Prioridad de modelos por calidad (mayor score = mejor)
+    function _whisperModelScore(name) {
+        var n = name.toLowerCase();
+        if (n.indexOf("large-v3-turbo") !== -1 || n.indexOf("large_v3_turbo") !== -1) return 90;
+        if (n.indexOf("large-v3") !== -1 || n.indexOf("large_v3") !== -1) return 100;
+        if (n.indexOf("large-v2") !== -1 || n.indexOf("large_v2") !== -1) return 80;
+        if (n.indexOf("large") !== -1) return 75;
+        if (n.indexOf("turbo") !== -1) return 70;
+        if (n.indexOf("medium") !== -1) return 60;
+        if (n.indexOf("small") !== -1) return 40;
+        if (n.indexOf("base") !== -1) return 20;
+        if (n.indexOf("tiny") !== -1) return 10;
+        return 30;
+    }
+
+    function _isGgmlModelFile(name) {
+        var n = name.toLowerCase();
+        if (!(/\.(bin|gguf)$/.test(n))) return false;
+        // Evitar binarios que no son modelos (p.ej. .bin genéricos pequeños se filtran por score>0 igual)
+        return n.indexOf("ggml") !== -1 || n.indexOf("gguf") !== -1 || n.indexOf("whisper") !== -1 ||
+               n.indexOf("large") !== -1 || n.indexOf("medium") !== -1 || n.indexOf("small") !== -1 ||
+               n.indexOf("base") !== -1 || n.indexOf("tiny") !== -1 || n.indexOf("turbo") !== -1;
+    }
+
+    SpeechToText.prototype._whisperModelDirs = function() {
+        var home = (typeof process !== "undefined" && process.env) ? (process.env.HOME || "") : "";
+        var dirs = [];
+        if (this._pluginDir) dirs.push(this._pluginDir + "/whisper");
+        if (home) {
+            dirs.push(home + "/.cache/whisper");
+            dirs.push(home + "/.whisper");
+            dirs.push(home + "/models");
+            dirs.push(home + "/whisper.cpp/models");
+            dirs.push(home + "/Library/Application Support/MacWhisper/models");
+            dirs.push(home + "/Library/Application Support/com.goodsnooze.MacWhisper/models");
+        }
+        dirs.push("/opt/homebrew/share/whisper.cpp");
+        dirs.push("/opt/homebrew/share/whisper-cpp");
+        dirs.push("/usr/local/share/whisper.cpp");
+        dirs.push("/usr/local/share/whisper-cpp");
+        return dirs;
+    };
+
+    /**
+     * Busca el mejor modelo ggml/gguf de whisper.cpp: override manual primero,
+     * luego escaneo de carpetas conocidas (cualquier nombre, no solo ggml-*),
+     * incluida la cache de Hugging Face. Devuelve el de mayor calidad.
+     */
     SpeechToText.prototype._findWhisperModel = function() {
         if (!fs) return null;
 
-        // Order: best quality first (Large v3 → … → base → tiny)
-        var candidates = [];
+        var manual = _lsGet(WHISPER_MODEL_KEY);
+        if (manual && /\.(bin|gguf)$/i.test(manual)) {
+            try { if (fs.existsSync(manual)) return manual; } catch(e) {}
+        }
+
+        var best = null;
+        var bestScore = -1;
+
+        function scanDir(dir) {
+            var files;
+            try { files = fs.readdirSync(dir); } catch(e) { return; }
+            for (var i = 0; i < files.length; i++) {
+                if (!_isGgmlModelFile(files[i])) continue;
+                var full = dir + "/" + files[i];
+                try {
+                    var st = fs.statSync(full);
+                    if (!st.isFile() || st.size < 50 * 1024 * 1024) continue; // los modelos reales pesan >50MB
+                } catch(e2) { continue; }
+                var score = _whisperModelScore(files[i]);
+                if (score > bestScore) { bestScore = score; best = full; }
+            }
+        }
+
+        var dirs = this._whisperModelDirs();
+        for (var d = 0; d < dirs.length; d++) scanDir(dirs[d]);
+
+        // Cache de Hugging Face: ~/.cache/huggingface/hub/models--*whisper*/snapshots/<sha>/
         var home = (typeof process !== "undefined" && process.env) ? (process.env.HOME || "") : "";
-
-        if (this._pluginDir) {
-            candidates.push(this._pluginDir + "/whisper/ggml-large-v3.bin");
-            candidates.push(this._pluginDir + "/whisper/ggml-large-v3-q5_0.bin");
-            candidates.push(this._pluginDir + "/whisper/ggml-large-v2.bin");
-            candidates.push(this._pluginDir + "/whisper/ggml-medium.bin");
-            candidates.push(this._pluginDir + "/whisper/ggml-small.bin");
-            candidates.push(this._pluginDir + "/whisper/ggml-base.bin");
-            candidates.push(this._pluginDir + "/whisper/ggml-tiny.bin");
-        }
         if (home) {
-            candidates.push(home + "/.cache/whisper/ggml-large-v3.bin");
-            candidates.push(home + "/.cache/whisper/ggml-large-v3-q5_0.bin");
-            candidates.push(home + "/.cache/whisper/ggml-large-v2.bin");
-            candidates.push(home + "/.cache/whisper/ggml-medium.bin");
-            candidates.push(home + "/.cache/whisper/ggml-small.bin");
-            candidates.push(home + "/.cache/whisper/ggml-base.bin");
-            candidates.push(home + "/.cache/whisper/ggml-tiny.bin");
+            var hub = home + "/.cache/huggingface/hub";
+            try {
+                var repos = fs.readdirSync(hub);
+                for (var r = 0; r < repos.length; r++) {
+                    if (repos[r].toLowerCase().indexOf("whisper") === -1) continue;
+                    var snaps = hub + "/" + repos[r] + "/snapshots";
+                    var shas;
+                    try { shas = fs.readdirSync(snaps); } catch(e3) { continue; }
+                    for (var s = 0; s < shas.length; s++) scanDir(snaps + "/" + shas[s]);
+                }
+            } catch(e4) {}
         }
 
-        for (var i = 0; i < candidates.length; i++) {
-            try { if (fs.existsSync(candidates[i])) return candidates[i]; } catch(e) {}
+        return best;
+    };
+
+    /**
+     * Detecta el Whisper de Python (openai-whisper): comando `whisper` en PATH
+     * + modelos .pt en ~/.cache/whisper/. Ese formato NO es compatible con
+     * whisper.cpp, así que se usa como motor alternativo.
+     */
+    SpeechToText.prototype._findWhisperPython = function() {
+        if (!fs || !childProcess) return { binary: null, model: null };
+        var binary = null;
+        try {
+            var whichCmd = (process && process.platform === 'win32') ? 'where whisper 2>NUL' : 'which whisper 2>/dev/null';
+            var found = childProcess.execSync(whichCmd, { encoding: "utf8" }).trim();
+            if (found) binary = found.split(/\r?\n/)[0];
+        } catch(e) {}
+        if (!binary) return { binary: null, model: null };
+
+        var home = (typeof process !== "undefined" && process.env) ? (process.env.HOME || "") : "";
+        var best = null;
+        var bestScore = -1;
+        if (home) {
+            try {
+                var files = fs.readdirSync(home + "/.cache/whisper");
+                for (var i = 0; i < files.length; i++) {
+                    if (!/\.pt$/i.test(files[i])) continue;
+                    var score = _whisperModelScore(files[i]);
+                    if (score > bestScore) { bestScore = score; best = files[i].replace(/\.pt$/i, ""); }
+                }
+            } catch(e2) {}
         }
-        return null;
+        // El comando whisper puede descargar el modelo solo, pero solo lo
+        // reportamos como listo si ya hay un modelo descargado.
+        return { binary: binary, model: best };
     };
 
     SpeechToText.prototype.getWhisperLocalStatus = function() {
         var binary = this._findWhisperBinary();
         var model = this._findWhisperModel();
-        var modelName = "";
-        if (model) {
+
+        if (binary.binary && model) {
             var parts = model.replace(/\\/g, "/").split("/");
-            modelName = parts[parts.length - 1] || "";
+            return {
+                engine: "cpp",
+                binaryFound: true,
+                binaryPath: binary.binary,
+                modelFound: true,
+                modelPath: model,
+                modelName: parts[parts.length - 1] || "",
+                ready: true
+            };
         }
+
+        // Fallback: Whisper de Python (openai-whisper) con modelos .pt
+        var py = this._findWhisperPython();
+        if (py.binary && py.model) {
+            return {
+                engine: "python",
+                binaryFound: true,
+                binaryPath: py.binary,
+                modelFound: true,
+                modelPath: null,
+                modelName: py.model + " (Python)",
+                pythonModel: py.model,
+                ready: true
+            };
+        }
+
         return {
-            binaryFound: !!binary.binary,
-            binaryPath: binary.binary || null,
+            engine: binary.binary ? "cpp" : (py.binary ? "python" : null),
+            binaryFound: !!(binary.binary || py.binary),
+            binaryPath: binary.binary || py.binary || null,
             modelFound: !!model,
             modelPath: model || null,
-            modelName: modelName,
-            ready: !!binary.binary && !!model
+            modelName: "",
+            searchedDirs: this._whisperModelDirs(),
+            ready: false
         };
     };
 
@@ -522,17 +665,23 @@
             return;
         }
 
-        var binaryInfo = this._findWhisperBinary();
-        if (!binaryInfo.binary) {
-            callback({ error: "whisper-cli no encontrado. Ejecuta whisper/setup-whisper.sh para instalar." });
+        var status = this.getWhisperLocalStatus();
+        if (!status.ready) {
+            var missing = [];
+            if (!status.binaryFound) missing.push("binario (whisper-cli / whisper)");
+            if (!status.modelFound) missing.push("modelo");
+            callback({ error: "Whisper local no disponible: falta " + missing.join(" y ") +
+                ". Instala whisper.cpp (whisper/setup-whisper.sh) o selecciona el modelo manualmente en Ajustes." });
             return;
         }
 
-        var modelPath = this._findWhisperModel();
-        if (!modelPath) {
-            callback({ error: "Modelo Whisper no encontrado. Ejecuta whisper/setup-whisper.sh para descargar." });
+        if (status.engine === "python") {
+            this._transcribeWhisperPython(filePath, status, onProgress, callback);
             return;
         }
+
+        var binaryInfo = { binary: status.binaryPath };
+        var modelPath = status.modelPath;
 
         var threads = 4;
         if (os && os.cpus) {
@@ -648,6 +797,119 @@
             clearInterval(watchdog);
             if (safeFilePath !== filePath) { try { fs.unlinkSync(safeFilePath); } catch(e) {} }
             callback({ error: "Error al ejecutar whisper.cpp: " + err.message });
+        });
+    };
+
+    /**
+     * Whisper de Python (openai-whisper): `whisper <wav> --model large-v3
+     * --output_format json --word_timestamps True`. Produce words[] con
+     * timestamps reales por palabra (mejor que los pseudo-words de whisper.cpp
+     * sin -ml). Los modelos .pt viven en ~/.cache/whisper/.
+     */
+    SpeechToText.prototype._transcribeWhisperPython = function(filePath, status, onProgress, callback) {
+        onProgress(5);
+        var safeFilePath = this._ensureAccessiblePath(filePath);
+        onProgress(10);
+
+        var outDir = os ? os.tmpdir() : "/tmp";
+        var args = [
+            safeFilePath,
+            "--model", status.pythonModel || "large-v3",
+            "--language", "es",
+            "--output_format", "json",
+            "--word_timestamps", "True",
+            "--output_dir", outDir,
+            "--verbose", "False"
+        ];
+
+        var finished = false;
+        var child = childProcess.spawn(status.binaryPath, args);
+        this._activeRequest = child;
+
+        // El Python whisper con large-v3 puede tardar mucho: watchdog por
+        // inactividad (10 min sin output), no por tiempo total.
+        var lastActivity = Date.now();
+        var watchdog = setInterval(function() {
+            if (finished) { clearInterval(watchdog); return; }
+            if (Date.now() - lastActivity > 600000) {
+                clearInterval(watchdog);
+                try { child.kill("SIGKILL"); } catch(e) {}
+                callback({ error: "Whisper (Python) sin actividad por 10 minutos — cancelado." });
+            }
+        }, 15000);
+
+        var stderrBuf = "";
+        child.stderr.on("data", function(chunk) {
+            lastActivity = Date.now();
+            stderrBuf += chunk.toString();
+            // tqdm: " 45%|####..." — usar el último porcentaje visto
+            var matches = stderrBuf.match(/(\d+)%\|/g);
+            if (matches && matches.length > 0) {
+                var pct = parseInt(matches[matches.length - 1]);
+                if (!isNaN(pct)) onProgress(10 + Math.round(pct * 0.85));
+            }
+            if (stderrBuf.length > 100000) stderrBuf = stderrBuf.slice(-20000);
+        });
+        child.stdout.on("data", function() { lastActivity = Date.now(); });
+
+        var self = this;
+        child.on("close", function(code) {
+            finished = true;
+            self._activeRequest = null;
+            clearInterval(watchdog);
+
+            function cleanupCopy() {
+                if (safeFilePath !== filePath) { try { fs.unlinkSync(safeFilePath); } catch(e) {} }
+            }
+
+            if (self._aborted) {
+                cleanupCopy();
+                callback({ error: "Transcripción cancelada." });
+                return;
+            }
+            if (code !== 0) {
+                cleanupCopy();
+                callback({ error: "Whisper (Python) terminó con código " + code + "." });
+                return;
+            }
+
+            // El output es <outDir>/<basename sin extensión>.json
+            var base = safeFilePath.replace(/\\/g, "/").split("/").pop().replace(/\.[^.]+$/, "");
+            var jsonOutPath = (path ? path.join(outDir, base + ".json") : outDir + "/" + base + ".json");
+
+            try {
+                var data = JSON.parse(fs.readFileSync(jsonOutPath, "utf8"));
+                try { fs.unlinkSync(jsonOutPath); } catch(e) {}
+                cleanupCopy();
+
+                var words = [];
+                var segments = data.segments || [];
+                for (var i = 0; i < segments.length; i++) {
+                    var segWords = segments[i].words || [];
+                    for (var w = 0; w < segWords.length; w++) {
+                        var wd = segWords[w];
+                        var txt = String(wd.word || "").trim();
+                        if (!txt) continue;
+                        words.push({ text: txt, start: wd.start, end: wd.end, type: "word" });
+                    }
+                }
+                if (words.length === 0) {
+                    callback({ error: "Whisper (Python) no devolvió palabras con timestamps." });
+                    return;
+                }
+                onProgress(100);
+                callback({ words: words, text: data.text || "", language: data.language || "es" });
+            } catch(e2) {
+                cleanupCopy();
+                callback({ error: "Error al leer resultado de Whisper (Python): " + e2.message });
+            }
+        });
+
+        child.on("error", function(err) {
+            finished = true;
+            clearInterval(watchdog);
+            if (safeFilePath !== filePath) { try { fs.unlinkSync(safeFilePath); } catch(e) {} }
+            callback({ error: "Error al ejecutar Whisper (Python): " + err.message });
         });
     };
 
