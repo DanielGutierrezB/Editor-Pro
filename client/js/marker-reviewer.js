@@ -422,21 +422,33 @@
     function resolveUnitResponse(unit, response, pairs, words, opts) {
         opts = mergeOpts(opts);
         var proposals = [];
+        var debug = (opts && opts._debug) ? opts._debug : null;
         if (!response || response.error) return proposals;
 
         function consider(kind, pairIdx, marker, raw, repeatedPhrase) {
-            if (!raw || raw.action !== "move") return;
+            if (!raw) { if (debug) debug.push(kind + ": sin campo en la respuesta"); return; }
+            if (raw.action !== "move") { if (debug) debug.push(kind + ": keep"); return; }
             var t = _num(raw.time);
-            if (t === null || t < 0) return;
+            if (t === null || t < 0) { if (debug) debug.push(kind + ": move sin tiempo válido (" + raw.time + ")"); return; }
             var original = marker.startSeconds;
-            if (Math.abs(t - original) > opts.maxMoveSeconds) return; // alucinación probable
+            if (Math.abs(t - original) > opts.maxMoveSeconds) {
+                if (debug) debug.push(kind + ": descartado, move de " + Math.abs(t - original).toFixed(1) + "s > máx " + opts.maxMoveSeconds + "s (posible alucinación)");
+                return;
+            }
             var mode = kind === "IN" ? "in" : "out";
             var clamped = clampToWordGap(words, t, mode, opts);
-            if (Math.abs(clamped - original) < opts.minChangeSeconds) return; // sin cambio real
+            if (Math.abs(clamped - original) < opts.minChangeSeconds) {
+                if (debug) debug.push(kind + ": descartado, cambio < " + opts.minChangeSeconds + "s tras clamp");
+                return;
+            }
             // Si el original normaliza al mismo gap, el "move" del LLM es un eco
             // del tiempo actual con ruido — no hay ajuste real que proponer
             var normalizedOriginal = clampToWordGap(words, original, mode, opts);
-            if (Math.abs(clamped - normalizedOriginal) < opts.minChangeSeconds) return;
+            if (Math.abs(clamped - normalizedOriginal) < opts.minChangeSeconds) {
+                if (debug) debug.push(kind + ": descartado, el borde ya cae en el mismo gap de palabra (¿faltan palabras en el transcript?)");
+                return;
+            }
+            if (debug) debug.push(kind + ": MOVE " + original.toFixed(1) + "→" + clamped.toFixed(1) + "s");
             proposals.push({
                 kind: kind,
                 pairIdx: pairIdx,

@@ -485,13 +485,14 @@
                     errors.push(response.error);
                     log(session, "LLM error en " + label + " (" + secs + "s): " + response.error);
                 } else {
-                    var props = MR.resolveUnitResponse(unit, response, session.pairs, session.words);
+                    var debug = [];
+                    var props = MR.resolveUnitResponse(unit, response, session.pairs, session.words, { _debug: debug });
                     for (var i = 0; i < props.length; i++) {
                         props[i].unitLabel = label;
                         props[i].selected = true;
                         proposals.push(props[i]);
                     }
-                    log(session, label + " (" + secs + "s): " + props.length + " ajuste(s) propuesto(s)");
+                    log(session, label + " (" + secs + "s): " + props.length + " ajuste(s) · decisión LLM → " + debug.join(" | "));
                 }
                 idx++;
                 next();
