@@ -221,15 +221,39 @@
         var cached = loadWordsFromDisk(session.seqName);
         if (cached) {
             log(session, "Transcript cargado de Transcribe/ (" + cached.words.length + " palabras)");
+            publishTranscript(cached, session.seqName);
             callback(null, cached.words);
             return;
         }
 
-        if (!stt || !stt.isConfigured()) {
+        if (!stt) {
+            callback("El módulo STT no está inicializado.");
+            return;
+        }
+
+        // Si Whisper Local no encuentra su modelo, intentar la búsqueda
+        // profunda en disco antes de rendirse (no pedirle la ruta al usuario)
+        if (!stt.isConfigured() && stt.provider === "whisper_local" && stt.deepSearchWhisperModel) {
+            onProgress(3, "Buscando el modelo Whisper en el disco...");
+            stt.deepSearchWhisperModel(function() {
+                if (!stt.isConfigured()) {
+                    callback("Whisper Local no está listo (no se encontró el modelo ni con búsqueda en disco) y no hay transcript guardado para \"" + session.seqName + "\". Revisa Ajustes → Speech-to-Text.");
+                    return;
+                }
+                _exportAndTranscribe(session, onProgress, callback);
+            });
+            return;
+        }
+
+        if (!stt.isConfigured()) {
             callback("El proveedor STT no está configurado (Ajustes → Speech-to-Text) y no hay transcript guardado para \"" + session.seqName + "\".");
             return;
         }
 
+        _exportAndTranscribe(session, onProgress, callback);
+    }
+
+    function _exportAndTranscribe(session, onProgress, callback) {
         onProgress(5, "Exportando audio de \"" + session.seqName + "\"...");
         evalScript("findOrCreateAudioPreset()", function(preset) {
             if (preset.error) return callback(preset.error);
@@ -237,8 +261,8 @@
             setTimeout(function() {
                 var presetPath = String(preset.path).replace(/\\/g, "/");
                 evalScript('exportSequenceAudio("' + escExtend(presetPath) + '")', function(exp) {
-                    if (exp.error) return callback(exp.error);
-                    if (state && !state.transcribeFolder && exp.transcribeFolder) {
+                    if (exp.error) return callback("Error al exportar audio: " + exp.error);
+                    if (state && exp.transcribeFolder) {
                         state.transcribeFolder = exp.transcribeFolder;
                     }
                     log(session, "Audio exportado: " + exp.path);
@@ -247,15 +271,41 @@
                     stt.transcribe(exp.path, function(pct) {
                         onProgress(15 + Math.round(pct * 0.5), "Transcribiendo \"" + session.seqName + "\"... " + pct + "%");
                     }, function(result) {
-                        if (result.error) return callback(result.error);
+                        if (result.error) return callback("Error al transcribir: " + result.error);
                         if (!result.words || result.words.length === 0) return callback("La transcripción no devolvió palabras.");
                         log(session, "Transcripción: " + result.words.length + " palabras");
                         saveWordsToDisk(session.seqName, result);
+                        publishTranscript(result, session.seqName);
                         callback(null, result.words);
                     });
                 });
             }, delay);
         });
+    }
+
+    /**
+     * Publica el transcript en el resto del panel — mismo comportamiento que
+     * la auto-carga de transcript-cache: aparece en la card de Transcripción,
+     * alimenta Notas de Grabación y habilita "Traer transcripción".
+     */
+    function publishTranscript(result, label) {
+        try {
+            if (state) {
+                state.sttResult = result;
+                state.lastWhisperResult = result;
+            }
+            var rec = EP.recording;
+            if (rec && rec.refreshTraerTranscriptButtons) rec.refreshTraerTranscriptButtons();
+            if (rec && rec.applySttResultToRecordingNotes) rec.applySttResultToRecordingNotes(result, true);
+            if (global._epHideElement) global._epHideElement("recording-empty");
+            if (global._epSttResultToSRT && global._epLoadTranscriptText) {
+                global._epLoadTranscriptText(global._epSttResultToSRT(result), label);
+            }
+        } catch(e) {
+            if (global.EPLogger) {
+                try { EPLogger.log("marker-reviewer", "publish-error", e.message); } catch(_e) {}
+            }
+        }
     }
 
     // ─── Hints determinísticos ───────────────────────────────
@@ -354,6 +404,7 @@
             mrState.sessions = [session];
             mrState.currentIdx = 0;
             runSession(session, function(err) {
+                if (err) session.error = err;
                 finishRun(err);
             });
         });
@@ -486,13 +537,24 @@
         var stopBtn = $("btn-mrv-stop");
         if (stopBtn) stopBtn.classList.add("hidden");
         if (err && mrState.sessions.length === 0) return failRun(err);
-        if (err) showToast(err, "info");
         renderResults();
+        if (err) {
+            showToast(err, "error");
+            return;
+        }
         var total = 0;
-        for (var i = 0; i < mrState.sessions.length; i++) total += mrState.sessions[i].proposals.length;
-        showToast(total > 0
-            ? total + " ajuste(s) propuesto(s) en " + mrState.sessions.length + " secuencia(s)"
-            : "Marcadores validados — sin ajustes necesarios", total > 0 ? "info" : "success");
+        var failed = 0;
+        for (var i = 0; i < mrState.sessions.length; i++) {
+            total += mrState.sessions[i].proposals.length;
+            if (mrState.sessions[i].error) failed++;
+        }
+        if (failed > 0) {
+            showToast(failed + " secuencia(s) con error — revisa el detalle", "error");
+        } else {
+            showToast(total > 0
+                ? total + " ajuste(s) propuesto(s) en " + mrState.sessions.length + " secuencia(s)"
+                : "Marcadores validados — sin ajustes necesarios", total > 0 ? "info" : "success");
+        }
     }
 
     function stopRun() {
@@ -662,7 +724,7 @@
             (session.words ? " · " + session.words.length + " palabras" : "") + "</span></div>");
 
         if (session.error) {
-            html.push("<div class='mrv-warning'>⚠ " + escHtml(session.error) + "</div>");
+            html.push("<div class='mrv-error'>✗ " + escHtml(session.error) + "</div>");
         }
         for (var w = 0; w < session.warnings.length; w++) {
             html.push("<div class='mrv-warning'>⚠ " + escHtml(session.warnings[w]) + "</div>");

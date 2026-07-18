@@ -60,7 +60,7 @@ Editor-Pro/
 ├── CSXS/
 │   └── manifest.xml         # Manifiesto CEP: com.codigo.editorpro
 ├── whisper/                 # whisper.cpp: scripts de instalación + modelos .bin
-├── VERSION                  # Versión actual (2.2.0)
+├── VERSION                  # Versión actual (2.2.1)
 ├── dist/                    # ZXP empaquetado
 ├── build-zxp.sh             # Firma y empaqueta ZXP
 └── install.sh               # Symlink para desarrollo + habilita debug mode
@@ -206,6 +206,7 @@ Herramienta previa a Cortes Automáticos: valida cada marcador IN/OUT contra el 
 ### Whisper Local — detección ampliada (v2.2.0)
 - Modelos ggml/gguf con cualquier nombre en: `<plugin>/whisper/`, `~/.cache/whisper/`, `~/.whisper`, `~/models`, `~/whisper.cpp/models`, Homebrew share, Application Support de MacWhisper y cache de Hugging Face (`models--*whisper*/snapshots/`). Se elige el de mayor calidad (large-v3 > turbo > medium > ...)
 - Binarios: `whisper-cli`/`whisper-cpp`/`main` en plugin, Homebrew, `~/whisper.cpp/build/bin/` y PATH
+- **Búsqueda profunda automática (v2.2.1)**: si el escaneo de carpetas no encuentra modelo, `deepSearchWhisperModel()` busca ggml/gguf en todo el disco con Spotlight (`mdfind`, macOS) y persiste el resultado en `editorpro_whisper_model_auto`. Se dispara sola al refrescar el estado en Ajustes y antes de transcribir
 - **Backend Python (openai-whisper)**: si no hay whisper.cpp pero existe el comando `whisper` con modelos `.pt` en `~/.cache/whisper/`, se transcribe con `whisper <wav> --output_format json --word_timestamps True` (timestamps reales por palabra)
 - **Override manual en Ajustes**: "Elegir modelo..." / "Elegir binario..." persistidos en localStorage (`editorpro_whisper_model`/`_binary`), botón "✕ auto" para volver a detección automática
 
@@ -376,12 +377,12 @@ Inserta supertextos como clips de Essential Graphics (MOGRT) en la línea de tie
 El header tiene 3 botones (además del dropdown de secuencia activa):
 
 1. **Log** (icono de descarga) — descarga el log de la sesión a la carpeta de Descargas.
-2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.2.0`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.1.3 → v2.2.0`).
+2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.2.1`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.2.0 → v2.2.1`).
 3. **Ajustes** — abre el panel de configuración (proveedor STT, proveedor de IA, API keys, modelo).
 
 > Nota histórica: los botones de debug de MOGRT (🔍/🔬) fueron removidos.
 
 ## Versión y auto-actualización
 
-- La versión vive en el archivo `VERSION` (actual: **2.2.0**) y en `CSXS/manifest.xml`.
+- La versión vive en el archivo `VERSION` (actual: **2.2.1**) y en `CSXS/manifest.xml`.
 - `updater.js` implementa un auto-updater basado en la GitHub API (no requiere git instalado) que descarga desde la rama **`workspace-daniel`**.
