@@ -324,6 +324,97 @@
         return Math.max(tO, targetO.end);
     }
 
+    // ─── Detector determinístico de conteos / lead-in ────────
+    //
+    // Independiente del LLM: si un bloque ARRANCA con un conteo ("3,2,1" /
+    // "tres dos uno") o cues de producción ("listo", "grabando", "acción"),
+    // propone avanzar el IN al final de ese conteo, donde empieza el contenido.
+    // Resuelve el caso clásico aunque el modelo devuelva "keep".
+
+    var NUMBER_TOKENS = (function() {
+        var m = {};
+        var arr = ["0","1","2","3","4","5","6","7","8","9",
+                   "cero","uno","una","dos","tres","cuatro","cinco","seis","siete","ocho","nueve","diez"];
+        for (var i = 0; i < arr.length; i++) m[arr[i]] = true;
+        return m;
+    })();
+
+    var CUE_TOKENS = (function() {
+        var m = {};
+        var arr = ["listo","dale","grabando","grabamos","accion","corre","corriendo",
+                   "ya","aja","aja", "va", "vale"];
+        for (var i = 0; i < arr.length; i++) m[arr[i]] = true;
+        return m;
+    })();
+
+    // Normaliza un token: minúsculas, sin acentos ni puntuación.
+    function normToken(text) {
+        var t = String(text || "").toLowerCase();
+        try { t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch(e) {}
+        return t.replace(/[.,!?;:…"“”'’¿¡()\[\]—–\-]/g, "").replace(/\s+/g, "");
+    }
+
+    // Palabras habladas (type "word") cuyo punto medio cae en [start, end].
+    function wordsInRange(words, start, end) {
+        var out = [];
+        for (var i = 0; i < words.length; i++) {
+            var w = words[i];
+            if (w.type && w.type !== "word") continue;
+            var mid = (w.start + w.end) / 2;
+            if (mid >= start - 0.01 && mid <= end + 0.01) out.push({ word: w, index: i });
+        }
+        return out;
+    }
+
+    /**
+     * Devuelve proposals de IN para bloques que empiezan con un conteo.
+     * Formato idéntico a resolveUnitResponse: {kind:"IN", pairIdx, marker,
+     * originalTime, newTime, reason, repeatedPhrase:"", snippet}.
+     */
+    function detectLeadIns(words, pairs, opts) {
+        opts = mergeOpts(opts);
+        var proposals = [];
+        if (!words || !pairs) return proposals;
+
+        for (var p = 0; p < pairs.length; p++) {
+            var inT = pairs[p].inMarker.startSeconds;
+            var outT = pairs[p].outMarker.startSeconds;
+            var segWords = wordsInRange(words, inT, outT);
+            if (segWords.length < 4) continue;
+
+            // Run inicial de tokens de conteo/cue; exige al menos un número
+            var runLen = 0;
+            var hasNumber = false;
+            for (var i = 0; i < segWords.length; i++) {
+                var tk = normToken(segWords[i].word.text);
+                if (tk === "") { runLen++; continue; } // puntuación: parte del run
+                if (NUMBER_TOKENS[tk]) { hasNumber = true; runLen++; }
+                else if (CUE_TOKENS[tk]) { runLen++; }
+                else break;
+            }
+            if (!hasNumber || runLen === 0) continue;
+            if (runLen >= segWords.length - 2) continue; // casi todo es conteo: no fiable
+
+            var firstReal = segWords[runLen].word;
+            var clamped = clampToWordGap(words, firstReal.start, "in", opts);
+            if (clamped - inT < opts.minChangeSeconds) continue; // ya está donde debe
+
+            proposals.push({
+                kind: "IN",
+                pairIdx: p,
+                marker: pairs[p].inMarker,
+                originalTime: inT,
+                newTime: clamped,
+                llmTime: firstReal.start,
+                reason: "Conteo/arranque de producción al inicio — el bloque empieza en la primera frase real",
+                repeatedPhrase: "",
+                deterministic: true,
+                snippet: snippetAround(words, clamped, 6)
+            });
+        }
+        return proposals;
+    }
+
     // ─── Prompts LLM ─────────────────────────────────────────
 
     var SYSTEM_MSG = "Eres un asistente de edición de video para clases educativas grabadas. " +
@@ -354,8 +445,11 @@
                     "ANTES del IN (se descarta):\n" + formatContext(ctx.before) + "\n\n" +
                     "DESPUÉS del IN (se conserva):\n" + formatContext(ctx.after) + "\n\n" +
                     (unit.hints ? "Sugerencias automáticas: " + unit.hints + "\n\n" : "") +
-                    "¿El IN está donde arranca la frase con sentido? Responde JSON:\n" +
-                    '{"in": {"action": "keep"|"move", "time": <segundos donde empieza la palabra que abre la frase>, "reason": "<breve, en español>"}}'
+                    "IMPORTANTE: si lo primero que se dice es un conteo (\"3, 2, 1\" / \"tres dos uno\"), un cue de producción " +
+                    "(\"listo\", \"grabando\", \"acción\") o un arranque a medias, el IN DEBE moverse hasta la primera palabra de la frase real. " +
+                    "Solo responde \"keep\" si el IN ya cae exactamente donde arranca la frase con sentido.\n" +
+                    "¿Dónde debe empezar? Responde JSON:\n" +
+                    '{"in": {"action": "keep"|"move", "time": <segundos donde empieza la palabra que abre la frase real>, "reason": "<breve, en español>"}}'
             };
         }
 
@@ -392,8 +486,9 @@
                 (unit.hints ? "Sugerencias automáticas: " + unit.hints + "\n\n" : "") +
                 "Valida tres cosas:\n" +
                 "1. El OUT debe caer justo después del final de la última frase con sentido del bloque anterior.\n" +
-                "2. El IN debe caer justo donde arranca la primera frase con sentido del bloque siguiente " +
-                "(descartando conteos, muletillas de arranque y frases a medias).\n" +
+                "2. El IN debe caer justo donde arranca la primera frase con sentido del bloque siguiente. " +
+                "Si el bloque siguiente empieza con un conteo (\"3, 2, 1\" / \"tres dos uno\"), un cue (\"listo\", \"grabando\", \"acción\") " +
+                "o una frase a medias, MUEVE el IN hasta la primera palabra de la frase real.\n" +
                 "3. MUY IMPORTANTE: si el inicio del bloque siguiente REPITE una frase que ya está al final del bloque anterior " +
                 "(el profesor retomó repitiendo lo último que dijo), el OUT debe RETROCEDER al tiempo donde empieza esa frase repetida " +
                 "en el bloque anterior, para que la frase quede una sola vez (la versión nueva, después del IN).\n\n" +
@@ -551,6 +646,7 @@
         buildBoundaryUnits: buildBoundaryUnits,
         computeAudioWindows: computeAudioWindows,
         windowsCoverPairs: windowsCoverPairs,
+        detectLeadIns: detectLeadIns,
         contextForTime: contextForTime,
         formatContext: formatContext,
         snippetAround: snippetAround,
