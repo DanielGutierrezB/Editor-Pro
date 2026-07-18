@@ -77,6 +77,13 @@
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 6A4.5 4.5 0 1 1 3 9.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M1 4.5V7.5H4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </button>
             </div>
+            <div id="whisper-local-pickers" class="settings-group hidden" style="display:flex;gap:6px;align-items:center;">
+                <button id="btn-whisper-pick-model" class="btn btn-sm btn-ghost">Elegir modelo...</button>
+                <button id="btn-whisper-pick-binary" class="btn btn-sm btn-ghost">Elegir binario...</button>
+                <button id="btn-whisper-clear-manual" class="btn btn-sm btn-ghost hidden" title="Volver a la detección automática">✕ auto</button>
+                <input type="file" id="whisper-model-file" class="hidden">
+                <input type="file" id="whisper-binary-file" class="hidden">
+            </div>
             <div id="stt-model-group" class="settings-group">
                 <label class="settings-label">Modelo STT</label>
                 <select id="stt-model-select" class="select-input">
@@ -116,6 +123,70 @@
 
     <!-- ═══ TOOL CARDS ═══ -->
     <div class="tools-container">
+
+        <!-- 0a. REVISAR MARCADORES -->
+        <div class="tool-card">
+            <div class="tool-card-header" data-tool="markerreviewer">
+                <span class="tool-card-title">🎯 Revisar Marcadores</span>
+                <div id="mrv-progress-header" class="header-progress hidden">
+                    <div class="progress-track header-progress-track"><div id="mrv-progress-header-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="mrv-progress-header-text" class="header-progress-text">Revisando...</span>
+                </div>
+                <span class="toggle-icon">▸</span>
+            </div>
+            <div class="tool-card-body hidden" id="mrv-body">
+                <p class="tool-description">Antes de cortar: transcribe la secuencia, valida cada marcador IN/OUT contra el transcript con la IA configurada y mueve los marcadores a donde la frase tiene sentido. Detecta frases repetidas entre bloques (retomas) y corrige el OUT anterior. Al final construye el transcript de la clase como quedaría cortada.</p>
+
+                <div class="btn-row">
+                    <button id="btn-mrv-review-active" class="btn-analyze">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+                            <circle cx="8" cy="8" r="2" fill="currentColor"/>
+                        </svg>
+                        <span>Revisar Activa</span>
+                    </button>
+                    <button id="btn-mrv-review-open" class="btn-analyze btn-batch">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <rect x="1" y="2" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                            <rect x="1" y="7" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                            <rect x="1" y="12" width="14" height="3" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                        </svg>
+                        <span>Revisar Abiertas</span>
+                    </button>
+                    <button id="btn-mrv-stop" class="btn btn-ghost btn-danger-text hidden">■ Detener</button>
+                </div>
+
+                <div id="mrv-progress" class="progress-bar hidden">
+                    <div class="progress-track"><div id="mrv-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                    <span id="mrv-progress-text" class="progress-text">Revisando...</span>
+                </div>
+
+                <div id="mrv-empty" class="empty-state-mini">
+                    <p class="empty-text">Coloca tus marcadores IN/OUT como siempre y presiona <strong>Revisar Activa</strong>. La herramienta transcribe (o reusa el transcript de Transcribe/), valida cada marcador con la IA y te propone los ajustes antes de cortar con Cortes Automáticos.</p>
+                </div>
+
+                <div id="mrv-results" class="hidden">
+                    <div id="mrv-session-tabs" class="mrv-session-tabs hidden"></div>
+                    <div id="mrv-session-body"></div>
+                    <button id="btn-mrv-apply" class="btn-analyze btn-execute hidden">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8.5L6 12.5L14 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>Aplicar seleccionados</span>
+                    </button>
+
+                    <div id="mrv-final-section" class="mrv-final-section hidden">
+                        <div class="mrv-group-title">Transcript final (como quedaría la clase)</div>
+                        <div id="mrv-final-summary" class="mrv-note"></div>
+                        <textarea id="mrv-final-text" class="mrv-final-text" readonly></textarea>
+                        <div class="btn-row">
+                            <button id="btn-mrv-coherence" class="btn btn-ghost btn-sm">Validar coherencia con IA</button>
+                            <button id="btn-mrv-save-final" class="btn btn-ghost btn-sm">Guardar .txt</button>
+                            <button id="btn-mrv-copy-final" class="btn btn-ghost btn-sm">Copiar</button>
+                        </div>
+                        <div id="mrv-coherence-result" class="mrv-coherence-result hidden"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- 0. PR-CUTTER -->
         <div class="tool-card">
@@ -259,80 +330,6 @@
                             <div id="cutter-marker-list" class="marker-list"></div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 0b. PR-CUTTER 2 (reconstrucción XML) -->
-        <div class="tool-card">
-            <div class="tool-card-header" data-tool="cutter2">
-                <span class="tool-card-title">⚡ Cortes Automáticos 2</span>
-                <span class="toggle-icon">▸</span>
-            </div>
-            <div class="tool-card-body hidden" id="cutter2-body">
-                <p class="tool-description">Corta por reconstrucción XML: exporta la secuencia, elimina las zonas y reimporta como secuencia nueva en segundos. <strong>La secuencia original no se modifica.</strong> Usa los mismos marcadores IN/OUT que Cortes Automáticos.</p>
-                <label class="cutter-option" style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);margin-bottom:6px;cursor:pointer;">
-                    <input type="checkbox" id="cutter2-skip-clapperboard" checked> Ignorar claqueta (por nombre; si no, el primer marcador)
-                </label>
-
-                <div class="btn-row">
-                    <button id="btn-cutter2-analyze" class="btn-analyze">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M2 3h12M2 8h8M2 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                            <circle cx="13" cy="11" r="2.5" stroke="currentColor" stroke-width="1.5"/>
-                        </svg>
-                        <span>Leer Marcadores</span>
-                    </button>
-                </div>
-
-                <div id="cutter2-progress" class="progress-bar hidden">
-                    <div class="progress-track"><div id="cutter2-progress-fill" class="progress-fill" style="width:0%"></div></div>
-                    <span id="cutter2-progress-text" class="progress-text">Leyendo marcadores...</span>
-                </div>
-
-                <div id="cutter2-empty" class="empty-state-mini">
-                    <p class="empty-text">Presiona <strong>Leer Marcadores</strong> para analizar la secuencia activa. El corte genera una secuencia nueva sin tocar la original.</p>
-                </div>
-
-                <div id="cutter2-results" class="hidden">
-                    <div class="summary-bar">
-                        <div class="stat-box keep">
-                            <div class="stat-label">Mantener</div>
-                            <div id="cutter2-keep-duration" class="stat-value">0:00</div>
-                            <div id="cutter2-keep-blocks" class="stat-detail">0 bloques</div>
-                        </div>
-                        <div class="stat-box remove">
-                            <div class="stat-label">Eliminar</div>
-                            <div id="cutter2-remove-duration" class="stat-value">0:00</div>
-                            <div id="cutter2-remove-blocks" class="stat-detail">0 zonas</div>
-                        </div>
-                        <div class="stat-box comment">
-                            <div class="stat-label">Anidaciones</div>
-                            <div id="cutter2-nest-count" class="stat-value">0</div>
-                            <div id="cutter2-nest-detail" class="stat-detail">anidaciones</div>
-                        </div>
-                    </div>
-                    <div id="cutter2-nest-warning" class="cutter2-nest-warning hidden"></div>
-                    <div id="cutter2-warnings" class="cutter2-warnings hidden"></div>
-                    <div id="cutter2-block-list" class="block-list"></div>
-                    <button id="btn-cutter2-execute" class="btn-analyze btn-execute">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 5-10 5V3z" fill="currentColor"/></svg>
-                        <span>Ejecutar Cortes (XML)</span>
-                    </button>
-                </div>
-
-                <div id="cutter2-result-done" class="hidden">
-                    <div class="result-panel result-panel-compact">
-                        <div class="result-header-row">
-                            <span class="result-icon-inline">&#10003;</span>
-                            <span id="cutter2-result-msg" class="result-msg">Cortes ejecutados</span>
-                        </div>
-                        <div id="cutter2-result-detail" class="result-detail"></div>
-                        <div class="result-actions-row">
-                            <button id="btn-cutter2-copy-log" class="btn btn-ghost">Copiar Log</button>
-                        </div>
-                    </div>
-                    <button id="btn-cutter2-back" class="btn-back-nav">&#8592; Volver al inicio</button>
                 </div>
             </div>
         </div>
@@ -1104,20 +1101,6 @@
         </div>
     </div>
 
-    <!-- Confirm Dialog (Cutter 2) -->
-    <div id="cutter2-confirm-overlay" class="confirm-overlay hidden">
-        <div class="confirm-dialog">
-            <div class="confirm-title">Confirmar cortes (XML)</div>
-            <div id="cutter2-confirm-msg" class="confirm-msg">
-                Se creará una secuencia nueva con los cortes aplicados. La secuencia original no se modifica.
-            </div>
-            <div class="confirm-actions">
-                <button id="btn-cutter2-cancel" class="btn btn-ghost">Cancelar</button>
-                <button id="btn-cutter2-confirm" class="btn btn-confirm-danger">Crear secuencia cortada</button>
-            </div>
-        </div>
-    </div>
-
     <!-- Info Modal (persistent, closeable) -->
     <div id="info-modal-overlay" class="confirm-overlay hidden">
         <div class="confirm-dialog info-modal-dialog">
@@ -1161,9 +1144,8 @@
     <script src="js/transcript-cache.js"></script>
     <script src="js/transcript-manager.js"></script>
     <script src="js/cutter.js"></script>
-    <script src="js/xml-cut-engine.js"></script>
     <script src="js/cut-validator.js"></script>
-    <script src="js/cutter2.js"></script>
+    <script src="js/marker-reviewer.js"></script>
 
     <!-- Auto-updater (GitHub API-based, no git required) -->
     <script src="js/updater.js"></script>
@@ -1177,5 +1159,6 @@
     <script src="js/ui-edit-suggestions.js"></script>
     <script src="js/ui-recording.js"></script>
     <script src="js/ui-validator.js"></script>
+    <script src="js/ui-marker-reviewer.js"></script>
 </body>
 </html>
