@@ -534,8 +534,8 @@
             }
             var unit = units[idx];
             unit.hints = hints["t" + unit.pairIdx] || "";
-            var label = "bloque " + (unit.pairIdx + 1);
-            onProgress(Math.round((idx / units.length) * 100), "Validando " + label + " (" + (idx + 1) + "/" + units.length + ")...");
+            var label = "bloque IN/OUT " + (unit.pairIdx + 1);
+            onProgress(Math.round((idx / units.length) * 100), "Validando " + label + " (" + (idx + 1) + "/" + units.length + " bloques)...");
 
             var built = MR.buildUnitPrompt(unit, session.pairs, session.words);
             var callStart = Date.now();
@@ -671,6 +671,7 @@
         evalScript(markersCall, function(data) {
             if (mrState.cancelled) return;
             if (data.error) return done(data.error);
+            session.markerCount = (data.markers || []).length;
             var parsed = MR.parsePairs(data.markers, { skipClapperboard: true });
             if (parsed.error) return done(parsed.error);
             session.pairs = parsed.pairs;
@@ -927,7 +928,8 @@
         var html = [];
 
         html.push("<div class='mrv-seq-title'>" + escHtml(session.seqName) +
-            " <span class='mrv-seq-meta'>" + session.pairs.length + " bloques" +
+            " <span class='mrv-seq-meta'>" + session.pairs.length + " bloques IN/OUT" +
+            (session.markerCount ? " (de " + session.markerCount + " marcadores)" : "") +
             (session.words ? " · " + session.words.length + " palabras" : "") + "</span></div>");
 
         if (session.error) {
