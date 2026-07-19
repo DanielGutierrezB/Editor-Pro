@@ -718,7 +718,7 @@
         return filePath;
     };
 
-    SpeechToText.prototype._transcribeWhisperLocal = function(filePath, onProgress, callback) {
+    SpeechToText.prototype._transcribeWhisperLocal = function(filePath, onProgress, callback, _noWordLevel) {
         if (!childProcess) {
             callback({ error: "child_process no disponible." });
             return;
@@ -769,7 +769,13 @@
         onProgress(10);
 
         var jsonOutPath = safeFilePath + ".json";
+        // Timestamps REALES por palabra: -ml 1 (un token por segmento) + -sow
+        // (dividir en palabras). Si el build no soporta estos flags, reintenta
+        // sin ellos (cae a estimación). Sin esto, los tiempos por palabra se
+        // estiman dividiendo la frase — impreciso para colocar cortes.
+        var wordLevel = !_noWordLevel;
         var args = ["-m", modelPath, "-f", safeFilePath, "-l", "es", "-t", String(threads), "-oj", "-pp"];
+        if (wordLevel) args = args.concat(["-ml", "1", "-sow"]);
         var stderrBuf = "";
         var finished = false;
         var child = childProcess.spawn(binaryInfo.binary, args);
@@ -812,6 +818,12 @@
                 return;
             }
             if (code !== 0) {
+                // Reintentar sin los flags de word-level por si el build no los soporta
+                if (wordLevel) {
+                    if (safeFilePath !== filePath) { try { fs.unlinkSync(safeFilePath); } catch(e) {} }
+                    self._transcribeWhisperLocal(filePath, onProgress, callback, true);
+                    return;
+                }
                 if (safeFilePath !== filePath) { try { fs.unlinkSync(safeFilePath); } catch(e) {} }
                 callback({ error: "whisper.cpp terminó con código " + code + ". Revisa que el archivo de audio sea válido." });
                 return;
@@ -835,22 +847,30 @@
                     var startMs = (seg.offsets && typeof seg.offsets.from === "number") ? seg.offsets.from : 0;
                     var endMs = (seg.offsets && typeof seg.offsets.to === "number") ? seg.offsets.to : 0;
                     var text = (seg.text || "").trim();
+                    if (!text) continue;
 
-                    // Whisper segments → split into pseudo-words with estimated timing
-                    var segWords = text.split(/\s+/);
-                    var segDuration = (endMs - startMs) / 1000;
-                    var wordDuration = segWords.length > 0 ? segDuration / segWords.length : 0;
+                    var segWords = text.split(/\s+/).filter(function(x) { return x; });
+                    var segStart = startMs / 1000;
+                    var segEnd = endMs / 1000;
 
-                    for (var w = 0; w < segWords.length; w++) {
-                        if (!segWords[w]) continue;
-                        var wStart = (startMs / 1000) + (w * wordDuration);
-                        var wEnd = wStart + wordDuration;
-                        words.push({
-                            text: segWords[w],
-                            start: wStart,
-                            end: wEnd,
-                            type: "word"
-                        });
+                    if (segWords.length === 1) {
+                        // Con -ml 1/-sow cada segmento es una palabra: tiempo REAL
+                        words.push({ text: segWords[0], start: segStart, end: segEnd, type: "word" });
+                    } else {
+                        // Respaldo (build sin word-level): repartir el tiempo del
+                        // segmento PONDERADO por longitud de cada palabra en vez
+                        // de uniforme — reduce el error de alineación.
+                        var totalChars = 0;
+                        var c;
+                        for (c = 0; c < segWords.length; c++) totalChars += segWords[c].length + 1;
+                        var segDur = Math.max(0, segEnd - segStart);
+                        var acc = segStart;
+                        for (c = 0; c < segWords.length; c++) {
+                            var frac = totalChars > 0 ? (segWords[c].length + 1) / totalChars : (1 / segWords.length);
+                            var wDur = segDur * frac;
+                            words.push({ text: segWords[c], start: acc, end: acc + wDur, type: "word" });
+                            acc += wDur;
+                        }
                     }
 
                     fullTextParts.push(text);
