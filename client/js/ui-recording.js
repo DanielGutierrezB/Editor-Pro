@@ -316,7 +316,8 @@
         if (_whisperDeepSearchState === "running") return;
 
         if (status.ready) {
-            var engineLabel = status.engine === "python" ? "Whisper (Python)" : "whisper.cpp";
+            var engineLabel = status.engine === "mlx" ? "Whisper MLX (Apple Silicon)"
+                : (status.engine === "python" ? "Whisper (Python)" : "whisper.cpp");
             statusText.innerHTML = '<span class="stt-connected">✓ ' + engineLabel + ' listo — ' +
                 esc(status.modelName || "modelo detectado") + '</span>' +
                 (status.modelPath ? '<br><span style="font-size:9px;color:var(--text-secondary);word-break:break-all;">' + esc(status.modelPath) + '</span>' : "");
@@ -2069,7 +2070,7 @@
         showElement("rec-cut-progress");
         setProgress("rec-cut-progress-fill", "rec-cut-progress-text", 10, "Creando backup de la secuencia...");
 
-        csInterface.evalScript("backupSequence()", function(backupRes) {
+        csInterface.evalScript("backupSequence('Pre-Cut')", function(backupRes) {
             var backup;
             try { backup = JSON.parse(backupRes); } catch(e) {
                 finishRecCut("Error al parsear backup: respuesta inválida");

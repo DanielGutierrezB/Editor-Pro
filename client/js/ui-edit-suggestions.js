@@ -147,6 +147,53 @@
         });
     }
 
+    /**
+     * Corre el análisis ES2 sobre un transcript arbitrario (no depende del
+     * textarea ni de state.transcript). Lo usa The Cutter con el transcript de
+     * la secuencia ya cortada. `extraContext` se antepone al transcript para que
+     * el LLM vea las notas del director de contenido.
+     * @param {function} cb cb(err, result)
+     */
+    function runWithTranscript(timedText, extraContext, cb) {
+        cb = cb || function() {};
+        if (!aiAnalyzer) return cb("El proveedor de IA no está inicializado");
+        if (!aiAnalyzer.isConfigured()) return cb("El proveedor de IA no está configurado (revisa Ajustes)");
+        if (!timedText || String(timedText).trim().length === 0) return cb("Transcripción vacía");
+
+        var payload = String(timedText);
+        if (extraContext && String(extraContext).trim().length > 0) {
+            payload = String(extraContext).trim() + "\n\n" + payload;
+        }
+
+        state.es2Analyzing = true;
+        hideElement("es2-empty");
+        hideElement("es2-results");
+        showElement("es2-progress");
+        setES2Progress(20, "Analizando contenido...");
+
+        aiAnalyzer.analyzeEditSuggestions2(payload, getPromptContext("es2"), function(result) {
+            setES2Progress(100, "Completado");
+            try {
+                hideElement("es2-progress");
+                hideElement("es2-progress-header");
+                if (result && result.error) {
+                    showElement("es2-empty");
+                    return cb(result.error);
+                }
+                state.es2Highlights = result.highlights || [];
+                state.es2Suggestions = result.suggestions || [];
+                state.es2Errors = postProcessES2Errors(result.errors || []);
+                renderES2Results(result);
+                showElement("es2-results");
+                cb(null, result);
+            } catch (e) {
+                cb("Error al procesar sugerencias: " + e.message);
+            } finally {
+                state.es2Analyzing = false;
+            }
+        });
+    }
+
     function postProcessES2Errors(errors) {
         var processed = errors.map(function(err) {
             if (!err.occurrences || err.occurrences.length < 2) return err;
@@ -1041,6 +1088,7 @@
     EP.editSuggestions = {
         init: _initRefs,
         start: startEditSuggestions2,
+        runWithTranscript: runWithTranscript,
         render: renderES2Results,
         exportData: exportEditSuggestions2,
         placeHighlightMarkers: placeES2HighlightMarkers,

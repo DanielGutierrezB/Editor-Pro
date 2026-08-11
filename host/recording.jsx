@@ -94,17 +94,22 @@ function findOrCreateAudioPreset() {
         presetBases.push("C:/Program Files/Adobe/Adobe Media Encoder " + years[y] + "/MediaIO/systempresets");
         presetBases.push("C:/Program Files/Adobe/Adobe Premiere Pro " + years[y] + "/MediaIO/systempresets");
     }
+    var best = null; // { path, rank }
     for (var b = 0; b < presetBases.length; b++) {
         var presetFolder = new Folder(presetBases[b]);
         if (!presetFolder.exists) continue;
-        // Los .epr suelen estar en subcarpetas; recorrer un nivel también
-        var found = _scanEprFolder(presetFolder);
-        if (found) return JSON.stringify({ success: true, path: found, cached: false });
+        // Los .epr suelen estar en subcarpetas; recorrer un nivel también.
+        best = _betterAudioPreset(best, _scanEprFolder(presetFolder));
+        if (best && best.rank >= 3) break;
         var subs = presetFolder.getFiles(function(f) { return f instanceof Folder; });
         for (var s = 0; s < subs.length; s++) {
-            found = _scanEprFolder(subs[s]);
-            if (found) return JSON.stringify({ success: true, path: found, cached: false });
+            best = _betterAudioPreset(best, _scanEprFolder(subs[s]));
+            if (best && best.rank >= 3) break;
         }
+        if (best && best.rank >= 3) break;
+    }
+    if (best && best.path) {
+        return JSON.stringify({ success: true, path: best.path, cached: false });
     }
 
     // 2) Último recurso: pedirle el preset a Media Encoder (abre AME una vez)
@@ -131,18 +136,43 @@ function findOrCreateAudioPreset() {
     });
 }
 
-// Busca en una carpeta un .epr de audio WAV (sin abrir AME).
+// Puntúa un nombre de preset .epr como preset de AUDIO WAV.
+// 0 = no sirve (o es de video/imagen). Mayor = mejor candidato de audio.
+// IMPORTANTE: "uncompressed" NO alcanza para audio — hay presets de video como
+// "AVI Uncompressed" u "OpenEXR Sequence - Uncompressed" que rompen
+// exportAsMediaDirect ("Unknown error exception"). Se excluyen explícitamente.
+function _audioPresetRank(name) {
+    var n = String(name || "").toLowerCase();
+    var reject = ["avi", "exr", "prores", "dnx", "h264", "h.264", "h265", "hevc",
+        "mpeg", "mp4", "quicktime", ".mov", "mxf", "image", "jpeg", "png", "tiff",
+        "targa", "dpx", "cineon", "sequence", "gif", "video", "cineform", "gopro"];
+    for (var i = 0; i < reject.length; i++) {
+        if (n.indexOf(reject[i]) >= 0) return 0;
+    }
+    if (n.indexOf("waveform") >= 0) return 3;
+    if (n.indexOf("wav") >= 0 && n.indexOf("audio") >= 0) return 3;
+    if (n.indexOf("wav") >= 0) return 2;
+    if (n.indexOf("aiff") >= 0 || n.indexOf("audio") >= 0) return 1;
+    return 0;
+}
+
+function _betterAudioPreset(a, b) {
+    if (!b) return a;
+    if (!a) return b;
+    return (b.rank > a.rank) ? b : a;
+}
+
+// Busca en una carpeta el mejor .epr de audio WAV (sin abrir AME).
+// Devuelve { path, rank } o null.
 function _scanEprFolder(folder) {
     if (!folder || !folder.exists) return null;
     var files = folder.getFiles("*.epr");
+    var best = null;
     for (var f = 0; f < files.length; f++) {
-        var fname = files[f].name.toLowerCase();
-        if (fname.indexOf("wav") >= 0 || fname.indexOf("waveform") >= 0 ||
-            fname.indexOf("uncompressed") >= 0) {
-            return files[f].fsName;
-        }
+        var rank = _audioPresetRank(files[f].name);
+        if (rank > 0) best = _betterAudioPreset(best, { path: files[f].fsName, rank: rank });
     }
-    return null;
+    return best;
 }
 
 // ─── Export Sequence Audio ────────────────────────────────────
@@ -178,15 +208,39 @@ function exportSequenceAudio(presetPath) {
         var existing = new File(outputPath);
         if (existing.exists) existing.remove();
 
-        seq.exportAsMediaDirect(outputPath, presetPath, 0);
-
+        // Premiere lanza a veces "Unknown error exception" en el primer intento
+        // de exportAsMediaDirect (secuencia recién activada / motor ocupado).
+        // Reintentar tras una pausa suele resolverlo.
         var exported = new File(outputPath);
-        if (!exported.exists) {
-            return JSON.stringify({ error: "La exportación no generó archivo. Verifica que el preset sea válido." });
+        var attempts = 0;
+        var lastErr = "";
+        while (attempts < 3) {
+            attempts++;
+            try {
+                seq.exportAsMediaDirect(outputPath, presetPath, 0);
+            } catch (exExport) {
+                lastErr = exExport.message || String(exExport);
+            }
+            exported = new File(outputPath);
+            if (exported.exists && exported.length > 0) break;
+            $.sleep(1500);
+            var stale = new File(outputPath);
+            if (stale.exists) { try { stale.remove(); } catch (exRm) {} }
         }
 
+        exported = new File(outputPath);
+        if (!exported.exists || exported.length === 0) {
+            return JSON.stringify({ error: "La exportación de audio no generó archivo tras " + attempts +
+                " intento(s)" + (lastErr ? " (" + lastErr + ")" : "") + ". Verifica que el preset WAV sea válido." });
+        }
+
+        // `seq.end` es un string de TICKS, no un objeto Time: `seq.end.seconds` es
+        // undefined y dejaba la duración en 0 dentro del transcript guardado — justo
+        // el dato con el que se detecta que un transcript ya no corresponde a la
+        // secuencia.
         var durationSecs = 0;
-        try { durationSecs = seq.end.seconds || 0; } catch(ex2) {}
+        try { durationSecs = parseFloat(seq.end) / TICKS_PER_SECOND; } catch(ex2) {}
+        if (!durationSecs || durationSecs < 0) durationSecs = 0;
 
         return JSON.stringify({
             success: true,
@@ -242,7 +296,7 @@ function openBackupAndCut(seqId, cutsFilePath) {
             });
         }
 
-        backupSequence();
+        backupSequence(BACKUP_LABEL_CUT);
         $.sleep(800);
 
         activeSeq = app.project.activeSequence;

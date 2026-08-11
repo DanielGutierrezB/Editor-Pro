@@ -8,7 +8,16 @@
 
 const suites = [
     { name: "cut-validator", mod: require("./cut-validator.test.js") },
-    { name: "marker-reviewer", mod: require("./marker-reviewer.test.js") }
+    { name: "marker-reviewer", mod: require("./marker-reviewer.test.js") },
+    { name: "mlx-parser", mod: require("./mlx-parser.test.js") },
+    { name: "transcript-edit", mod: require("./transcript-edit.test.js") },
+    { name: "transcript-repeats", mod: require("./transcript-repeats.test.js") },
+    { name: "thecutter-core", mod: require("./thecutter-core.test.js") },
+    { name: "host-cutter", mod: require("./host-cutter.test.js") },
+    { name: "marker-precision", mod: require("./marker-precision.test.js") },
+    { name: "marker-anchor", mod: require("./marker-anchor.test.js") },
+    { name: "audio-onset", mod: require("./audio-onset.test.js") },
+    { name: "marker-verify", mod: require("./marker-verify.test.js") }
 ];
 
 let totalPassed = 0;

@@ -280,6 +280,47 @@ function run() {
         assert(report[0].contextBeforeOut.indexOf("problemas") !== -1, "contexto antes del OUT");
     }
 
+    section("detectPickups() — retoma que rebobina al MEDIO del bloque previo");
+    {
+        // Bloque 1: intro + frase buena a mitad + intento fallido al final.
+        // Bloque 2 arranca repitiendo la frase del MEDIO (no la cola).
+        const w1 = mkWords("bueno vamos a empezar con la introduccion el teorema de pitagoras dice que en un triangulo rectangulo eh no me equivoque perdon", 10);
+        const w2 = mkWords("el teorema de pitagoras dice que en un triangulo rectangulo la hipotenusa al cuadrado es la suma de los catetos", lastEnd(w1) + 4);
+        const words = w1.concat(w2);
+        const segments = [
+            { inTime: w1[0].start - 0.3, outTime: lastEnd(w1) + 0.3 },
+            { inTime: w2[0].start - 0.3, outTime: lastEnd(w2) + 0.3 }
+        ];
+        const proposals = validator.detectPickups(words, segments);
+        const pk = proposals.filter(function(p) { return p.type === "pickup"; })[0];
+        assert(!!pk, "detecta la retoma aunque la frase esté en el medio del bloque previo");
+        if (pk) {
+            assertEq(pk.prevSegPos, 0, "retoma sobre el bloque 0");
+            assertEq(pk.anchored, false, "el match NO está anclado al final (rebobinó al medio)");
+            // "el teorema..." empieza ~t=12.4; el OUT debe retroceder ahí, no quedarse al final (~19)
+            assert(pk.proposedOutTime < 14 && pk.proposedOutTime > 11.5, "OUT retrocede al inicio de la frase del medio (obtenido " + pk.proposedOutTime.toFixed(2) + ")");
+            assert(pk.removedSeconds > 4, "recorta el intento fallido del final (" + pk.removedSeconds.toFixed(1) + "s)");
+            assert(pk.matchText.indexOf("teorema") !== -1, "la frase repetida es la del medio");
+        }
+    }
+
+    section("detectPickups() — alucinación de una sola palabra repetida → NO propone");
+    {
+        // Toma 1 termina con una racha alucinada "nuevo nuevo nuevo..."
+        // Toma 2 arranca con la misma racha. Sin blindaje esto dispararía un
+        // pickup falso; con él, no debe proponer nada (1 solo token distinto).
+        const w1 = mkWords("hoy vemos el tema principal de la clase nuevo nuevo nuevo nuevo nuevo nuevo nuevo", 5);
+        const w2 = mkWords("nuevo nuevo nuevo nuevo nuevo nuevo nuevo y ahora seguimos con otra cosa distinta", lastEnd(w1) + 3);
+        const words = w1.concat(w2);
+        const segments = [
+            { inTime: w1[0].start - 0.3, outTime: lastEnd(w1) + 0.3 },
+            { inTime: w2[0].start - 0.3, outTime: lastEnd(w2) + 0.3 }
+        ];
+        const proposals = validator.detectPickups(words, segments);
+        const realPickups = proposals.filter(function(p) { return p.type === "pickup"; });
+        assertEq(realPickups.length, 0, "una sola palabra repetida no cuenta como retoma");
+    }
+
     return { passed, failed };
 }
 

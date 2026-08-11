@@ -26,10 +26,13 @@
     "use strict";
 
     var DEFAULTS = {
-        tailWords: 20,        // palabras de la cola de la toma previa a comparar
+        tailWords: 20,        // palabras de la cola de la toma previa (si no se busca el bloque entero)
         headWords: 20,        // palabras de la cabeza de la toma siguiente
-        minMatchWords: 3,     // mínimo de palabras coincidentes contiguas
-        minMatchChars: 12,    // mínimo de caracteres significativos del match
+        searchWholePrevBlock: true, // buscar la frase de apertura del bloque siguiente en TODO el bloque previo (retomas que rebobinan lejos), no solo en la cola
+        minMatchWords: 3,     // mínimo de palabras contiguas si el match está pegado al final del bloque previo
+        minMatchChars: 12,    // mínimo de caracteres significativos si está pegado al final
+        minMatchWordsFar: 4,  // umbral MÁS estricto cuando el match cae lejos del final (evita falsos positivos por frases comunes a mitad de bloque)
+        minMatchCharsFar: 18,
         maxHeadOffset: 6,     // el match debe empezar en las primeras N palabras de la cabeza
         minRemainderSec: 1.0, // no proponer si la toma previa quedaría más corta que esto
         snapMinPre: 0.15,     // margen mínimo antes de la primera palabra
@@ -122,34 +125,33 @@
     // ─── Detector de pickups ─────────────────────────────────
 
     /**
-     * Busca el match contiguo más largo entre la cola de tailTokens y la
-     * cabeza de headTokens, exigiendo que:
-     *   - el match empiece dentro de las primeras maxHeadOffset palabras de
-     *     la cabeza, y
-     *   - el match termine en las últimas 2 palabras de la cola (anclado al
-     *     final de la toma previa). Sin este anclaje, una muletilla repetida
-     *     a mitad de la cola generaría un pickup que borra contenido único.
-     * Devuelve { tailStart, headStart, length } o null.
-     * Ante empates de longitud prefiere el match más tardío en la cola
-     * (corta lo mínimo necesario de la toma previa).
+     * Busca el match contiguo más largo entre las palabras del bloque previo
+     * (prevTokens) y la cabeza del bloque siguiente (headTokens), exigiendo que
+     * el match empiece dentro de las primeras maxHeadOffset palabras de la
+     * cabeza (o sea, que sea la APERTURA del bloque siguiente lo que se repite).
+     * NO exige que el match esté al final del bloque previo: el profe puede
+     * rebobinar y repetir una frase del medio. Devuelve
+     * { tailStart, headStart, length, anchored } o null. `anchored` indica si el
+     * match termina cerca del final del bloque previo (retoma "clásica").
+     * Prefiere el match más largo; a igual longitud, el más tardío (corta menos).
      */
-    function findOverlap(tailTokens, headTokens, opts) {
+    function findOverlap(prevTokens, headTokens, opts) {
         var best = null;
-        for (var i = 0; i < tailTokens.length; i++) {
+        for (var i = 0; i < prevTokens.length; i++) {
             for (var j = 0; j < headTokens.length && j < opts.maxHeadOffset; j++) {
                 var len = 0;
-                while (i + len < tailTokens.length &&
+                while (i + len < prevTokens.length &&
                        j + len < headTokens.length &&
-                       tailTokens[i + len] === headTokens[j + len]) {
+                       prevTokens[i + len] === headTokens[j + len]) {
                     len++;
                 }
                 if (len === 0) continue;
-                if (i + len < tailTokens.length - 2) continue; // no anclado al final de la cola
                 if (!best || len > best.length || (len === best.length && i > best.tailStart)) {
                     best = { tailStart: i, headStart: j, length: len };
                 }
             }
         }
+        if (best) best.anchored = (best.tailStart + best.length >= prevTokens.length - 2);
         return best;
     }
 
@@ -173,7 +175,7 @@
             var tailTokens = [];
             var headTokens = [];
             var i, tk;
-            var tailRaw = prevWords.slice(-opts.tailWords);
+            var tailRaw = opts.searchWholePrevBlock ? prevWords : prevWords.slice(-opts.tailWords);
             var headRaw = nextWords.slice(0, opts.headWords);
             for (i = 0; i < tailRaw.length; i++) {
                 tk = normToken(tailRaw[i].word.text);
@@ -186,13 +188,28 @@
             if (tail.length === 0 || head.length === 0) continue;
 
             var match = findOverlap(tailTokens, headTokens, opts);
-            if (!match || match.length < opts.minMatchWords) continue;
+            if (!match) continue;
+            // Umbral según dónde cayó el match: pegado al final del bloque previo
+            // (retoma clásica) usa el bar suelto; lejos del final exige más
+            // palabras/caracteres para no disparar por frases comunes del medio.
+            var minW = match.anchored ? opts.minMatchWords : opts.minMatchWordsFar;
+            var minC = match.anchored ? opts.minMatchChars : opts.minMatchCharsFar;
+            if (match.length < minW) continue;
 
             var matchedChars = 0;
+            var uniqTokens = {};
             for (i = 0; i < match.length; i++) {
-                matchedChars += tailTokens[match.tailStart + i].length;
+                var mt = tailTokens[match.tailStart + i];
+                matchedChars += mt.length;
+                uniqTokens[mt] = true;
             }
-            if (matchedChars < opts.minMatchChars) continue;
+            if (matchedChars < minC) continue;
+            // Una "frase repetida" formada por la MISMA palabra repetida
+            // ("nuevo nuevo nuevo...") es una alucinación de Whisper, no una
+            // retoma real: exigir al menos 2 tokens distintos.
+            var uniqCount = 0;
+            for (var uk in uniqTokens) { if (uniqTokens.hasOwnProperty(uk)) uniqCount++; }
+            if (uniqCount < 2) continue;
 
             var matchFirstWord = tail[match.tailStart].word;
             var matchLastTailWord = tail[match.tailStart + match.length - 1].word;
@@ -230,10 +247,12 @@
                 continue;
             }
 
-            // El match siempre viene anclado al final de la cola (findOverlap);
-            // confianza alta si además arranca al inicio de la cabeza y es largo
+            // Confianza alta si la apertura del bloque siguiente arranca al
+            // inicio de la cabeza, es larga y el match está anclado al final del
+            // bloque previo (retoma clásica). Si rebobinó más atrás (no anclado),
+            // el pickup es correcto pero más incierto → media.
             var headStartsAtBoundary = match.headStart <= 2;
-            var confidence = (headStartsAtBoundary && match.length >= 4) ? "alta" : "media";
+            var confidence = (match.anchored && headStartsAtBoundary && match.length >= 4) ? "alta" : "media";
 
             proposals.push({
                 type: "pickup",
@@ -247,6 +266,7 @@
                 proposedOutTime: proposedOutTime,
                 removedSeconds: prev.outTime - proposedOutTime,
                 nextInTime: next.inTime,
+                anchored: match.anchored,
                 confidence: confidence
             });
         }

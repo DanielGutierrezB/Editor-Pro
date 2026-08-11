@@ -7,14 +7,9 @@
  *
  * Responsabilidades:
  *   - parsePairs(markers, opts)        → pares IN/OUT (skip claqueta por nombre)
- *   - buildBoundaryUnits(pairs)        → unidades de revisión (primer IN,
- *                                        transiciones OUT→IN, último OUT)
  *   - contextForTime(words, t, n)      → palabras alrededor de un tiempo
- *   - formatContext(entries)           → texto "(t)palabra" para el prompt LLM
- *   - buildUnitPrompt(unit, words)     → systemMsg + prompt JSON para el LLM
- *   - resolveUnitResponse(...)         → valida la respuesta del LLM, clampa
- *                                        los tiempos a gaps de palabra y
- *                                        produce proposals accionables
+ *   - snippetAround(words, t, n)       → frase legible alrededor de un tiempo
+ *   - detectLeadIns(words, pairs)      → conteos "3,2,1" al inicio de un bloque
  *   - clampToWordGap(words, t, mode)   → nunca cortar a mitad de palabra
  *   - buildFinalTranscript(words, blocks) → transcript de la clase resultante
  *   - buildCoherencePrompt(text)       → prompt del chequeo final de sentido
@@ -27,13 +22,13 @@
 
     var DEFAULTS = {
         skipClapperboard: true,
-        contextWords: 60,      // palabras de contexto a cada lado de una frontera
-        maxMoveSeconds: 30,    // un ajuste mayor a esto se descarta como alucinación
         inPreMin: 0.1,         // margen mínimo antes de la primera palabra del IN
         inPreMax: 0.4,         // margen máximo
         outPostMin: 0.1,       // margen mínimo después de la última palabra del OUT
         outPostMax: 0.4,       // margen máximo
-        minChangeSeconds: 0.12 // por debajo de esto se considera "keep"
+        minChangeSeconds: 0.12, // por debajo de esto se considera "keep"
+        phraseGapSeconds: 0.45, // silencio que separa una frase de la siguiente
+        maxBandSeconds: 30      // por encima de esto la duración del IN no es una banda
     };
 
     function mergeOpts(opts) {
@@ -130,38 +125,6 @@
         return { pairs: pairs, skipped: skipped, warnings: warnings, error: null };
     }
 
-    // ─── Unidades de revisión ────────────────────────────────
-
-    /**
-     * Convierte los pares en unidades de revisión para el LLM:
-     *   - { type: "first-in",   pairIdx: 0 }
-     *   - { type: "transition", outPairIdx: i, inPairIdx: i+1 }  (OUT + IN + pickup)
-     *   - { type: "last-out",   pairIdx: n-1 }
-     * Total de llamadas al LLM: pares + 1.
-     */
-    function buildBoundaryUnits(pairs) {
-        var units = [];
-        if (!pairs || pairs.length === 0) return units;
-        units.push({ type: "first-in", pairIdx: 0 });
-        for (var i = 0; i < pairs.length - 1; i++) {
-            units.push({ type: "transition", outPairIdx: i, inPairIdx: i + 1 });
-        }
-        units.push({ type: "last-out", pairIdx: pairs.length - 1 });
-        return units;
-    }
-
-    /**
-     * Una unidad por bloque [IN, OUT]. Cada llamada al LLM evalúa AMBOS bordes
-     * del mismo bloque, con foco (evita que el modelo descuide el IN como
-     * pasaba con el prompt de transición combinado).
-     */
-    function buildBlockUnits(pairs) {
-        var units = [];
-        if (!pairs) return units;
-        for (var i = 0; i < pairs.length; i++) units.push({ type: "block", pairIdx: i });
-        return units;
-    }
-
     // ─── Ventanas de audio a transcribir ────────────────────
 
     /**
@@ -234,18 +197,6 @@
         if (before.length > n) before = before.slice(before.length - n);
         if (after.length > n) after = after.slice(0, n);
         return { before: before, after: after };
-    }
-
-    /**
-     * Formatea palabras para el prompt: "(12.3)palabra (12.8)otra ..."
-     * El timestamp es el START de cada palabra, con 1 decimal.
-     */
-    function formatContext(entries) {
-        var parts = [];
-        for (var i = 0; i < entries.length; i++) {
-            parts.push("(" + entries[i].start.toFixed(1) + ")" + entries[i].text);
-        }
-        return parts.join(" ");
     }
 
     /**
@@ -336,6 +287,45 @@
         return Math.max(tO, targetO.end);
     }
 
+    // ─── La banda que el CD le da al marcador IN ─────────────
+    //
+    // El CD le pone ~10s de duración a cada IN (el OUT vive en un frame). Esa banda
+    // es lo que el CD marcó como "por aquí abre el bloque", y hasta ahora se tiraba:
+    // solo se leía `startSeconds`.
+    //
+    // Se usa en una sola dirección, la que arregla el defecto que se ve en la
+    // timeline: el IN no se empuja MÁS ADELANTE del final de la banda. Empujarlo más
+    // sería saltarse contenido que el CD marcó como la apertura, y es exactamente lo
+    // que el editor reportaba como "el marcador inicia después de donde debería".
+    // Hacia atrás no limita nada: mover el IN antes es lo que hace `take-start`
+    // cuando el CD lo dejó a mitad de la toma.
+
+    /**
+     * La banda de un marcador, si su duración es creíble como tal.
+     * @returns {object|null} {start, end, span}
+     */
+    function markerBand(marker, opts) {
+        opts = mergeOpts(opts);
+        if (!marker || marker.endSeconds == null) return null;
+        var span = marker.endSeconds - marker.startSeconds;
+        // Un marcador de un frame es un punto, no una banda; uno larguísimo es otra
+        // cosa (un rango de la secuencia) y tampoco habla de dónde abre el bloque.
+        if (!(span > 0.5) || span > opts.maxBandSeconds) return null;
+        return { start: marker.startSeconds, end: marker.endSeconds, span: span };
+    }
+
+    /**
+     * ¿El punto elegido se sale de la banda que el CD marcó? Es señal, no ley: se
+     * escribe en el log para saber si la convención de los 10s se cumple.
+     * @returns {string} "" | "late" | "early"
+     */
+    function bandVerdict(band, time) {
+        if (!band) return "";
+        if (time > band.end) return "late";
+        if (time < band.start) return "early";
+        return "";
+    }
+
     // ─── Detector determinístico de conteos / lead-in ────────
     //
     // Independiente del LLM: si un bloque ARRANCA con un conteo ("3,2,1" /
@@ -343,10 +333,12 @@
     // propone avanzar el IN al final de ese conteo, donde empieza el contenido.
     // Resuelve el caso clásico aunque el modelo devuelva "keep".
 
+    // "una" no entra: nadie cuenta "tres, dos, una", y como artículo abre frases
+    // de contenido a todas horas ("Una pregunta de negocio sonaría...").
     var NUMBER_TOKENS = (function() {
         var m = {};
         var arr = ["0","1","2","3","4","5","6","7","8","9",
-                   "cero","uno","una","dos","tres","cuatro","cinco","seis","siete","ocho","nueve","diez"];
+                   "cero","uno","dos","tres","cuatro","cinco","seis","siete","ocho","nueve","diez"];
         for (var i = 0; i < arr.length; i++) m[arr[i]] = true;
         return m;
     })();
@@ -359,11 +351,32 @@
         return m;
     })();
 
+    // Con qué anuncia el profesor que vuelve a grabar. Vale sin conteo, pero solo si
+    // es un anuncio suelto: lo que sigue tiene que abrir frase, o "Retomemos lo que
+    // vimos la clase pasada" (que es clase) abriría el bloque en "lo".
+    var RETAKE_TOKENS = (function() {
+        var m = {};
+        var arr = ["retomemos","retomamos","retomo","retoma","retomando",
+                   "volvemos","repetimos","repito"];
+        for (var i = 0; i < arr.length; i++) m[arr[i]] = true;
+        return m;
+    })();
+
+    var ENDS_PHRASE = /(\.\.\.|…|[.!?])[")'\]»]*$/;
+
     // Normaliza un token: minúsculas, sin acentos ni puntuación.
     function normToken(text) {
         var t = String(text || "").toLowerCase();
         try { t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch(e) {}
         return t.replace(/[.,!?;:…"“”'’¿¡()\[\]—–\-]/g, "").replace(/\s+/g, "");
+    }
+
+    /** ¿La palabra en `idx` abre frase? (punto en la anterior o pausa en medio) */
+    function opensPhrase(segWords, idx, opts) {
+        if (idx <= 0 || idx >= segWords.length) return idx === 0;
+        var prev = segWords[idx - 1].word, here = segWords[idx].word;
+        if (ENDS_PHRASE.test(String(prev.text || "").replace(/\s+$/, ""))) return true;
+        return (here.start - prev.end) >= opts.phraseGapSeconds;
     }
 
     // Palabras habladas (type "word") cuyo punto medio cae en [start, end].
@@ -379,9 +392,9 @@
     }
 
     /**
-     * Devuelve proposals de IN para bloques que empiezan con un conteo.
-     * Formato idéntico a resolveUnitResponse: {kind:"IN", pairIdx, marker,
-     * originalTime, newTime, reason, repeatedPhrase:"", snippet}.
+     * Devuelve proposals de IN para bloques que empiezan con un conteo:
+     * {kind:"IN", pairIdx, marker, originalTime, newTime, reason,
+     * repeatedPhrase:"", snippet}.
      */
     function detectLeadIns(words, pairs, opts) {
         opts = mergeOpts(opts);
@@ -394,17 +407,24 @@
             var segWords = wordsInRange(words, inT, outT);
             if (segWords.length < 4) continue;
 
-            // Run inicial de tokens de conteo/cue; exige al menos un número
+            // Run inicial de tokens de conteo/cue. Un número suelto no basta: hace
+            // falta un conteo de verdad (dos números) o un número con un cue al
+            // lado, o "Uno de los problemas..." se leería como "3, 2, 1".
             var runLen = 0;
-            var hasNumber = false;
+            var numbers = 0;
+            var cues = 0;
+            var retakes = 0;
             for (var i = 0; i < segWords.length; i++) {
                 var tk = normToken(segWords[i].word.text);
                 if (tk === "") { runLen++; continue; } // puntuación: parte del run
-                if (NUMBER_TOKENS[tk]) { hasNumber = true; runLen++; }
-                else if (CUE_TOKENS[tk]) { runLen++; }
+                if (NUMBER_TOKENS[tk]) { numbers++; runLen++; }
+                else if (CUE_TOKENS[tk]) { cues++; runLen++; }
+                else if (RETAKE_TOKENS[tk]) { retakes++; runLen++; }
                 else break;
             }
-            if (!hasNumber || runLen === 0) continue;
+            if (runLen === 0) continue;
+            var counted = numbers >= 2 || (numbers >= 1 && cues >= 1);
+            if (!counted && !(retakes >= 1 && opensPhrase(segWords, runLen, opts))) continue;
             if (runLen >= segWords.length - 2) continue; // casi todo es conteo: no fiable
 
             var firstReal = segWords[runLen].word;
@@ -418,242 +438,12 @@
                 originalTime: inT,
                 newTime: clamped,
                 llmTime: firstReal.start,
-                reason: "Conteo/arranque de producción al inicio — el bloque empieza en la primera frase real",
+                reason: "Conteo, arranque de producción o anuncio de retoma al inicio — " +
+                    "el bloque empieza en la primera frase real",
                 repeatedPhrase: "",
                 deterministic: true,
                 snippet: snippetAround(words, clamped, 6)
             });
-        }
-        return proposals;
-    }
-
-    // ─── Prompts LLM ─────────────────────────────────────────
-
-    var SYSTEM_MSG = "Eres un asistente de edición de video para clases educativas grabadas. " +
-        "El profesor graba con errores, pausas y retomas; el editor marca IN (inicio de bloque bueno) " +
-        "y OUT (fin de bloque bueno) y todo lo que queda fuera de los bloques se elimina. " +
-        "Tu trabajo es validar que cada marcador caiga exactamente donde la frase tiene sentido. " +
-        "Recibes fragmentos del transcript donde cada palabra va precedida por su tiempo en segundos: (12.3)palabra. " +
-        "Cuando propongas mover un marcador, usa el tiempo de inicio de la palabra donde debe empezar la frase (para IN) " +
-        "o el tiempo de la palabra siguiente al final de la frase (para OUT). " +
-        "Responde ÚNICAMENTE con JSON válido, sin texto adicional ni markdown.";
-
-    /**
-     * Construye el prompt de una unidad. Devuelve { systemMsg, prompt }.
-     * hints: candidatos determinísticos opcionales (de EPCutValidator) como texto.
-     */
-    function buildUnitPrompt(unit, pairs, words, opts) {
-        opts = mergeOpts(opts);
-        var n = opts.contextWords;
-
-        if (unit.type === "block") {
-            var pair = pairs[unit.pairIdx];
-            var inT = pair.inMarker.startSeconds;
-            var outT = pair.outMarker.startSeconds;
-            var ctxInBefore = contextForTime(words, inT, n);
-            var ctxOutAfter = contextForTime(words, outT, n);
-            var num = unit.pairIdx + 1;
-            return {
-                systemMsg: SYSTEM_MSG,
-                prompt: "BLOQUE " + num + " de la clase. El editor marcó IN en t=" + inT.toFixed(1) +
-                    "s y OUT en t=" + outT.toFixed(1) + "s. Todo lo que queda dentro [IN, OUT] se conserva; " +
-                    "lo de fuera se elimina. Valida que ambos bordes caigan donde la frase tiene sentido.\n\n" +
-                    "ANTES del IN (se elimina):\n" + formatContext(ctxInBefore.before) + "\n\n" +
-                    "DESPUÉS del IN = inicio del bloque (se conserva):\n" + formatContext(ctxInBefore.after) + "\n\n" +
-                    "ANTES del OUT = final del bloque (se conserva):\n" + formatContext(ctxOutAfter.before) + "\n\n" +
-                    "DESPUÉS del OUT (se elimina):\n" + formatContext(ctxOutAfter.after) + "\n\n" +
-                    (unit.hints ? "Sugerencias automáticas: " + unit.hints + "\n\n" : "") +
-                    "Reglas:\n" +
-                    "- IN: debe caer donde ARRANCA la primera frase con sentido del bloque. Si empieza con un conteo " +
-                    "(\"3, 2, 1\"), un cue (\"listo\", \"grabando\", \"acción\") o una frase a medias, MUEVE el IN a la primera palabra de la frase real.\n" +
-                    "- OUT: debe caer justo DESPUÉS de la última frase completa con sentido. Si después hay una pausa, un error, " +
-                    "un comando al editor o una frase a medias, el OUT ya está bien; si el OUT corta una frase por la mitad, muévelo al final de esa frase.\n" +
-                    "Usa el tiempo (segundos) de la palabra correspondiente. Responde JSON:\n" +
-                    '{"in": {"action": "keep"|"move", "time": <segundos donde empieza la frase real>, "reason": "<breve, español>"}, ' +
-                    '"out": {"action": "keep"|"move", "time": <segundos de la palabra siguiente al final de la frase>, "reason": "<breve, español>"}}'
-            };
-        }
-
-        if (unit.type === "first-in") {
-            var inT = pairs[unit.pairIdx].inMarker.startSeconds;
-            var ctx = contextForTime(words, inT, n);
-            return {
-                systemMsg: SYSTEM_MSG,
-                prompt: "PRIMER MARCADOR IN de la clase (después de la claqueta). Está en t=" + inT.toFixed(1) + "s.\n" +
-                    "El bloque bueno debe empezar donde arranca la primera frase con sentido de la clase " +
-                    "(saludo o inicio del tema), descartando conteos (3,2,1), silencios y falsos arranques.\n\n" +
-                    "ANTES del IN (se descarta):\n" + formatContext(ctx.before) + "\n\n" +
-                    "DESPUÉS del IN (se conserva):\n" + formatContext(ctx.after) + "\n\n" +
-                    (unit.hints ? "Sugerencias automáticas: " + unit.hints + "\n\n" : "") +
-                    "IMPORTANTE: si lo primero que se dice es un conteo (\"3, 2, 1\" / \"tres dos uno\"), un cue de producción " +
-                    "(\"listo\", \"grabando\", \"acción\") o un arranque a medias, el IN DEBE moverse hasta la primera palabra de la frase real. " +
-                    "Solo responde \"keep\" si el IN ya cae exactamente donde arranca la frase con sentido.\n" +
-                    "¿Dónde debe empezar? Responde JSON:\n" +
-                    '{"in": {"action": "keep"|"move", "time": <segundos donde empieza la palabra que abre la frase real>, "reason": "<breve, en español>"}}'
-            };
-        }
-
-        if (unit.type === "last-out") {
-            var outT = pairs[unit.pairIdx].outMarker.startSeconds;
-            var ctxO = contextForTime(words, outT, n);
-            return {
-                systemMsg: SYSTEM_MSG,
-                prompt: "ÚLTIMO MARCADOR OUT de la clase. Está en t=" + outT.toFixed(1) + "s.\n" +
-                    "El bloque bueno debe terminar justo al final de la última frase con sentido " +
-                    "(cierre o despedida), sin cortar la frase ni incluir material sobrante (comandos al editor, pausas, errores).\n\n" +
-                    "ANTES del OUT (se conserva):\n" + formatContext(ctxO.before) + "\n\n" +
-                    "DESPUÉS del OUT (se descarta):\n" + formatContext(ctxO.after) + "\n\n" +
-                    (unit.hints ? "Sugerencias automáticas: " + unit.hints + "\n\n" : "") +
-                    "¿El OUT está justo después del final de la frase con sentido? Responde JSON:\n" +
-                    '{"out": {"action": "keep"|"move", "time": <segundos donde empieza la palabra SIGUIENTE al final de la frase>, "reason": "<breve, en español>"}}'
-            };
-        }
-
-        // transition: OUT del par i + IN del par i+1, con detección de repetición
-        var outTime = pairs[unit.outPairIdx].outMarker.startSeconds;
-        var inTime = pairs[unit.inPairIdx].inMarker.startSeconds;
-        var ctxOut = contextForTime(words, outTime, n);
-        var ctxIn = contextForTime(words, inTime, n);
-
-        return {
-            systemMsg: SYSTEM_MSG,
-            prompt: "TRANSICIÓN entre dos bloques buenos. El OUT del bloque anterior está en t=" + outTime.toFixed(1) +
-                "s y el IN del bloque siguiente en t=" + inTime.toFixed(1) + "s. Lo que queda entre ambos se elimina.\n\n" +
-                "FINAL del bloque anterior (antes del OUT, se conserva):\n" + formatContext(ctxOut.before) + "\n\n" +
-                "Justo después del OUT (se descarta):\n" + formatContext(ctxOut.after) + "\n\n" +
-                "Justo antes del IN (se descarta):\n" + formatContext(ctxIn.before) + "\n\n" +
-                "INICIO del bloque siguiente (después del IN, se conserva):\n" + formatContext(ctxIn.after) + "\n\n" +
-                (unit.hints ? "Sugerencias automáticas: " + unit.hints + "\n\n" : "") +
-                "Valida tres cosas:\n" +
-                "1. El OUT debe caer justo después del final de la última frase con sentido del bloque anterior.\n" +
-                "2. El IN debe caer justo donde arranca la primera frase con sentido del bloque siguiente. " +
-                "Si el bloque siguiente empieza con un conteo (\"3, 2, 1\" / \"tres dos uno\"), un cue (\"listo\", \"grabando\", \"acción\") " +
-                "o una frase a medias, MUEVE el IN hasta la primera palabra de la frase real.\n" +
-                "3. MUY IMPORTANTE: si el inicio del bloque siguiente REPITE una frase que ya está al final del bloque anterior " +
-                "(el profesor retomó repitiendo lo último que dijo), el OUT debe RETROCEDER al tiempo donde empieza esa frase repetida " +
-                "en el bloque anterior, para que la frase quede una sola vez (la versión nueva, después del IN).\n\n" +
-                "Responde JSON:\n" +
-                '{"out": {"action": "keep"|"move", "time": <segundos>, "reason": "<breve>"}, ' +
-                '"in": {"action": "keep"|"move", "time": <segundos>, "reason": "<breve>"}, ' +
-                '"repeatedPhrase": "<la frase repetida, o cadena vacía si no hay repetición>"}'
-        };
-    }
-
-    // ─── Resolución de respuestas del LLM ────────────────────
-
-    function _num(v) {
-        var n = typeof v === "number" ? v : parseFloat(v);
-        return isNaN(n) ? null : n;
-    }
-
-    /**
-     * Valida y normaliza la respuesta del LLM para una unidad.
-     * Devuelve una lista de proposals:
-     *   { kind: "IN"|"OUT", pairIdx, marker, originalTime, newTime, reason,
-     *     repeatedPhrase?, snippet: {before, after} }
-     * Solo incluye ajustes reales (action move, delta significativo, dentro
-     * de maxMoveSeconds, clampado a gap de palabra).
-     */
-    function resolveUnitResponse(unit, response, pairs, words, opts) {
-        opts = mergeOpts(opts);
-        var proposals = [];
-        var debug = (opts && opts._debug) ? opts._debug : null;
-        if (!response || response.error) return proposals;
-
-        function consider(kind, pairIdx, marker, raw, repeatedPhrase) {
-            if (!raw) { if (debug) debug.push(kind + ": sin campo en la respuesta"); return; }
-            if (raw.action !== "move") { if (debug) debug.push(kind + ": keep"); return; }
-            var t = _num(raw.time);
-            if (t === null || t < 0) { if (debug) debug.push(kind + ": move sin tiempo válido (" + raw.time + ")"); return; }
-            var original = marker.startSeconds;
-            if (Math.abs(t - original) > opts.maxMoveSeconds) {
-                if (debug) debug.push(kind + ": descartado, move de " + Math.abs(t - original).toFixed(1) + "s > máx " + opts.maxMoveSeconds + "s (posible alucinación)");
-                return;
-            }
-            var mode = kind === "IN" ? "in" : "out";
-            var clamped = clampToWordGap(words, t, mode, opts);
-            if (Math.abs(clamped - original) < opts.minChangeSeconds) {
-                if (debug) debug.push(kind + ": descartado, cambio < " + opts.minChangeSeconds + "s tras clamp");
-                return;
-            }
-            // Si el original normaliza al mismo gap, el "move" del LLM es un eco
-            // del tiempo actual con ruido — no hay ajuste real que proponer
-            var normalizedOriginal = clampToWordGap(words, original, mode, opts);
-            if (Math.abs(clamped - normalizedOriginal) < opts.minChangeSeconds) {
-                if (debug) debug.push(kind + ": descartado, el borde ya cae en el mismo gap de palabra (¿faltan palabras en el transcript?)");
-                return;
-            }
-            if (debug) debug.push(kind + ": MOVE " + original.toFixed(1) + "→" + clamped.toFixed(1) + "s");
-            proposals.push({
-                kind: kind,
-                pairIdx: pairIdx,
-                marker: marker,
-                originalTime: original,
-                newTime: clamped,
-                llmTime: t,
-                reason: String(raw.reason || ""),
-                repeatedPhrase: repeatedPhrase || "",
-                snippet: snippetAround(words, clamped, 6)
-            });
-        }
-
-        if (unit.type === "block") {
-            consider("IN", unit.pairIdx, pairs[unit.pairIdx].inMarker, response["in"], "");
-            consider("OUT", unit.pairIdx, pairs[unit.pairIdx].outMarker, response.out, "");
-        } else if (unit.type === "first-in") {
-            consider("IN", unit.pairIdx, pairs[unit.pairIdx].inMarker, response["in"], "");
-        } else if (unit.type === "last-out") {
-            consider("OUT", unit.pairIdx, pairs[unit.pairIdx].outMarker, response.out, "");
-        } else {
-            var rep = String(response.repeatedPhrase || "");
-            consider("OUT", unit.outPairIdx, pairs[unit.outPairIdx].outMarker, response.out, rep);
-            consider("IN", unit.inPairIdx, pairs[unit.inPairIdx].inMarker, response["in"], rep);
-        }
-        return proposals;
-    }
-
-    /**
-     * Evita que, tras aplicar los ajustes, un bloque se pise con el siguiente:
-     * si el OUT propuesto del bloque N queda después del IN propuesto del
-     * bloque N+1, se recorta el OUT de N hasta el IN de N+1 (se prioriza el
-     * siguiente IN, como pidió el flujo). Muta la lista de proposals.
-     * `proposals`: array con {kind, pairIdx, newTime, originalTime, marker...}.
-     */
-    function resolveOverlaps(proposals, pairs) {
-        if (!pairs || pairs.length < 2) return proposals;
-        // Tiempo efectivo (propuesto o original) de cada borde por bloque
-        function effTime(kind, pairIdx) {
-            for (var i = 0; i < proposals.length; i++) {
-                if (proposals[i].kind === kind && proposals[i].pairIdx === pairIdx) return proposals[i].newTime;
-            }
-            return kind === "IN" ? pairs[pairIdx].inMarker.startSeconds : pairs[pairIdx].outMarker.startSeconds;
-        }
-        for (var p = 0; p < pairs.length - 1; p++) {
-            var outN = effTime("OUT", p);
-            var inNext = effTime("IN", p + 1);
-            if (outN > inNext) {
-                // Recortar el OUT del bloque N a inNext
-                var found = null;
-                for (var j = 0; j < proposals.length; j++) {
-                    if (proposals[j].kind === "OUT" && proposals[j].pairIdx === p) { found = proposals[j]; break; }
-                }
-                if (found) {
-                    found.newTime = inNext;
-                    found.reason = (found.reason ? found.reason + " " : "") + "(recortado para no pisar el IN del bloque " + (p + 2) + ")";
-                } else {
-                    proposals.push({
-                        kind: "OUT",
-                        pairIdx: p,
-                        marker: pairs[p].outMarker,
-                        originalTime: pairs[p].outMarker.startSeconds,
-                        newTime: inNext,
-                        reason: "Recortado para no pisar el IN del bloque " + (p + 2),
-                        repeatedPhrase: "",
-                        overlapFix: true,
-                        snippet: snippetAround((pairs[p]._words || []), inNext, 6)
-                    });
-                }
-            }
         }
         return proposals;
     }
@@ -730,20 +520,94 @@
         };
     }
 
+    // Cómo suena en el detalle del revisor que el problema está en la apertura o en el
+    // cierre. Es la única pista de qué borde arreglar cuando dice "frase cortada".
+    var SAYS_HEAD = /\bin\b|inicio|empieza|arranca|abre|apertura|principio|comienza/i;
+    var SAYS_TAIL = /\bout\b|final|termina|acaba|cierra|cierre|corta al final/i;
+    // Cuando el revisor dice que un bloque repite, hay que saber a qué lado: "el bloque 5
+    // repite lo YA dicho ANTES" señala el bloque 5 como la segunda vez, y entonces lo que
+    // sobra es la cola del bloque 4. Sin esto se arreglaba el cierre equivocado.
+    var SAYS_EARLIER = /anterior|antes|previo|ya (se )?(dicho|dijo|dio|dado|dada|menciona|mencionad|vist|explicad|habl)|anteriormente|arriba/i;
+
+    /**
+     * A qué bordes hay que volver según lo que dijo el revisor de coherencia.
+     *
+     * El revisor lee la clase ya cortada y habla de BLOQUES ("el bloque 4 repite lo que
+     * dice el 5"); quien reajusta trabaja con BORDES:
+     *
+     *   · `repeticion` → un CIERRE, el del bloque que habló primero: lo que sobra es su
+     *     cola, porque la toma buena es la segunda. Si el revisor dice que el bloque
+     *     citado repite algo *anterior*, el cierre a arreglar es el del bloque de antes.
+     *   · `corte-frase` → el borde que el detalle señale; si no lo dice, los dos.
+     *
+     * Los dos piden PRUEBA del transcript (`proof`), y no por desconfianza abstracta: el
+     * modelo local cita mal el número de bloque. Leyendo cinco veces la clase 15 con la
+     * repetición dentro, señaló el cierre correcto una vez, el de al lado tres y nada una.
+     * Y lo que afirma se puede medir —que un corte parta una frase, que dos bloques digan
+     * las mismas palabras—, así que se mide. Lo que no cuadra se queda en el log: un
+     * corte de más en la clase cuesta más que un aviso que lee el editor.
+     *
+     * Lo que NO manda a ningún borde, medido sobre las clases 14 y 15 leídas con los
+     * cortes ya buenos:
+     *
+     *   · `salto-tema`. Sale en 2 de 4 observaciones y siempre es lo mismo: entre dos
+     *     tomas falta material que nunca se grabó ("salta de la teoría a la práctica sin
+     *     transición"). Mover un marcador no añade clase; lo único que haría es estropear
+     *     un borde que estaba bien.
+     *   · `otro` y los generales (`block: 0`): "falta una introducción" no es un corte.
+     *
+     * @param {Array} issues [{block, type, detail}] tal como responde el revisor
+     * @param {number} blockCount cuántos bloques tiene la clase
+     * @param {object} [proof] lo que el transcript sí sostiene:
+     *   `{cut: {"IN:3": true}, repeat: {"OUT:3": true}}`
+     * @returns {Array} [{pairIdx, kind, type, detail}] sin repetidos
+     */
+    function coherenceTargets(issues, blockCount, proof) {
+        var out = [], seen = {};
+        var cut = (proof && proof.cut) || {};
+        var repeat = (proof && proof.repeat) || {};
+
+        function add(pairIdx, kind, issue, evidence) {
+            if (pairIdx < 0 || pairIdx >= blockCount) return;
+            var key = kind + ":" + pairIdx;
+            if (seen[key] || !evidence[key]) return;
+            seen[key] = true;
+            out.push({ pairIdx: pairIdx, kind: kind, type: issue.type || "otro",
+                detail: String(issue.detail || "") });
+        }
+
+        for (var i = 0; i < (issues || []).length; i++) {
+            var issue = issues[i] || {};
+            var num = Number(issue.block);
+            if (!(num >= 1)) continue;          // 0 o basura: es un comentario general
+            var idx = num - 1;
+            var type = String(issue.type || "");
+            var detail = String(issue.detail || "");
+
+            if (type === "repeticion") {
+                add(SAYS_EARLIER.test(detail) ? idx - 1 : idx, "OUT", issue, repeat);
+                continue;
+            }
+            if (type === "corte-frase") {
+                var head = SAYS_HEAD.test(detail), tail = SAYS_TAIL.test(detail);
+                if (head || !tail) add(idx, "IN", issue, cut);
+                if (tail || !head) add(idx, "OUT", issue, cut);
+            }
+        }
+        return out;
+    }
+
     var EPMarkerReviewer = {
         parsePairs: parsePairs,
-        buildBoundaryUnits: buildBoundaryUnits,
-        buildBlockUnits: buildBlockUnits,
-        resolveOverlaps: resolveOverlaps,
+        coherenceTargets: coherenceTargets,
         computeAudioWindows: computeAudioWindows,
         windowsCoverPairs: windowsCoverPairs,
         detectLeadIns: detectLeadIns,
+        markerBand: markerBand,
+        bandVerdict: bandVerdict,
         contextForTime: contextForTime,
-        formatContext: formatContext,
         snippetAround: snippetAround,
         clampToWordGap: clampToWordGap,
-        buildUnitPrompt: buildUnitPrompt,
-        resolveUnitResponse: resolveUnitResponse,
         buildFinalTranscript: buildFinalTranscript,
         buildCoherencePrompt: buildCoherencePrompt,
         isOutMarker: isOutMarker,

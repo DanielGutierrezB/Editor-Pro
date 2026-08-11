@@ -86,6 +86,8 @@
         if (window.EditorProUI && window.EditorProUI.recording && window.EditorProUI.recording.init) window.EditorProUI.recording.init();
         if (window.EditorProUI && window.EditorProUI.validator && window.EditorProUI.validator.init) window.EditorProUI.validator.init();
         if (window.EditorProUI && window.EditorProUI.markerReviewer && window.EditorProUI.markerReviewer.init) window.EditorProUI.markerReviewer.init();
+        if (window.EditorProUI && window.EditorProUI.transcribeBatch && window.EditorProUI.transcribeBatch.init) window.EditorProUI.transcribeBatch.init();
+        if (window.EditorProUI && window.EditorProUI.theCutter && window.EditorProUI.theCutter.init) window.EditorProUI.theCutter.init();
 
         loadSavedSettings();
         loadCustomDictionary();
@@ -139,6 +141,10 @@
         on("btn-settings", "click", toggleSettings);
         on("btn-save-api-key", "click", saveApiKey);
         on("btn-ollama-refresh", "click", checkOllamaConnection);
+        on("btn-cc-login", "click", function() { window.claudeCodeLogin(); });
+        on("btn-cc-logout", "click", function() { window.claudeCodeLogout(); });
+        on("btn-cc-verify", "click", function() { window.verifyClaudeCode(); });
+        on("btn-ai-models-refresh", "click", function() { window.refreshAnthropicModels(); });
 
         on("ai-provider-select", "change", function() {
             var prov = this.value;
@@ -566,6 +572,7 @@
         if (window.EditorProUI && window.EditorProUI.recording) window.EditorProUI.recording.refreshSttHeaderProgressVisibility();
         if (window.EditorProUI && window.EditorProUI.editSuggestions) window.EditorProUI.editSuggestions.refreshES2HeaderProgressVisibility();
         if (window.EditorProUI && window.EditorProUI.markerReviewer && window.EditorProUI.markerReviewer.refreshHeaderProgress) window.EditorProUI.markerReviewer.refreshHeaderProgress();
+        if (window.EditorProUI && window.EditorProUI.theCutter && window.EditorProUI.theCutter.refreshHeaderProgress) window.EditorProUI.theCutter.refreshHeaderProgress();
     }
 
     // ─── Expose remaining bindings for UI modules ────────────────

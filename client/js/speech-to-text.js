@@ -35,7 +35,7 @@
         },
         whisper_local: {
             name: "Whisper Local",
-            description: "whisper.cpp local — sin internet, rápido",
+            description: "Local — MLX (Apple Silicon), whisper.cpp o Whisper Python. Sin internet, rápido",
             needsKey: false,
             local: true,
             models: [
@@ -87,6 +87,26 @@
 
     SpeechToText.prototype.setPluginDir = function(dir) {
         this._pluginDir = (dir || "").replace(/\/+$/, "");
+    };
+
+    /**
+     * Entorno para los procesos hijos de transcripción. CRÍTICO: Premiere lanza
+     * el panel con un PATH mínimo (/usr/bin:/bin), y whisper (mlx/python) invoca
+     * `ffmpeg` internamente para decodificar el audio. Sin ffmpeg en el PATH,
+     * mlx_whisper atrapa el fallo, imprime "Skipping..." y sale con código 0 SIN
+     * escribir el JSON → luego falla al leerlo (ENOENT). Aquí garantizamos que
+     * las rutas de Homebrew/local estén en el PATH del hijo.
+     */
+    SpeechToText.prototype._childEnv = function() {
+        var env = {};
+        try { for (var k in process.env) env[k] = process.env[k]; } catch(e) {}
+        var extra = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"];
+        var parts = (env.PATH || "").split(":").filter(function(p) { return p; });
+        for (var i = 0; i < extra.length; i++) {
+            if (parts.indexOf(extra[i]) === -1) parts.push(extra[i]);
+        }
+        env.PATH = parts.join(":");
+        return env;
     };
 
     SpeechToText.prototype.getActiveKey = function() {
@@ -657,7 +677,81 @@
         return { binary: binary, model: best };
     };
 
+    /**
+     * Whisper MLX (Apple Silicon) — motor preferido en Macs M-series.
+     * Usa el CLI `mlx_whisper` (paquete mlx-whisper) instalado en el venv
+     * dedicado del plugin (~/.editorpro/mlx-whisper-venv), o en PATH/--user.
+     * Produce words[] con timestamps REALES (mismo JSON que openai-whisper),
+     * pero mucho más rápido en el M3 (~15-20x tiempo real).
+     * El modelo se descarga/cachea en ~/.cache/huggingface (mlx-community).
+     */
+    var MLX_BIN_KEY = "editorpro_mlx_binary";
+    var MLX_MODEL_KEY = "editorpro_mlx_model";
+    var MLX_DEFAULT_MODEL = "mlx-community/whisper-large-v3-turbo";
+
+    SpeechToText.prototype._findMlxWhisper = function() {
+        if (!fs || !childProcess) return { binary: null, model: null };
+        var home = (typeof process !== "undefined" && process.env) ? (process.env.HOME || "") : "";
+
+        // 1) Override manual
+        var manual = null;
+        try { manual = localStorage.getItem(MLX_BIN_KEY); } catch(e) {}
+
+        var candidates = [];
+        if (manual) candidates.push(manual);
+        if (home) {
+            candidates.push(home + "/.editorpro/mlx-whisper-venv/bin/mlx_whisper");
+            candidates.push(home + "/.local/bin/mlx_whisper");
+        }
+        var binary = null;
+        for (var i = 0; i < candidates.length; i++) {
+            try { if (candidates[i] && fs.existsSync(candidates[i])) { binary = candidates[i]; break; } } catch(e) {}
+        }
+        // PATH como último recurso
+        if (!binary) {
+            try {
+                var whichCmd = (process && process.platform === "win32") ? "where mlx_whisper 2>NUL" : "which mlx_whisper 2>/dev/null";
+                var found = childProcess.execSync(whichCmd, { encoding: "utf8" }).trim();
+                if (found) binary = found.split(/\r?\n/)[0];
+            } catch(e) {}
+        }
+        if (!binary) return { binary: null, model: null };
+
+        // Modelo: override manual, o repo cacheado en HuggingFace, o el default
+        var model = null;
+        try { model = localStorage.getItem(MLX_MODEL_KEY); } catch(e) {}
+        if (!model) model = MLX_DEFAULT_MODEL;
+
+        var modelLabel = model.split("/").pop();
+        var cached = false;
+        if (home) {
+            try {
+                var repoDir = "models--" + model.replace(/\//g, "--");
+                cached = fs.existsSync(home + "/.cache/huggingface/hub/" + repoDir);
+            } catch(e) {}
+        }
+        return { binary: binary, model: model, modelLabel: modelLabel, cached: cached };
+    };
+
     SpeechToText.prototype.getWhisperLocalStatus = function() {
+        // Motor preferido en Apple Silicon: Whisper MLX
+        var isMac = !(typeof process !== "undefined" && process && process.platform === "win32");
+        if (isMac) {
+            var mlx = this._findMlxWhisper();
+            if (mlx.binary) {
+                return {
+                    engine: "mlx",
+                    binaryFound: true,
+                    binaryPath: mlx.binary,
+                    modelFound: true,       // mlx_whisper descarga/cachea el modelo solo
+                    modelPath: null,
+                    modelName: mlx.modelLabel + " (MLX)" + (mlx.cached ? "" : " · se descargará al primer uso"),
+                    mlxModel: mlx.model,
+                    ready: true
+                };
+            }
+        }
+
         var binary = this._findWhisperBinary();
         var model = this._findWhisperModel();
 
@@ -750,6 +844,11 @@
             return;
         }
 
+        if (status.engine === "mlx") {
+            this._transcribeWhisperMlx(filePath, status, onProgress, callback);
+            return;
+        }
+
         if (status.engine === "python") {
             this._transcribeWhisperPython(filePath, status, onProgress, callback);
             return;
@@ -778,7 +877,7 @@
         if (wordLevel) args = args.concat(["-ml", "1", "-sow"]);
         var stderrBuf = "";
         var finished = false;
-        var child = childProcess.spawn(binaryInfo.binary, args);
+        var child = childProcess.spawn(binaryInfo.binary, args, { env: this._childEnv() });
         this._activeRequest = child;
 
         // Watchdog: kill process if no stderr activity for 120 seconds (likely stuck)
@@ -878,7 +977,7 @@
 
                 onProgress(100);
                 callback({
-                    words: words,
+                    words: cleanHallucinatedRepeats(words),
                     text: fullTextParts.join(" "),
                     language: "es"
                 });
@@ -918,7 +1017,7 @@
         ];
 
         var finished = false;
-        var child = childProcess.spawn(status.binaryPath, args);
+        var child = childProcess.spawn(status.binaryPath, args, { env: this._childEnv() });
         this._activeRequest = child;
 
         // El Python whisper con large-v3 puede tardar mucho: watchdog por
@@ -977,17 +1076,7 @@
                 try { fs.unlinkSync(jsonOutPath); } catch(e) {}
                 cleanupCopy();
 
-                var words = [];
-                var segments = data.segments || [];
-                for (var i = 0; i < segments.length; i++) {
-                    var segWords = segments[i].words || [];
-                    for (var w = 0; w < segWords.length; w++) {
-                        var wd = segWords[w];
-                        var txt = String(wd.word || "").trim();
-                        if (!txt) continue;
-                        words.push({ text: txt, start: wd.start, end: wd.end, type: "word" });
-                    }
-                }
+                var words = parseWhisperSegmentsToWords(data);
                 if (words.length === 0) {
                     callback({ error: "Whisper (Python) no devolvió palabras con timestamps." });
                     return;
@@ -1005,6 +1094,216 @@
             clearInterval(watchdog);
             if (safeFilePath !== filePath) { try { fs.unlinkSync(safeFilePath); } catch(e) {} }
             callback({ error: "Error al ejecutar Whisper (Python): " + err.message });
+        });
+    };
+
+    /**
+     * Parser compartido del JSON de Whisper (openai-whisper y mlx_whisper usan
+     * el mismo esquema: { text, language, segments:[{ words:[{word,start,end}] }] }).
+     * Devuelve words[] normalizado ({text,start,end,type:"word"}).
+     */
+    // Normaliza un token para comparar (minúsculas, sin acentos ni puntuación).
+    function _normRepeatToken(text) {
+        var t = String(text || "").toLowerCase();
+        try { t = t.normalize("NFD").replace(/[̀-ͯ]/g, ""); } catch(e) {}
+        return t.replace(/[.,!?;:…"“”'’¿¡()\[\]—–\-]/g, "").replace(/\s+/g, "");
+    }
+
+    /**
+     * Elimina alucinaciones de Whisper: rachas de la MISMA palabra repetida
+     * muchas veces seguidas ("nuevo nuevo nuevo ..."), típicas en silencios o
+     * música. En habla real casi nunca se repite la misma palabra ≥ minRun veces
+     * seguidas, así que esas rachas se descartan enteras (no son voz real y
+     * ensucian el clamp y el detector de repeticiones).
+     */
+    function cleanHallucinatedRepeats(words, opts) {
+        opts = opts || {};
+        var minWordRun = opts.minWordRun || 6;   // palabra suelta repetida N veces
+        var minPhraseReps = opts.minPhraseReps || 3; // frase (≥2 palabras) repetida N veces
+        var maxPhraseLen = opts.maxPhraseLen || 8;
+        if (!words || words.length < 3) return words || [];
+
+        var N = words.length;
+        var norm = new Array(N);
+        for (var n = 0; n < N; n++) norm[n] = _normRepeatToken(words[n].text);
+
+        var keep = new Array(N);
+        for (var z = 0; z < N; z++) keep[z] = true;
+
+        var i = 0;
+        while (i < N) {
+            // Buscar el loop (patrón de longitud L=1..maxPhraseLen) que MÁS cubre
+            // desde i. Whisper alucina repitiendo la misma palabra o frase muchas
+            // veces seguidas en silencios/música. Se descarta el run entero.
+            var bestL = 0, bestReps = 0;
+            for (var L = 1; L <= maxPhraseLen && i + 2 * L <= N; L++) {
+                // El patrón base no debe ser puro vacío (puntuación)
+                var patternEmpty = true;
+                for (var q = 0; q < L; q++) { if (norm[i + q] !== "") { patternEmpty = false; break; } }
+                if (patternEmpty) continue;
+
+                var reps = 1;
+                while (true) {
+                    var base = i + reps * L;
+                    if (base + L > N) break;
+                    var same = true;
+                    for (var k = 0; k < L; k++) {
+                        if (norm[i + k] !== norm[base + k]) { same = false; break; }
+                    }
+                    if (!same) break;
+                    reps++;
+                }
+                var threshold = (L === 1) ? minWordRun : minPhraseReps;
+                if (reps >= threshold && reps * L > bestReps * bestL) { bestL = L; bestReps = reps; }
+            }
+            if (bestL > 0) {
+                for (var d = 0; d < bestReps * bestL; d++) keep[i + d] = false;
+                i += bestReps * bestL;
+            } else {
+                i++;
+            }
+        }
+
+        var out = [];
+        for (var m = 0; m < N; m++) if (keep[m]) out.push(words[m]);
+        return out;
+    }
+    SpeechToText.cleanHallucinatedRepeats = cleanHallucinatedRepeats;
+
+    function parseWhisperSegmentsToWords(data) {
+        var words = [];
+        var segments = (data && data.segments) || [];
+        for (var i = 0; i < segments.length; i++) {
+            var segWords = segments[i].words || [];
+            for (var w = 0; w < segWords.length; w++) {
+                var wd = segWords[w];
+                var txt = String(wd.word || wd.text || "").trim();
+                if (!txt) continue;
+                if (typeof wd.start !== "number" || typeof wd.end !== "number") continue;
+                words.push({ text: txt, start: wd.start, end: wd.end, type: "word" });
+            }
+        }
+        return cleanHallucinatedRepeats(words);
+    }
+    SpeechToText.parseWhisperSegmentsToWords = parseWhisperSegmentsToWords;
+
+    /**
+     * Whisper MLX (Apple Silicon): `mlx_whisper <wav> --model <repo> --language es
+     * --word-timestamps True --output-format json`. Timestamps reales por palabra,
+     * muy rápido en el M-series. El resultado se escribe en <outDir>/<name>.json.
+     */
+    SpeechToText.prototype._transcribeWhisperMlx = function(filePath, status, onProgress, callback) {
+        onProgress(5);
+        var safeFilePath = this._ensureAccessiblePath(filePath);
+        onProgress(10);
+
+        var outDir = os ? os.tmpdir() : "/tmp";
+        var outName = "epmlx_" + Date.now();
+        var model = status.mlxModel || MLX_DEFAULT_MODEL;
+        var args = [
+            safeFilePath,
+            "--model", model,
+            "--language", "es",
+            "--word-timestamps", "True",
+            // Anti-alucinación: no condicionar en el texto previo (principal
+            // causa de loops "nuevo nuevo nuevo...") y saltar silencios largos
+            // donde Whisper suele alucinar.
+            "--condition-on-previous-text", "False",
+            "--hallucination-silence-threshold", "2",
+            "--output-format", "json",
+            "--output-dir", outDir,
+            "--output-name", outName,
+            "--verbose", "False"
+        ];
+
+        var finished = false;
+        var child = childProcess.spawn(status.binaryPath, args, { env: this._childEnv() });
+        this._activeRequest = child;
+
+        // Watchdog por inactividad: la primera vez puede tardar (descarga del
+        // modelo), luego es muy rápido. 10 min sin ninguna salida → cancelar.
+        var lastActivity = Date.now();
+        var watchdog = setInterval(function() {
+            if (finished) { clearInterval(watchdog); return; }
+            if (Date.now() - lastActivity > 600000) {
+                clearInterval(watchdog);
+                try { child.kill("SIGKILL"); } catch(e) {}
+                callback({ error: "Whisper MLX sin actividad por 10 minutos — cancelado." });
+            }
+        }, 15000);
+
+        var stderrBuf = "";
+        child.stderr.on("data", function(chunk) {
+            lastActivity = Date.now();
+            stderrBuf += chunk.toString();
+            // Barra tqdm de frames: " 53%|█████▎ | 7784/14673"
+            var matches = stderrBuf.match(/(\d+)%\|/g);
+            if (matches && matches.length > 0) {
+                var pct = parseInt(matches[matches.length - 1], 10);
+                if (!isNaN(pct)) onProgress(10 + Math.round(pct * 0.85));
+            }
+            if (stderrBuf.length > 100000) stderrBuf = stderrBuf.slice(-20000);
+        });
+        child.stdout.on("data", function() { lastActivity = Date.now(); });
+
+        var self = this;
+        child.on("close", function(code) {
+            finished = true;
+            self._activeRequest = null;
+            clearInterval(watchdog);
+
+            function cleanupCopy() {
+                if (safeFilePath !== filePath) { try { fs.unlinkSync(safeFilePath); } catch(e) {} }
+            }
+
+            if (self._aborted) {
+                cleanupCopy();
+                callback({ error: "Transcripción cancelada." });
+                return;
+            }
+            if (code !== 0) {
+                cleanupCopy();
+                callback({ error: "Whisper MLX terminó con código " + code + ". " +
+                    (stderrBuf ? stderrBuf.slice(-200) : "Revisa el audio o reinstala con whisper/setup-mlx.sh.") });
+                return;
+            }
+
+            var jsonOutPath = (path ? path.join(outDir, outName + ".json") : outDir + "/" + outName + ".json");
+            // mlx_whisper puede salir con código 0 pero NO escribir el JSON si no
+            // pudo decodificar el audio (típico: no encontró `ffmpeg` en el PATH
+            // del proceso — imprime "Skipping ... FileNotFoundError").
+            if (!fs.existsSync(jsonOutPath)) {
+                cleanupCopy();
+                var tail = (stderrBuf || "").replace(/\s+/g, " ").trim().slice(-300);
+                var hint = /ffmpeg|FileNotFound|Skipping/i.test(stderrBuf)
+                    ? "mlx_whisper no pudo decodificar el audio (¿falta ffmpeg en el PATH del proceso?)."
+                    : "mlx_whisper no generó resultado.";
+                callback({ error: hint + (tail ? " Detalle: " + tail : "") });
+                return;
+            }
+            try {
+                var data = JSON.parse(fs.readFileSync(jsonOutPath, "utf8"));
+                try { fs.unlinkSync(jsonOutPath); } catch(e) {}
+                cleanupCopy();
+
+                var words = parseWhisperSegmentsToWords(data);
+                if (words.length === 0) {
+                    callback({ error: "Whisper MLX no devolvió palabras con timestamps." });
+                    return;
+                }
+                onProgress(100);
+                callback({ words: words, text: data.text || "", language: data.language || "es" });
+            } catch(e2) {
+                cleanupCopy();
+                callback({ error: "Error al leer resultado de Whisper MLX: " + e2.message });
+            }
+        });
+
+        child.on("error", function(err) {
+            finished = true;
+            clearInterval(watchdog);
+            if (safeFilePath !== filePath) { try { fs.unlinkSync(safeFilePath); } catch(e) {} }
+            callback({ error: "Error al ejecutar Whisper MLX: " + err.message });
         });
     };
 
@@ -1049,6 +1348,11 @@
                 return;
             }
             var tmpDir = os ? os.tmpdir() : "/tmp";
+            // Si Premiere exportó el audio a una ruta protegida (TemporaryItems /
+            // sandbox), ffmpeg no la puede leer y TODAS las ventanas fallarían.
+            // Copiar a una ruta accesible una sola vez antes de cortar.
+            var srcPath = self._ensureAccessiblePath(filePath);
+            var srcIsCopy = (srcPath !== filePath);
             var allWords = [];
             var textParts = [];
             var language = "es";
@@ -1056,42 +1360,76 @@
             var totalDur = 0;
             for (var r = 0; r < regions.length; r++) totalDur += Math.max(0, regions[r].end - regions[r].start);
             var doneDur = 0;
+            var diagnostics = [];   // por qué falló cada ventana (para diagnóstico)
+            var okRegions = 0;
 
             function cleanup(slicePath) {
                 try { fs.unlinkSync(slicePath); } catch(e) {}
             }
 
+            function finishCleanup() {
+                if (srcIsCopy) { try { fs.unlinkSync(srcPath); } catch(e) {} }
+            }
+
             function nextRegion() {
                 if (idx >= regions.length) {
                     if (allWords.length === 0) {
-                        callback({ error: "La transcripción por regiones no devolvió palabras." });
+                        // Ninguna ventana produjo palabras: en vez de fallar,
+                        // caer a transcribir el archivo completo (más lento pero
+                        // robusto) y adjuntar el diagnóstico de por qué falló cada
+                        // ventana, para poder corregir el modo rápido después.
+                        var detail = diagnostics.length ? diagnostics.join(" | ") : "sin detalle";
+                        self.transcribe(srcPath, onProgress, function(res) {
+                            finishCleanup();
+                            if (res && !res.error) {
+                                res.fellBackToFull = true;
+                                res.regionFallbackReason = detail;
+                            } else if (res) {
+                                res.error = "Regiones sin palabras (" + detail + "). Y el fallback completo también falló: " + res.error;
+                            }
+                            callback(res);
+                        });
                         return;
                     }
+                    finishCleanup();
                     allWords.sort(function(a, b) { return a.start - b.start; });
                     callback({
                         words: allWords,
                         text: textParts.join(" "),
                         language: language,
                         partial: true,
-                        windows: regions
+                        windows: regions,
+                        regionDiagnostics: diagnostics.length ? diagnostics : null
                     });
                     return;
                 }
                 var reg = regions[idx];
+                var regNum = idx + 1;
                 var dur = Math.max(0, reg.end - reg.start);
                 var slicePath = (path ? path.join(tmpDir, "epmrv_slice_" + Date.now() + "_" + idx + ".wav") : tmpDir + "/epmrv_slice_" + idx + ".wav");
-                var cmd = '"' + ffmpeg + '" -y -ss ' + reg.start.toFixed(3) + ' -i "' + filePath +
+                var cmd = '"' + ffmpeg + '" -y -ss ' + reg.start.toFixed(3) + ' -i "' + srcPath +
                     '" -t ' + dur.toFixed(3) + ' -ar 16000 -ac 1 -c:a pcm_s16le "' + slicePath + '"';
 
-                childProcess.exec(cmd, { maxBuffer: 8 * 1024 * 1024 }, function(err) {
+                childProcess.exec(cmd, { maxBuffer: 8 * 1024 * 1024 }, function(err, stdout, stderr) {
                     if (err) {
-                        // Si falla el corte de una ventana, seguir con las demás
+                        // Si falla el corte de una ventana, registrar y seguir
+                        var ffMsg = (err && err.message ? err.message : "") + " " + (stderr || "");
+                        diagnostics.push("v" + regNum + " (" + reg.start.toFixed(0) + "-" + reg.end.toFixed(0) + "s): ffmpeg falló — " + ffMsg.replace(/\s+/g, " ").trim().slice(0, 160));
+                        idx++;
+                        nextRegion();
+                        return;
+                    }
+                    // Verificar que el slice existe y no está vacío antes de transcribir
+                    var sliceOk = false;
+                    try { sliceOk = fs.existsSync(slicePath) && fs.statSync(slicePath).size > 1024; } catch(_e) {}
+                    if (!sliceOk) {
+                        diagnostics.push("v" + regNum + " (" + reg.start.toFixed(0) + "-" + reg.end.toFixed(0) + "s): el slice quedó vacío (¿ventana fuera del audio o ruta protegida?)");
+                        cleanup(slicePath);
                         idx++;
                         nextRegion();
                         return;
                     }
                     var regStart = reg.start;
-                    var regNum = idx + 1;
                     self.transcribe(slicePath, function(pct) {
                         var base = totalDur > 0 ? (doneDur / totalDur) : (idx / regions.length);
                         var span = totalDur > 0 ? (dur / totalDur) : (1 / regions.length);
@@ -1099,7 +1437,9 @@
                             { region: regNum, total: regions.length, windowSeconds: totalDur });
                     }, function(result) {
                         cleanup(slicePath);
-                        if (result && !result.error && result.words) {
+                        if (result && result.error) {
+                            diagnostics.push("v" + regNum + " (" + reg.start.toFixed(0) + "-" + reg.end.toFixed(0) + "s): " + result.error);
+                        } else if (result && result.words && result.words.length > 0) {
                             for (var w = 0; w < result.words.length; w++) {
                                 var wd = result.words[w];
                                 allWords.push({
@@ -1111,6 +1451,9 @@
                             }
                             if (result.text) textParts.push(result.text);
                             if (result.language) language = result.language;
+                            okRegions++;
+                        } else {
+                            diagnostics.push("v" + regNum + " (" + reg.start.toFixed(0) + "-" + reg.end.toFixed(0) + "s): 0 palabras");
                         }
                         doneDur += dur;
                         idx++;

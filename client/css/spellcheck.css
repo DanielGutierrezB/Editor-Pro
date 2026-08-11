@@ -85,6 +85,28 @@
 .ollama-disconnected { color: var(--error); }
 .ollama-checking { color: var(--text-secondary); }
 
+/* Sesión de Claude (CLI de Claude Code) */
+.cc-status {
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    font-size: 11px;
+}
+.cc-status-line { line-height: 1.5; }
+.cc-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+.cc-account { color: var(--text-secondary); }
+.cc-account strong { color: var(--text-primary); font-weight: 600; }
+.cc-hint { color: var(--text-muted); display: block; margin-top: 3px; }
+
+.model-row { display: flex; align-items: center; gap: 6px; }
+.model-row .select-input { flex: 1; min-width: 0; }
+
 .btn-icon-tiny {
     background: none;
     border: none;

@@ -16,6 +16,8 @@
         recAnalyzing: false,
         spellChecking: false,
         ollamaConnected: false,
+        // Sesión del CLI de Claude Code: {installed, loggedIn, email, orgName}
+        ccSession: null,
         textClips: [],
         clipResults: {},
         supertexts2: [],

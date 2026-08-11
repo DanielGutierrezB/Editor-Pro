@@ -4,8 +4,9 @@
  *
  * Premiere no permite cambiar marker.start de un marcador existente, así que
  * "mover" = localizar el marcador (por tiempo +/- tolerancia y nombre), borrarlo
- * y recrearlo en la posición nueva conservando nombre, comentario, color y
- * duración (end - start).
+ * y recrearlo en la posición nueva conservando su metadata (epRecreateMarker en
+ * common.jsx). Se resuelven todos los objetivos ANTES de tocar la secuencia,
+ * reservando cada marcador por su guid.
  */
 
 function mrMoveMarkers(jsonPath, seqId) {
@@ -29,6 +30,14 @@ function mrMoveMarkers(jsonPath, seqId) {
         var moved = 0;
         var notFound = [];
 
+        // ── Fase 1: resolver qué marcador corresponde a cada movimiento ──
+        // Se hace ANTES de tocar nada. Recrear marcadores cambia las posiciones
+        // de la secuencia, así que buscar por tiempo a mitad del proceso puede
+        // agarrar el marcador equivocado (p.ej. un OUT que retrocede hasta
+        // quedar donde estaba otro). Cada marcador se reserva por su guid.
+        var plans = [];
+        var takenGuids = {};
+
         for (var i = 0; i < moves.length; i++) {
             var mv = moves[i];
             var oldStart = parseFloat(mv.oldStart);
@@ -38,16 +47,17 @@ function mrMoveMarkers(jsonPath, seqId) {
                 continue;
             }
 
-            // Localizar el marcador por tiempo (y nombre si viene)
             var target = null;
             var marker = m.getFirstMarker();
             while (marker) {
-                if (Math.abs(marker.start.seconds - oldStart) < EPS) {
+                var g = "";
+                try { g = String(marker.guid || ""); } catch(eG) {}
+                if (!(g && takenGuids[g]) && Math.abs(marker.start.seconds - oldStart) < EPS) {
                     if (!mv.name || (marker.name || "") === mv.name) {
                         target = marker;
                         break;
                     }
-                    if (target === null) target = marker; // fallback por tiempo
+                    if (target === null) target = marker; // fallback solo por tiempo
                 }
                 try { marker = m.getNextMarker(marker); } catch(e) { marker = null; }
             }
@@ -57,33 +67,26 @@ function mrMoveMarkers(jsonPath, seqId) {
                 continue;
             }
 
-            // Capturar metadata antes de borrar
-            var name = target.name || "";
-            var comments = target.comments || "";
-            var durationSecs = 0;
-            try { durationSecs = target.end.seconds - target.start.seconds; } catch(eD) {}
-            var colorIdx = -1;
-            try { colorIdx = target.getColorByIndex(0); } catch(eC) {}
+            var guid = "";
+            try { guid = String(target.guid || ""); } catch(eG2) {}
+            if (guid) takenGuids[guid] = true;
+            plans.push({ guid: guid, oldStart: oldStart, newStart: newStart, marker: target });
+        }
 
-            try { m.deleteMarker(target); } catch(eDel) {
-                notFound.push(oldStart);
+        // ── Fase 2: borrar + recrear ──
+        for (var p = 0; p < plans.length; p++) {
+            var plan = plans[p];
+            // El guid identifica al marcador sin ambigüedad; si esta versión de
+            // Premiere no lo expone, se usa la referencia capturada arriba.
+            var current = plan.guid ? epFindMarkerByGuid(m, plan.guid) : plan.marker;
+            if (!current) {
+                notFound.push(plan.oldStart);
                 continue;
             }
 
-            try {
-                var created = m.createMarker(newStart);
-                created.name = name;
-                created.comments = comments;
-                if (durationSecs > 0.01) {
-                    try { created.end = newStart + durationSecs; } catch(eE) {}
-                }
-                if (colorIdx >= 0) {
-                    try { created.setColorByIndex(colorIdx); } catch(eCol) {}
-                }
-                moved++;
-            } catch(eNew) {
-                notFound.push(oldStart);
-            }
+            var res = epRecreateMarker(m, current, plan.newStart, null);
+            if (res.error) notFound.push(plan.oldStart);
+            else moved++;
         }
 
         return JSON.stringify({

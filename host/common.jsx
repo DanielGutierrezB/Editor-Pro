@@ -117,12 +117,29 @@ function getActiveSequenceInfo() {
             }
         } catch(e) {}
 
+        var seqId = "";
+        try { seqId = seq.sequenceID; } catch(e) {}
+
+        // Hasta dónde llega el último marcador: con esto el panel sabe qué tiene que
+        // cubrir un transcript para poder validar los cortes.
+        var lastMarker = 0;
+        try {
+            var mk = seq.markers.getFirstMarker();
+            while (mk) {
+                var mkStart = parseFloat(mk.start.seconds);
+                if (mkStart > lastMarker) lastMarker = mkStart;
+                mk = seq.markers.getNextMarker(mk);
+            }
+        } catch(e) {}
+
         return JSON.stringify({
             name: seq.name,
+            sequenceID: seqId,
             duration: seq.end,
             durationSeconds: parseFloat(seq.end) / TICKS_PER_SECOND,
             frameRate: fps,
             markerCount: seq.markers.numMarkers,
+            lastMarkerSeconds: lastMarker,
             audioTracks: audioTrackCount,
             videoTracks: seq.videoTracks.numTracks,
             projectPath: app.project.path || ""
@@ -152,7 +169,7 @@ function getSequenceMarkers() {
                     endSeconds: marker.end.seconds,
                     colorIndex: -1
                 };
-                try { info.colorIndex = marker.getColorByIndex(0); } catch(ec) {}
+                info.colorIndex = epGetMarkerColor(marker);
                 markers.push(info);
                 try { marker = m.getNextMarker(marker); } catch(e) { marker = null; }
             }
@@ -344,6 +361,30 @@ function movePlayhead(timeSeconds) {
     }
 }
 
+// Seek to a time (seconds). If seqId is given and it is not the active
+// sequence, open it first so the playhead lands on the right class.
+function seekSequenceToSeconds(timeSeconds, seqId) {
+    try {
+        var seq = app.project.activeSequence;
+        var opened = false;
+        if (seqId && (!seq || seq.sequenceID !== seqId)) {
+            var target = findSequenceById(seqId);
+            if (target) {
+                try { app.project.openSequence(target.sequenceID); } catch(e) {}
+                $.sleep(300);
+                seq = app.project.activeSequence;
+                opened = true;
+            }
+        }
+        if (!seq) return JSON.stringify({ error: "No hay secuencia activa." });
+        var ticks = parseFloat(timeSeconds) * TICKS_PER_SECOND;
+        seq.setPlayerPosition(ticks.toString());
+        return JSON.stringify({ success: true, opened: opened });
+    } catch(e) {
+        return JSON.stringify({ error: "Error: " + e.message });
+    }
+}
+
 // ─── Export Current Frame ─────────────────────────────────────
 
 function exportCurrentFrame() {
@@ -443,8 +484,73 @@ function findItemByNameRecursive(rootItem, itemName) {
     return null;
 }
 
-function backupSequence() {
+/**
+ * Etiquetas de los dos momentos en que el pipeline copia la secuencia. El editor
+ * las lee en el bin "Backup" para saber a qué estado vuelve, así que se escriben
+ * exactamente así.
+ */
+var BACKUP_LABEL_MARKER = "Pre-Marker"; // estado previo a mover los marcadores
+var BACKUP_LABEL_CUT = "Pre-Cut";       // estado previo a aplicar los cortes
+
+/** Fecha del nombre del backup: YYYY-MM-DD_HH-MM */
+function backupDateStamp(now) {
+    function p2(n) { return (n < 10 ? "0" : "") + n; }
+    return now.getFullYear() + "-" + p2(now.getMonth() + 1) + "-" + p2(now.getDate()) +
+        "_" + p2(now.getHours()) + "-" + p2(now.getMinutes());
+}
+
+/**
+ * Nombre de la copia: "<secuencia>_Backup_<etiqueta>_<fecha>". La etiqueta va
+ * antes de la fecha para que se lea aunque el bin recorte el nombre, y "_Backup_"
+ * se mantiene pegado al nombre original porque restoreBackup() busca por ese
+ * prefijo cuando ya no tiene el sequenceID.
+ *
+ * Dos pasadas dentro del mismo minuto darían el mismo nombre; como la copia se
+ * mueve al bin y se restaura buscándola por nombre, la segunda se numera (_2, _3)
+ * en vez de dejar dos secuencias homónimas.
+ *
+ * @param {string}   seqName   nombre de la secuencia original
+ * @param {string}   label     BACKUP_LABEL_MARKER / BACKUP_LABEL_CUT (opcional)
+ * @param {string}   dateStamp de backupDateStamp()
+ * @param {function} isTaken   opcional, nombre → boolean
+ */
+function buildBackupName(seqName, label, dateStamp, isTaken) {
+    var base = seqName + "_Backup_";
+    if (label) base += label + "_";
+    base += dateStamp;
+    if (!isTaken) return base;
+
+    var name = base;
+    var n = 1;
+    while (isTaken(name)) {
+        n++;
+        name = base + "_" + n;
+    }
+    return name;
+}
+
+function sequenceNameExists(name) {
+    for (var i = 0; i < app.project.sequences.numSequences; i++) {
+        if (app.project.sequences[i].name === name) return true;
+    }
+    return false;
+}
+
+/**
+ * Copia de la secuencia en el bin "Backup", junto a la original.
+ * @param {string} label  opcional, de qué punto del proceso es la copia
+ *                        (BACKUP_LABEL_MARKER / BACKUP_LABEL_CUT)
+ * @param {string} seqId  opcional, la secuencia a copiar (por defecto, la activa)
+ */
+function backupSequence(label, seqId) {
     try {
+        if (seqId) {
+            var active = app.project.activeSequence;
+            if (!active || active.sequenceID !== seqId) {
+                var opened = JSON.parse(openSequenceById(seqId));
+                if (opened.error) return JSON.stringify({ error: opened.error });
+            }
+        }
         var seq = app.project.activeSequence;
         if (!seq) return JSON.stringify({ error: "No hay secuencia activa." });
 
@@ -452,16 +558,7 @@ function backupSequence() {
         _originalSeqId = seq.sequenceID;
         var originalSeqId = seq.sequenceID;
 
-        // Build datetime string: YYYY-MM-DD_HH-MM
-        var now = new Date();
-        var y = now.getFullYear();
-        var mo = (now.getMonth() + 1 < 10 ? "0" : "") + (now.getMonth() + 1);
-        var d = (now.getDate() < 10 ? "0" : "") + now.getDate();
-        var h = (now.getHours() < 10 ? "0" : "") + now.getHours();
-        var mi = (now.getMinutes() < 10 ? "0" : "") + now.getMinutes();
-        var dateStr = y + "-" + mo + "-" + d + "_" + h + "-" + mi;
-
-        var backupSeqName = seq.name + "_Backup_" + dateStr;
+        var backupSeqName = buildBackupName(seq.name, label, backupDateStamp(new Date()), sequenceNameExists);
 
         // Snapshot all existing sequence IDs before cloning
         var existingIds = {};
@@ -751,8 +848,7 @@ function getPostCutMarkers() {
                     }
                 }
 
-                var ci = -1;
-                try { ci = marker.getColorByIndex(0); } catch(e) {}
+                var ci = epGetMarkerColor(marker);
 
                 markers.push({
                     index: idx,
@@ -848,6 +944,120 @@ function deleteMarkersWithoutComments() {
     }
 }
 
+// ─── Marcadores: reposicionar sin "mover" ────────────────────
+//
+// La API de Premiere NO permite reposicionar un marcador existente:
+//   · `Marker.start` figura como "Time object; read/write", pero asignarle un
+//     Time lanza "Illegal Parameter type", y mutar `marker.start.ticks` no hace
+//     nada porque el getter devuelve una copia del Time.
+//   · `Marker.end` sí se puede escribir, pero SOLO con un valor en SEGUNDOS
+//     (la propia doc lo aclara: "pass a Seconds value, not a complete
+//     replacement Time").
+//   · `Marker.type` es read-only; el tipo se restituye con setTypeAs*().
+//
+// Por eso cualquier cambio de posición se hace borrando y recreando el
+// marcador con su metadata (epRecreateMarker). Nunca dependemos de un "move".
+
+function epIsColorIndex(v) {
+    var n = parseInt(v, 10);
+    return !isNaN(n) && n >= 0 && n <= 7;
+}
+
+/**
+ * Índice de color de un marcador, o -1 si no se pudo leer.
+ * La doc describe `getColorByIndex(index)` con index = "marcador a leer", pero
+ * los scripts reales la llaman sin argumentos sobre la instancia. Se prueban
+ * las dos formas y se valida que el resultado sea un color (0-7).
+ */
+function epGetMarkerColor(marker) {
+    var v;
+    try {
+        v = marker.getColorByIndex();
+        if (epIsColorIndex(v)) return parseInt(v, 10);
+    } catch(e1) {}
+    try {
+        v = marker.getColorByIndex(0);
+        if (epIsColorIndex(v)) return parseInt(v, 10);
+    } catch(e2) {}
+    return -1;
+}
+
+/**
+ * Colorea un marcador. Se llama con UN solo argumento: el segundo parámetro
+ * documentado (`markerIndex`) apunta a otro marcador de la colección y
+ * terminaría coloreando el equivocado.
+ * Colores: 0 verde · 1 rojo · 2 morado · 3 naranja · 4 amarillo · 5 blanco ·
+ * 6 azul · 7 cian.
+ */
+function epSetMarkerColor(marker, colorIdx) {
+    if (!epIsColorIndex(colorIdx)) return false;
+    try { marker.setColorByIndex(parseInt(colorIdx, 10)); return true; } catch(e) { return false; }
+}
+
+/** createMarker() siempre crea un marcador de comentario: restituye el tipo original. */
+function epApplyMarkerType(marker, typeStr) {
+    try {
+        if (typeStr === "Chapter" && marker.setTypeAsChapter) marker.setTypeAsChapter();
+        else if (typeStr === "Segmentation" && marker.setTypeAsSegmentation) marker.setTypeAsSegmentation();
+        else if (typeStr === "WebLink" && marker.setTypeAsWebLink) marker.setTypeAsWebLink();
+    } catch(e) {}
+}
+
+/** Marcador de la colección con ese guid (identidad estable), o null. */
+function epFindMarkerByGuid(markers, guid) {
+    if (!guid) return null;
+    var marker = markers.getFirstMarker();
+    while (marker) {
+        var g = "";
+        try { g = String(marker.guid || ""); } catch(e) {}
+        if (g === guid) return marker;
+        try { marker = markers.getNextMarker(marker); } catch(eN) { marker = null; }
+    }
+    return null;
+}
+
+/**
+ * Reposiciona un marcador borrándolo y creando uno nuevo en newStart, con el
+ * mismo nombre, comentario, color, tipo y duración.
+ * @param endSecs fin absoluto en segundos; null conserva la duración original.
+ * @returns {{created, error}}
+ */
+function epRecreateMarker(markers, target, newStart, endSecs) {
+    var name = "", comments = "", typeStr = "", durationSecs = 0;
+    try { name = target.name || ""; } catch(e1) {}
+    try { comments = target.comments || ""; } catch(e2) {}
+    try { typeStr = String(target.type || ""); } catch(e3) {}
+    try { durationSecs = target.end.seconds - target.start.seconds; } catch(e4) {}
+    var colorIdx = epGetMarkerColor(target);
+
+    try {
+        markers.deleteMarker(target);
+    } catch(eDel) {
+        return { created: null, error: "no se pudo borrar el marcador: " + eDel.message };
+    }
+
+    var created = null;
+    try {
+        created = markers.createMarker(newStart);
+    } catch(eNew) {
+        return { created: null, error: "no se pudo recrear el marcador: " + eNew.message };
+    }
+
+    try { created.name = name; } catch(e5) {}
+    try { created.comments = comments; } catch(e6) {}
+
+    var wantEnd = null;
+    if (typeof endSecs === "number" && !isNaN(endSecs)) wantEnd = endSecs;
+    else if (durationSecs > 0.01) wantEnd = newStart + durationSecs;
+    if (wantEnd !== null && wantEnd > newStart) {
+        try { created.end = wantEnd; } catch(e7) {}
+    }
+
+    epSetMarkerColor(created, colorIdx);
+    epApplyMarkerType(created, typeStr);
+    return { created: created, error: null };
+}
+
 function colorizeCommentMarkers() {
     try {
         var seq = app.project.activeSequence;
@@ -864,10 +1074,7 @@ function colorizeCommentMarkers() {
             var hasComment = (!isOut && dashIdx > 0);
 
             if (hasComment) {
-                try {
-                    marker.setColorByIndex(0, 6);
-                    colored++;
-                } catch(e) {}
+                if (epSetMarkerColor(marker, 6)) colored++;
             }
 
             try { marker = m.getNextMarker(marker); } catch(e) { marker = null; }
@@ -876,6 +1083,162 @@ function colorizeCommentMarkers() {
         return JSON.stringify({ success: true, colored: colored });
     } catch(e) {
         return JSON.stringify({ error: "Error: " + e.message });
+    }
+}
+
+// ─── Nombres de marcadores de TODAS las secuencias ───────────
+
+/**
+ * Recorre todas las secuencias del proyecto (menos backups) y devuelve los
+ * nombres/notas distintos de los marcadores IN. Sirve para armar el mapeo de
+ * vistas (nombre de marcador → pistas de video) sin tener que abrir ni cerrar
+ * pestañas: una sola llamada, sin efectos secundarios en el proyecto.
+ * items: [{name, note, count, sequences}]
+ */
+function getMarkerNamesAllSequences() {
+    try {
+        var seen = {};
+        var items = [];
+        var seqCount = 0;
+        var MAX_ITEMS = 200;
+
+        for (var i = 0; i < app.project.sequences.numSequences; i++) {
+            var seq = app.project.sequences[i];
+            if (seq.name.indexOf("_Backup_") >= 0 || seq.name.indexOf("_Fail") >= 0) continue;
+            seqCount++;
+
+            var m = seq.markers;
+            var numM = 0;
+            try { numM = m.numMarkers; } catch(eN) { continue; }
+            if (numM === 0) continue;
+
+            var seenHere = {};
+            var marker = m.getFirstMarker();
+            while (marker) {
+                var raw = (marker.comments || "");
+                var trimmed = raw.replace(/^\s+|\s+$/g, "");
+                if (trimmed.indexOf("OUT:") !== 0) {
+                    var note = "";
+                    var dashIdx = trimmed.indexOf(" - ");
+                    if (dashIdx > 0) note = trimmed.substring(0, dashIdx).replace(/^\s+|\s+$/g, "");
+
+                    var name = marker.name || "";
+                    var key = name + "\u0000" + note;
+                    if (seen[key] === undefined) {
+                        if (items.length < MAX_ITEMS) {
+                            seen[key] = items.length;
+                            items.push({ name: name, note: note, count: 1, sequences: 1 });
+                            seenHere[key] = true;
+                        }
+                    } else {
+                        var it = items[seen[key]];
+                        it.count++;
+                        if (!seenHere[key]) { it.sequences++; seenHere[key] = true; }
+                    }
+                }
+                try { marker = m.getNextMarker(marker); } catch(eX) { marker = null; }
+            }
+        }
+
+        return JSON.stringify({
+            success: true,
+            items: items,
+            sequenceCount: seqCount,
+            truncated: items.length >= MAX_ITEMS
+        });
+    } catch(e) {
+        return JSON.stringify({ error: "Error al leer nombres de marcadores: " + e.message });
+    }
+}
+
+// ─── Duración de marcadores existentes ───────────────────────
+
+/**
+ * Asigna una duración (endTime absoluto en segundos) a marcadores existentes.
+ * items: [{ start, endTime, comment? }] — match por start (±0.05s) y comentario
+ * opcional. Intenta asignar marker.end in-place; si Premiere no lo acepta,
+ * borra y recrea el marcador conservando nombre, comentario y color.
+ */
+function setMarkerDurations(jsonPath, seqId) {
+    try {
+        var seq;
+        if (seqId) {
+            seq = findSequenceById(seqId);
+            if (!seq) return JSON.stringify({ error: "Secuencia no encontrada: " + seqId });
+        } else {
+            seq = app.project.activeSequence;
+            if (!seq) return JSON.stringify({ error: "No hay secuencia activa." });
+        }
+
+        var f = new File(jsonPath);
+        if (!f.exists) return JSON.stringify({ error: "Archivo no encontrado: " + jsonPath });
+        f.encoding = "UTF-8"; f.open("r"); var content = f.read(); f.close();
+        var items = JSON.parse(content);
+
+        var EPS = 0.05;
+        var m = seq.markers;
+        var updated = 0;
+        var recreated = 0;
+        var notFound = [];
+
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i];
+            var startS = parseFloat(it.start);
+            var endS = parseFloat(it.endTime);
+            if (isNaN(startS) || isNaN(endS) || endS <= startS) {
+                notFound.push(it.start);
+                continue;
+            }
+
+            var target = null;
+            var marker = m.getFirstMarker();
+            while (marker) {
+                if (Math.abs(marker.start.seconds - startS) < EPS) {
+                    if (!it.comment || (marker.comments || "") === it.comment) {
+                        target = marker;
+                        break;
+                    }
+                    if (target === null) target = marker; // fallback solo por tiempo
+                }
+                try { marker = m.getNextMarker(marker); } catch(eN) { marker = null; }
+            }
+
+            if (!target) {
+                notFound.push(startS);
+                continue;
+            }
+
+            // 1) Intento in-place
+            var ok = false;
+            try {
+                target.end = endS;
+                var readBack = target.end.seconds;
+                ok = (Math.abs(readBack - endS) < 0.1);
+            } catch(eSet) {
+                ok = false;
+            }
+            if (ok) {
+                updated++;
+                continue;
+            }
+
+            // 2) Fallback: borrar + recrear con la duración deseada
+            var res = epRecreateMarker(m, target, startS, endS);
+            if (res.error) notFound.push(startS);
+            else recreated++;
+        }
+
+        return JSON.stringify({
+            success: true,
+            updated: updated,
+            recreated: recreated,
+            requested: items.length,
+            notFound: notFound,
+            sequenceName: seq.name,
+            markerCount: m.numMarkers
+        });
+    } catch(e) {
+        return JSON.stringify({ error: "Error al asignar duraciones: " + e.message });
     }
 }
 
@@ -1003,7 +1366,7 @@ function getMarkersForSequence(seqId) {
                     endSeconds: marker.end.seconds,
                     colorIndex: -1
                 };
-                try { info.colorIndex = marker.getColorByIndex(0); } catch(ec) {}
+                info.colorIndex = epGetMarkerColor(marker);
                 markers.push(info);
                 try { marker = m.getNextMarker(marker); } catch(e) { marker = null; }
             }
@@ -1110,6 +1473,38 @@ function discoverMethods(obj, label) {
 
 function secsToTicks(seconds) {
     return String(Math.round(parseFloat(seconds) * TICKS_PER_SECOND));
+}
+
+/** Ticks que dura un frame de la secuencia. 0 si Premiere no lo dice. */
+function ticksPerFrameOf(seq) {
+    var tpf = 0;
+    try { tpf = parseFloat(seq.timebase); } catch(e) {}
+    if (!(tpf > 0)) {
+        try {
+            var settings = seq.getSettings();
+            var frameDur = (settings && settings.videoFrameRate)
+                ? parseFloat(settings.videoFrameRate.seconds) : 0;
+            if (frameDur > 0) tpf = frameDur * TICKS_PER_SECOND;
+        } catch(e2) {}
+    }
+    return (tpf > 0) ? tpf : 0;
+}
+
+/**
+ * Segundos → ticks, pegados a la rejilla de frames de la secuencia.
+ *
+ * Premiere edita por frames: un punto de entrada/salida a mitad de frame hace
+ * que el extract ripplee una cantidad NO entera de frames y la unión queda con
+ * un hueco (o un frame de sobra). Y a mitad de frame llegan siempre: los tiempos
+ * salen de marcadores clavados en un frame, pero viajan al panel y vuelven como
+ * segundos redondeados al milisegundo, y a 30 fps dos de cada tres frames no
+ * caen en un milisegundo exacto (a 29.97, ninguno). Medio milisegundo es una
+ * centésima de frame, así que volver al frame más cercano es exacto.
+ */
+function secsToFrameTicks(seconds, ticksPerFrame) {
+    var ticks = parseFloat(seconds) * TICKS_PER_SECOND;
+    if (!(ticksPerFrame > 0)) return String(Math.round(ticks));
+    return String(Math.round(ticks / ticksPerFrame) * ticksPerFrame);
 }
 
 function getClipRangesOnTrack(trackIndex) {

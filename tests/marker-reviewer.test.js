@@ -97,19 +97,6 @@ function run() {
         assertEq(r.warnings.length, 2, "OUT huérfano + IN final sin cierre");
     }
 
-    section("buildBoundaryUnits() — unidades = pares + 1");
-    {
-        const pairs = [{}, {}, {}];
-        const units = MR.buildBoundaryUnits(pairs);
-        assertEq(units.length, 4, "3 pares → 4 unidades");
-        assertEq(units[0].type, "first-in", "primera unidad");
-        assertEq(units[1].type, "transition", "transición 1");
-        assertEq(units[1].outPairIdx, 0, "OUT del par 0");
-        assertEq(units[1].inPairIdx, 1, "IN del par 1");
-        assertEq(units[3].type, "last-out", "última unidad");
-        assertEq(MR.buildBoundaryUnits([{}]).length, 2, "1 par → first-in + last-out");
-    }
-
     section("computeAudioWindows() — ventanas alrededor de los cortes con merge");
     {
         const pairs = [
@@ -163,6 +150,17 @@ function run() {
         assertEq(props.length, 0, "no propone sin conteo");
     }
 
+    section("detectLeadIns() — un número suelto es contenido");
+    {
+        // "Una pregunta de negocio..." abre con artículo: leerlo como conteo movía
+        // el IN a la segunda palabra y frenaba el pipeline.
+        const w = mkWords("una pregunta de negocio sonaria mas o menos asi debemos priorizar belleza o mascotas", 50);
+        const pairs = [
+            { inMarker: mkMarker(49.8, "1", ""), outMarker: mkMarker(lastEnd(w) + 0.5, "", "OUT: x") }
+        ];
+        assertEq(MR.detectLeadIns(w, pairs).length, 0, "un solo número no es conteo");
+    }
+
     section("detectLeadIns() — cue sin número no dispara solo");
     {
         // "vamos" es contenido, no debe tratarse como conteo sin un número
@@ -174,67 +172,51 @@ function run() {
         assertEq(props.length, 0, "sin número no se considera conteo");
     }
 
-    section("buildBlockUnits() + resolveUnitResponse(block) — evalúa IN y OUT del bloque");
+    section("detectLeadIns() — el anuncio de retoma también es preámbulo");
     {
-        const w = mkWords("tres dos uno hola bienvenidos a la clase de hoy sobre integrales y derivadas fin del tema aqui pausa", 100, 0.3, 0.2);
+        // "Retomamos." y después de la pausa arranca la frase de verdad.
+        const w = mkWords("retomamos", 50, 0.5, 0)
+            .concat(mkWords("hoy vamos a ver el margen bruto de la tienda y su conversion", 51.4));
         const pairs = [
-            { inMarker: mkMarker(99.8, "1", ""), outMarker: mkMarker(lastEnd(w) + 0.5, "", "OUT: x") }
+            { inMarker: mkMarker(49.9, "1", ""), outMarker: mkMarker(lastEnd(w) + 0.5, "", "OUT: x") }
         ];
-        const units = MR.buildBlockUnits(pairs);
-        assertEq(units.length, 1, "una unidad por bloque");
-        assertEq(units[0].type, "block", "tipo block");
-
-        // El LLM mueve el IN a 'hola' (idx 3) y el OUT a antes de 'pausa'
-        const outWordIdx = w.length - 1; // 'pausa'
-        const props = MR.resolveUnitResponse(units[0], {
-            "in": { action: "move", time: w[3].start, reason: "quitar conteo" },
-            "out": { action: "move", time: w[outWordIdx].start, reason: "cortar antes de pausa" }
-        }, pairs, w);
-        const inProp = props.find(p => p.kind === "IN");
-        const outProp = props.find(p => p.kind === "OUT");
-        assert(!!inProp, "propone IN");
-        assert(!!outProp, "propone OUT");
-        assert(inProp.newTime <= w[3].start, "IN antes de 'hola'");
+        const props = MR.detectLeadIns(w, pairs);
+        assertEq(props.length, 1, "el anuncio de retoma dispara sin conteo");
+        assert(props[0].newTime <= w[1].start, "el IN abre en \"hoy\"");
+        // Pero si la frase sigue pegada al anuncio, es clase: no hay preámbulo.
+        const glued = mkWords("retomamos lo que vimos la clase pasada sobre el margen bruto y la conversion", 50);
+        const gluedPairs = [
+            { inMarker: mkMarker(49.9, "1", ""), outMarker: mkMarker(lastEnd(glued) + 0.5, "", "OUT: x") }
+        ];
+        assertEq(MR.detectLeadIns(glued, gluedPairs).length, 0,
+            "\"Retomamos lo que vimos...\" es contenido");
     }
 
-    section("resolveOverlaps() — recorta el OUT si se pisa con el IN siguiente");
+    section("markerBand() — los ~10s que el CD le da al IN");
     {
-        const pairs = [
-            { inMarker: mkMarker(10, "1", ""), outMarker: mkMarker(30, "", "OUT: a") },
-            { inMarker: mkMarker(28, "2", ""), outMarker: mkMarker(50, "", "OUT: b") }
-        ];
-        // Propuesta: OUT del bloque 1 a 32 (se pasa del IN del bloque 2 = 28)
-        const proposals = [
-            { kind: "OUT", pairIdx: 0, marker: pairs[0].outMarker, originalTime: 30, newTime: 32, reason: "x" }
-        ];
-        MR.resolveOverlaps(proposals, pairs);
-        assertEq(proposals[0].newTime, 28, "OUT recortado al IN del bloque siguiente");
-        assert(proposals[0].reason.indexOf("pisar") !== -1, "razón menciona el recorte");
+        const band = MR.markerBand({ startSeconds: 100, endSeconds: 110 });
+        assertEq(band.span, 10, "la banda dura lo que el marcador");
+        assertEq(band.start, 100, "empieza donde el marcador");
+        assertEq(band.end, 110, "y acaba donde acaba");
+        assertEq(MR.markerBand({ startSeconds: 100, endSeconds: 100.04 }), null,
+            "un marcador de un frame es un punto, no una banda");
+        assertEq(MR.markerBand({ startSeconds: 100 }), null, "sin endSeconds no hay banda");
+        assertEq(MR.markerBand({ startSeconds: 100, endSeconds: 400 }), null,
+            "una banda larguísima no habla de dónde abre el bloque");
+
+        assertEq(MR.bandVerdict(band, 104), "", "dentro de la banda no hay nada que decir");
+        assertEq(MR.bandVerdict(band, 112), "late", "más adelante del final: late");
+        assertEq(MR.bandVerdict(band, 98), "early", "antes del inicio: early");
+        assertEq(MR.bandVerdict(null, 98), "", "sin banda no se opina");
     }
 
-    section("resolveOverlaps() — crea recorte si no había propuesta de OUT");
-    {
-        const pairs = [
-            { inMarker: mkMarker(10, "1", ""), outMarker: mkMarker(35, "", "OUT: a") },
-            { inMarker: mkMarker(30, "2", ""), outMarker: mkMarker(50, "", "OUT: b") }
-        ];
-        // Sin propuesta de OUT para el bloque 0; el OUT original (35) > IN(30)
-        const proposals = [];
-        MR.resolveOverlaps(proposals, pairs);
-        assertEq(proposals.length, 1, "se crea un recorte de OUT");
-        assertEq(proposals[0].kind, "OUT", "es OUT");
-        assertEq(proposals[0].newTime, 30, "recortado al IN siguiente");
-    }
-
-    section("contextForTime() y formatContext()");
+    section("contextForTime() — palabras alrededor de un tiempo");
     {
         const words = mkWords("uno dos tres cuatro cinco seis siete ocho", 10);
         const ctx = MR.contextForTime(words, words[3].start + 0.05, 2);
         assertEq(ctx.before.length, 2, "2 palabras antes");
         assertEq(ctx.before[1].text, "tres", "última palabra antes");
         assertEq(ctx.after[0].text, "cuatro", "primera palabra después");
-        const fmt = MR.formatContext(ctx.after.slice(0, 1));
-        assert(/^\(\d+\.\d\)cuatro$/.test(fmt), "formato (t)palabra: " + fmt);
     }
 
     section("clampToWordGap() — IN nunca corta palabra");
@@ -256,97 +238,6 @@ function run() {
         assert(clamped >= lastW.end, "OUT clampado después del final de la palabra (obtenido " + clamped + ")");
     }
 
-    section("resolveUnitResponse() — move válido con clamp");
-    {
-        const words = mkWords("tres dos uno hola bienvenidos a la clase de hoy", 10, 0.3, 0.4);
-        // IN original en 10 (antes del conteo); el LLM propone empezar en "hola" (words[3])
-        const pairs = [{ inMarker: mkMarker(10, "1", ""), outMarker: mkMarker(60, "", "OUT: x") }];
-        const unit = { type: "first-in", pairIdx: 0 };
-        const proposals = MR.resolveUnitResponse(unit, {
-            "in": { action: "move", time: words[3].start, reason: "El conteo 3,2,1 debe quedar fuera" }
-        }, pairs, words);
-        assertEq(proposals.length, 1, "1 propuesta");
-        assertEq(proposals[0].kind, "IN", "es IN");
-        assert(proposals[0].newTime <= words[3].start, "clampado antes de 'hola'");
-        assert(proposals[0].newTime > words[2].end, "después del final de 'uno'");
-        assert(proposals[0].reason.indexOf("conteo") !== -1, "conserva la razón");
-    }
-
-    section("resolveUnitResponse() — keep y deltas insignificantes no proponen");
-    {
-        const words = mkWords("contenido de la clase aqui", 10);
-        const pairs = [{ inMarker: mkMarker(9.8, "1", ""), outMarker: mkMarker(30, "", "OUT: x") }];
-        const unit = { type: "first-in", pairIdx: 0 };
-
-        let proposals = MR.resolveUnitResponse(unit, { "in": { action: "keep" } }, pairs, words);
-        assertEq(proposals.length, 0, "keep → sin propuestas");
-
-        // move con tiempo ≈ original (el clamp lo devuelve al mismo sitio)
-        proposals = MR.resolveUnitResponse(unit, { "in": { action: "move", time: 9.85 } }, pairs, words);
-        assertEq(proposals.length, 0, "delta insignificante → sin propuestas");
-    }
-
-    section("resolveUnitResponse() — movimientos absurdos se descartan");
-    {
-        const words = mkWords("palabras de relleno para el test de seguridad", 10);
-        const pairs = [{ inMarker: mkMarker(12, "1", ""), outMarker: mkMarker(40, "", "OUT: x") }];
-        const unit = { type: "first-in", pairIdx: 0 };
-
-        let proposals = MR.resolveUnitResponse(unit, { "in": { action: "move", time: 500 } }, pairs, words);
-        assertEq(proposals.length, 0, "move de 488s descartado (maxMoveSeconds)");
-
-        proposals = MR.resolveUnitResponse(unit, { "in": { action: "move", time: "no-numero" } }, pairs, words);
-        assertEq(proposals.length, 0, "tiempo no numérico descartado");
-
-        proposals = MR.resolveUnitResponse(unit, null, pairs, words);
-        assertEq(proposals.length, 0, "respuesta nula → sin propuestas");
-    }
-
-    section("resolveUnitResponse() — transición con OUT e IN + frase repetida");
-    {
-        // Bloque 1: 10-30, bloque 2: 50-80. El LLM retrocede el OUT a 25 y mueve el IN a 52.
-        const w1 = mkWords("la primera parte del tema con una frase que se repite al final", 10, 0.3, 0.4);
-        const w2 = mkWords("una frase que se repite al final y ahora el contenido nuevo", 50, 0.3, 0.4);
-        const words = w1.concat(w2);
-        const pairs = [
-            { inMarker: mkMarker(9.5, "1", ""), outMarker: mkMarker(30, "", "OUT: a") },
-            { inMarker: mkMarker(49.5, "2", ""), outMarker: mkMarker(80, "", "OUT: b") }
-        ];
-        const unit = { type: "transition", outPairIdx: 0, inPairIdx: 1 };
-        const repeatStart = w1[7].start; // "una"
-        const proposals = MR.resolveUnitResponse(unit, {
-            out: { action: "move", time: repeatStart, reason: "El bloque siguiente repite esta frase" },
-            "in": { action: "keep" },
-            repeatedPhrase: "una frase que se repite al final"
-        }, pairs, words);
-        assertEq(proposals.length, 1, "solo el OUT se mueve");
-        assertEq(proposals[0].kind, "OUT", "es OUT");
-        assertEq(proposals[0].pairIdx, 0, "del par 0");
-        assert(proposals[0].newTime < 30, "el OUT retrocede");
-        assert(proposals[0].repeatedPhrase.indexOf("repite") !== -1, "lleva la frase repetida");
-    }
-
-    section("buildUnitPrompt() — estructura de los prompts");
-    {
-        const words = mkWords("tres dos uno hola bienvenidos a la clase", 10);
-        const pairs = [
-            { inMarker: mkMarker(10, "1", ""), outMarker: mkMarker(30, "", "OUT: a") },
-            { inMarker: mkMarker(40, "2", ""), outMarker: mkMarker(60, "", "OUT: b") }
-        ];
-        const p1 = MR.buildUnitPrompt({ type: "first-in", pairIdx: 0 }, pairs, words);
-        assert(p1.systemMsg.indexOf("JSON") !== -1, "system pide JSON");
-        assert(p1.prompt.indexOf("PRIMER MARCADOR IN") !== -1, "prompt de primer IN");
-        assert(p1.prompt.indexOf("(1") !== -1, "incluye timestamps de contexto");
-
-        const p2 = MR.buildUnitPrompt({ type: "transition", outPairIdx: 0, inPairIdx: 1, hints: "pista X" }, pairs, words);
-        assert(p2.prompt.indexOf("TRANSICIÓN") !== -1, "prompt de transición");
-        assert(p2.prompt.indexOf("REPITE") !== -1, "incluye la instrucción de repetición");
-        assert(p2.prompt.indexOf("pista X") !== -1, "incluye los hints determinísticos");
-
-        const p3 = MR.buildUnitPrompt({ type: "last-out", pairIdx: 1 }, pairs, words);
-        assert(p3.prompt.indexOf("ÚLTIMO MARCADOR OUT") !== -1, "prompt de último OUT");
-    }
-
     section("buildFinalTranscript() — transcript de los bloques");
     {
         const w1 = mkWords("bloque uno con contenido", 10);
@@ -364,6 +255,75 @@ function run() {
         assert(ft.text.indexOf("esto se corta") === -1, "el contenido eliminado no aparece");
         assertEq(ft.wordCount, 9, "conteo de palabras");
         assert(ft.text.indexOf("[Bloque 1") !== -1, "encabezados de bloque");
+    }
+
+    section("coherenceTargets() — de lo que dice el revisor a qué borde arreglar");
+    {
+        const key = t => t.map(x => x.kind + ":" + x.pairIdx).join(" ");
+
+        const repeats = { repeat: { "OUT:3": true } };
+        assertEq(key(MR.coherenceTargets(
+            [{ block: 4, type: "repeticion", detail: "el bloque 5 repite esto" }], 10, repeats)),
+            "OUT:3", "una repetición se arregla en el cierre del bloque citado");
+
+        // Caso real (clase 15 con la repetición dentro): el revisor señaló el bloque 5
+        // diciendo que repetía lo del anterior. El cierre a arreglar es el del 4.
+        assertEq(key(MR.coherenceTargets(
+            [{ block: 5, type: "repeticion",
+               detail: "Repite información ya dada en el bloque anterior sobre el dashboard." }], 10, repeats)),
+            "OUT:3", "si el bloque citado es la segunda vez, se cierra antes el de antes");
+        assertEq(MR.coherenceTargets(
+            [{ block: 1, type: "repeticion", detail: "repite lo anterior" }], 10, repeats).length, 0,
+            "no hay bloque antes del primero");
+        // El revisor apunta al bloque de al lado 3 veces de 5: sin palabras repetidas
+        // medibles en ESE cierre, no se mueve nada.
+        assertEq(MR.coherenceTargets(
+            [{ block: 3, type: "repeticion", detail: "el bloque 4 repite esto" }], 10, repeats).length, 0,
+            "una repetición que el transcript no ve no manda a ningún borde");
+        assertEq(MR.coherenceTargets(
+            [{ block: 4, type: "repeticion", detail: "repite" }], 10).length, 0,
+            "sin pruebas del transcript no se toca nada");
+
+        // Los saltos de tema no se arreglan moviendo marcadores: falta material que
+        // nunca se grabó, y mover un borde bueno solo lo estropea.
+        assertEq(MR.coherenceTargets(
+            [{ block: 4, type: "salto-tema", detail: "se pasa de golpe a otro tema" }], 10).length, 0,
+            "un salto de tema no manda a ningún borde");
+
+        // Que un corte parta una frase se mide: sin confirmación del transcript, el
+        // revisor se equivocó de bloque (lo hace, medido en las clases 14 y 15).
+        const cut = { cut: { "IN:1": true, "OUT:1": true } };
+        assertEq(key(MR.coherenceTargets(
+            [{ block: 2, type: "corte-frase", detail: "el bloque empieza a media frase" }], 10, cut)),
+            "IN:1", "\"empieza\" señala la apertura");
+        assertEq(key(MR.coherenceTargets(
+            [{ block: 2, type: "corte-frase", detail: "la frase del final queda cortada" }], 10, cut)),
+            "OUT:1", "\"final\" señala el cierre");
+        assertEq(key(MR.coherenceTargets(
+            [{ block: 2, type: "corte-frase", detail: "frase incompleta" }], 10, cut)),
+            "IN:1 OUT:1", "sin pista, se revisan los dos bordes del bloque");
+        assertEq(MR.coherenceTargets(
+            [{ block: 2, type: "corte-frase", detail: "frase incompleta" }], 10).length, 0,
+            "si el transcript no ve la frase partida, no se toca nada");
+        assertEq(MR.coherenceTargets(
+            [{ block: 5, type: "corte-frase", detail: "frase incompleta" }], 10, cut).length, 0,
+            "y la confirmación es de ESE borde, no de cualquiera");
+
+        // Lo que no dice dónde no se toca, y nada se sale de la clase.
+        assertEq(MR.coherenceTargets([{ block: 0, type: "otro", detail: "va bien" }], 10).length, 0,
+            "un comentario general no manda a ningún borde");
+        assertEq(MR.coherenceTargets([{ block: 3, type: "otro", detail: "suena raro" }], 10).length, 0,
+            "\"otro\" tampoco: no dice qué borde");
+        assertEq(MR.coherenceTargets([{ block: 99, type: "repeticion", detail: "x" }], 10).length, 0,
+            "un bloque que no existe se ignora");
+        assertEq(MR.coherenceTargets(null, 10).length, 0, "sin observaciones no hay nada que hacer");
+
+        // El mismo borde señalado dos veces se arregla una.
+        assertEq(key(MR.coherenceTargets([
+            { block: 4, type: "repeticion", detail: "repite" },
+            { block: 4, type: "corte-frase", detail: "el final queda cortado" }
+        ], 10, { cut: { "OUT:3": true }, repeat: { "OUT:3": true } })),
+            "OUT:3", "el mismo borde no entra dos veces");
     }
 
     section("buildCoherencePrompt() — incluye el transcript y pide JSON");

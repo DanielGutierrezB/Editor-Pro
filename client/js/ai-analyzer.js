@@ -41,6 +41,20 @@
             ],
             defaultModel: "gemini-2.0-flash"
         },
+        claude_code: {
+            name: "Claude (sesión)",
+            local: true,
+            cli: true,
+            keyPlaceholder: "",
+            // Alias del CLI: siempre apuntan al último modelo de cada familia.
+            models: [
+                { id: "default", label: "Predeterminado de tu plan" },
+                { id: "sonnet", label: "Sonnet (último, recomendado)" },
+                { id: "opus", label: "Opus (último, máxima calidad)" },
+                { id: "haiku", label: "Haiku (último, rápido)" }
+            ],
+            defaultModel: "sonnet"
+        },
         anthropic: {
             name: "Claude",
             host: "api.anthropic.com",
@@ -128,6 +142,11 @@
 
     AIAnalyzer.prototype.isConfigured = function() {
         if (this.provider === "ollama") return true;
+        // Claude Code no usa API key: basta con tener el CLI instalado (la sesión
+        // se valida con la primera llamada real).
+        if (this.provider === "claude_code") {
+            return !!(global.EPClaudeCode && global.EPClaudeCode.isInstalled());
+        }
         var key = this.getActiveKey();
         return key && key.length > 5;
     };
@@ -292,8 +311,10 @@
         // rápidas. Qwen espera el switch "/no_think" en el ÚLTIMO mensaje de
         // usuario (no en el system); en el system no surte efecto y el modelo
         // gastaría los tokens pensando (respuesta vacía).
+        // Claude no entiende el switch de qwen y en el CLI un "/" podría leerse
+        // como comando, así que ahí no se añade.
         var noThink = opts.think === false;
-        if (noThink && userPrompt) userPrompt = userPrompt + "\n\n/no_think";
+        if (noThink && userPrompt && this.provider !== "claude_code") userPrompt = userPrompt + "\n\n/no_think";
         var numPredict = (typeof opts.numPredict === "number" && opts.numPredict > 0) ? opts.numPredict : this.maxTokens;
 
         // Auto-correct provider/model before sending
@@ -379,6 +400,18 @@
                     }
                 });
                 break;
+        }
+
+        // Claude Code va por el CLI local (sesión del usuario, sin API key), así
+        // que no hay body HTTP que construir.
+        if (this.provider === "claude_code") {
+            self._activeTimeoutId = setTimeout(function() {
+                try { if (self._activeRequest && self._activeRequest.abort) self._activeRequest.abort(); } catch(e) {}
+                wrappedCallback({ error: "Tiempo de espera agotado (" + Math.round(timeoutMs / 60000) + " min) esperando a Claude Code." });
+            }, timeoutMs);
+            self._activeRequest = self._requestClaudeCode(
+                systemMsg, userPrompt, wrappedCallback, opts.timeoutMs, opts.onWait);
+            return;
         }
 
         var onTimeout = function() {
@@ -667,6 +700,111 @@
         }
     };
 
+    // ─── Claude Code (CLI local, sesión del usuario) ─────────────
+
+    /**
+     * El CLI reporta la sesión caducada como un 401 de API key, que no le dice
+     * nada al usuario: aquí se traduce a la acción que resuelve el problema.
+     */
+    function _claudeCodeError(raw) {
+        var msg = String(raw || "Error del CLI de Claude Code").trim();
+        if (/401|authenticate|api key is invalid|unauthorized|oauth/i.test(msg)) {
+            return "Tu sesión de Claude no es válida (" + msg + "). Abre Ajustes y pulsa " +
+                "\"Iniciar sesión\" para reconectar tu cuenta.";
+        }
+        return msg;
+    }
+    /**
+     * Invoca `claude -p --output-format json` y pasa su stdout tal cual a
+     * _parseResponse (que sabe leer el envoltorio del CLI).
+     * Devuelve un objeto con abort() para que _send/abort() pueda matar el proceso.
+     */
+    AIAnalyzer.prototype._requestClaudeCode = function(systemMsg, userPrompt, callback, timeoutMs, onWait) {
+        var self = this;
+        var cc = global.EPClaudeCode;
+        if (!cc) {
+            callback({ error: "El módulo de Claude Code no está cargado." });
+            return null;
+        }
+        if (!cc.isInstalled()) {
+            callback({
+                error: "No se encontró el CLI de Claude Code. Instálalo con " +
+                    "`npm install -g @anthropic-ai/claude-code` y vuelve a Ajustes."
+            });
+            return null;
+        }
+        return cc.prompt({
+            system: systemMsg,
+            prompt: userPrompt,
+            model: self.model,
+            timeoutMs: timeoutMs || 0,
+            onWait: onWait || null
+        }, function(err, stdout) {
+            if (err) { callback({ error: err }); return; }
+            self._parseResponse(stdout, callback);
+        });
+    };
+
+    /**
+     * cb(err, {model, text}) — llamada mínima para verificar la sesión.
+     * Una sesión sana contesta esto en segundos, así que el tope es corto: si se
+     * pasa, el problema es la sesión y no vale la pena esperar los reintentos.
+     */
+    AIAnalyzer.prototype.verifyClaudeCode = function(cb, onWait) {
+        var cc = global.EPClaudeCode;
+        if (!cc || !cc.isInstalled()) { cb("El CLI de Claude Code no está instalado."); return; }
+        cc.prompt({
+            system: "Responde solo con JSON válido.",
+            prompt: 'Responde exactamente {"ok":1}',
+            model: this.model,
+            timeoutMs: 30000,
+            onWait: onWait || null
+        }, function(err, stdout) {
+            if (err) { cb(err); return; }
+            var data = null;
+            try { data = JSON.parse(stdout); } catch (e) {}
+            if (!data) { cb("Respuesta ilegible del CLI de Claude Code."); return; }
+            if (data.is_error) { cb(_claudeCodeError(data.result)); return; }
+            var used = "";
+            try {
+                for (var k in (data.modelUsage || {})) { if (data.modelUsage.hasOwnProperty(k)) { used = k; break; } }
+            } catch (e) {}
+            cb(null, { model: used, text: String(data.result || "") });
+        });
+    };
+
+    /**
+     * Modelos disponibles ahora mismo en la API de Anthropic (GET /v1/models),
+     * para no depender de una lista fija de versiones.
+     * cb(err, [{id, label}])
+     */
+    AIAnalyzer.prototype.fetchAnthropicModels = function(cb) {
+        var key = this.keys.anthropic || "";
+        if (!key) { cb("Configura primero tu API key de Claude."); return; }
+        if (!https) { cb("No se puede consultar la API desde este entorno."); return; }
+        var req = https.request({
+            hostname: "api.anthropic.com", port: 443, path: "/v1/models?limit=50", method: "GET",
+            headers: { "x-api-key": key, "anthropic-version": "2023-06-01" }
+        }, function(res) {
+            var data = "";
+            res.on("data", function(c) { data += c; });
+            res.on("end", function() {
+                var parsed = null;
+                try { parsed = JSON.parse(data); } catch (e) {}
+                if (!parsed) { cb("Respuesta ilegible de la API de Claude."); return; }
+                if (parsed.error) { cb(parsed.error.message || "Error de la API de Claude"); return; }
+                var list = [];
+                (parsed.data || []).forEach(function(m) {
+                    if (m && m.id) list.push({ id: m.id, label: m.display_name || m.id });
+                });
+                if (!list.length) { cb("La API no devolvió modelos."); return; }
+                cb(null, list);
+            });
+        });
+        req.on("error", function(e) { cb("Error de conexión con la API de Claude: " + e.message); });
+        req.end();
+    };
+
     // ─── Parse response per provider ─────────────────────────────
     AIAnalyzer.prototype._parseResponse = function(data, callback) {
         try {
@@ -682,6 +820,14 @@
             switch (this.provider) {
                 case "ollama":
                     if (response.message && response.message.content) content = response.message.content;
+                    break;
+                case "claude_code":
+                    // Envoltorio del CLI: {type:"result", is_error, result:"<texto>"}
+                    if (response.is_error) {
+                        callback({ error: _claudeCodeError(response.result) });
+                        return;
+                    }
+                    if (typeof response.result === "string") content = response.result;
                     break;
                 case "anthropic":
                     if (response.content && response.content.length > 0) {

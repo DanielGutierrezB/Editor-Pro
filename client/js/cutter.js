@@ -687,7 +687,7 @@
         dom.btnBatchAnalyze.classList.add("btn-disabled");
 
         // Step 1: Backup
-        evalScript("backupSequence()", function(backupResult) {
+        evalScript("backupSequence('Pre-Cut')", function(backupResult) {
             if (state.singleStopping) {
                 dom.analyzeProgress.classList.add("hidden");
                 dom.resultsSection.classList.remove("hidden");
@@ -762,7 +762,7 @@
                 if (window.EPLogger) EPLogger.log("cutter", "execute", (s.removed || 0) + " cuts applied");
 
                 // Load remaining markers
-                evalScript("getPostCutMarkers()", function(markerResult) {
+                loadPostCutMarkers(function() {
                     setTimeout(function() {
                         dom.analyzeProgress.classList.add("hidden");
                         finishSingleProcessing();
@@ -775,14 +775,6 @@
 
                         dom.resultDone.classList.remove("hidden");
                         state.analyzed = false;
-
-                        // Render marker list
-                        if (markerResult.markers) {
-                            state.postMarkers = markerResult.markers;
-                            state.selectedMarkerTimes = {};
-                            renderMarkerManager();
-                            renderViewMapping();
-                        }
 
                         showToast(
                             (s.removed || 0) > 0
@@ -852,7 +844,36 @@
         return MARKER_COLORS[colorIndex] || "#9898a8";
     }
 
-    function renderMarkerManager() {
+    /**
+     * Lee los marcadores que quedaron y pinta con ellos el panel y la Vista de
+     * Cámaras. Es el único sitio por el que se cargan: antes cada flujo (corte
+     * suelto, abrir una del lote) hacía su propia llamada y **se tragaba el fallo**
+     * —`if (markerResult.markers)` sin `else`—, así que un error del host o una
+     * secuencia que no llegó a activarse dejaban el panel en "Marcadores 0" y sin
+     * Vista de Cámaras, sin decir por qué ni dejar nada en el log. Eso no se
+     * distingue de una secuencia que de verdad se quedó sin marcadores.
+     */
+    function loadPostCutMarkers(cb) {
+        evalScript("getPostCutMarkers()", function(markerResult) {
+            if (!markerResult || markerResult.error || !markerResult.markers) {
+                var why = (markerResult && markerResult.error) || "el host no devolvió marcadores";
+                if (window.EPLogger) EPLogger.error("cutter", "post-markers", why);
+                state.postMarkers = [];
+                renderMarkerManager(why);
+                renderViewMapping();
+                showToast("No se pudieron leer los marcadores: " + why, "error");
+                if (cb) cb(false);
+                return;
+            }
+            state.postMarkers = markerResult.markers;
+            state.selectedMarkerTimes = {};
+            renderMarkerManager();
+            renderViewMapping();
+            if (cb) cb(true);
+        });
+    }
+
+    function renderMarkerManager(problem) {
         dom.markerList.innerHTML = "";
         state.selectedMarkerTimes = {};
         if (dom.selectAllCb) dom.selectAllCb.checked = false;
@@ -860,6 +881,25 @@
 
         var markers = state.postMarkers || [];
         dom.markerMgrCount.textContent = markers.length;
+
+        // Una lista vacía tiene dos causas muy distintas y el editor no puede
+        // distinguirlas desde fuera: o la secuencia se quedó sin marcadores, o la
+        // lectura falló. Se dice cuál, y se deja el botón para reintentarla sin
+        // tener que volver a cortar.
+        if (markers.length === 0) {
+            var empty = document.createElement("div");
+            empty.className = "marker-empty-note";
+            empty.textContent = problem
+                ? "No se pudieron leer los marcadores: " + problem
+                : "La secuencia activa no tiene marcadores.";
+            dom.markerList.appendChild(empty);
+
+            var retry = document.createElement("button");
+            retry.className = "btn btn-ghost btn-sm";
+            retry.textContent = "Recargar marcadores";
+            retry.addEventListener("click", function() { loadPostCutMarkers(); });
+            dom.markerList.appendChild(retry);
+        }
 
         // Log raw marker data for debugging
         if (window.EPLogger) {
@@ -963,13 +1003,7 @@
     }
 
     function refreshMarkerList() {
-        evalScript("getPostCutMarkers()", function(result) {
-            if (result.markers) {
-                state.postMarkers = result.markers;
-                state.selectedMarkerTimes = {};
-                renderMarkerManager();
-            }
-        });
+        loadPostCutMarkers();
     }
 
     function doDeleteNoComments() {
@@ -1147,16 +1181,37 @@
         savePresetsStore(store);
     }
 
+    /** La Vista de Cámaras no aparece: decir qué falta en vez de dejar el hueco. */
+    function showViewNote(text) {
+        dom.viewSection.innerHTML = "";
+        var note = document.createElement("div");
+        note.className = "view-section marker-empty-note";
+        note.textContent = text;
+        dom.viewSection.appendChild(note);
+        dom.viewSection.classList.remove("hidden");
+    }
+
     function renderViewMapping() {
         dom.viewSection.innerHTML = "";
         dom.viewSection.classList.add("hidden");
 
         var markers = state.postMarkers || [];
         var names = getUniqueMarkerNames(markers);
-        if (names.length === 0) return;
+        // Sin marcadores el panel de arriba ya explica por qué. Con marcadores pero
+        // sin nombres de vista, la sección desaparecía sin más: se dice qué falta.
+        if (names.length === 0) {
+            if (markers.length > 0) showViewNote("Ninguno de los " + markers.length +
+                " marcadores tiene nombre de vista (CAM, PC...), así que no hay nada que mapear.");
+            return;
+        }
 
         evalScript("getVideoTrackNames()", function(data) {
-            if (data.error || !data.tracks || data.tracks.length === 0) return;
+            if (data.error || !data.tracks || data.tracks.length === 0) {
+                var why = data.error || "la secuencia activa no tiene pistas de video con clips";
+                if (window.EPLogger) EPLogger.error("cutter", "video-tracks", why);
+                showViewNote("No se pudieron leer las pistas de video: " + why);
+                return;
+            }
 
             state.videoTracks = data.tracks;
             var store = loadPresetsStore();
@@ -1766,7 +1821,7 @@
                     "(" + (current + 1) + "/" + total + ") Backup: " + seq.seqName + "...";
                 dom.analyzeProgressFill.style.width = basePct + Math.round((1 / total) * 25) + "%";
 
-                evalScript("backupSequence()", function(backupResult) {
+                evalScript("backupSequence('Pre-Cut')", function(backupResult) {
                     if (backupResult.error) {
                         state.batchLog.push("Backup fallo: " + backupResult.error);
                     } else {
@@ -1938,7 +1993,21 @@
                 showToast("Error al abrir: " + result.error, "error");
                 return;
             }
-            showToast("Secuencia abierta: " + seqName, "success");
+            // El host reintenta hasta 8 s y avisa si la secuencia no llegó a quedar
+            // activa. Ignorarlo era leer los marcadores de OTRA secuencia —o de
+            // ninguna—, que es como el panel acababa en "Marcadores 0" sin motivo
+            // visible.
+            if (result.verified === false) {
+                if (window.EPLogger) {
+                    EPLogger.error("cutter", "open-sequence",
+                        "pedida " + seqName + ", activa " + (result.activeName || "ninguna"));
+                }
+                showToast("Premiere no activó \"" + seqName + "\" (sigue en \"" +
+                    (result.activeName || "ninguna") + "\"). Ábrela en el timeline y " +
+                    "pulsa Recargar marcadores.", "error");
+            } else {
+                showToast("Secuencia abierta: " + seqName, "success");
+            }
             refreshSequenceInfo();
 
             dom.batchDone.classList.add("hidden");
@@ -1951,15 +2020,7 @@
             dom.btnCopyLog.style.display = "none";
 
             renderBatchNavBar();
-
-            evalScript("getPostCutMarkers()", function(markerResult) {
-                if (markerResult.markers) {
-                    state.postMarkers = markerResult.markers;
-                    state.selectedMarkerTimes = {};
-                    renderMarkerManager();
-                    renderViewMapping();
-                }
-            });
+            loadPostCutMarkers();
         });
     }
 

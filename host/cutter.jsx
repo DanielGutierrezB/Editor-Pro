@@ -32,6 +32,15 @@ function executeCuts(filePath) {
             log.push("  Zona " + zz + ": " + parseFloat(removeZones[zz].start).toFixed(2) + "s - " + parseFloat(removeZones[zz].end).toFixed(2) + "s (" + removeZones[zz].label + ")");
         }
 
+        // Los tiempos llegan en segundos redondeados al milisegundo: hay que
+        // devolverlos a la rejilla de frames antes de marcar in/out (ver
+        // secsToFrameTicks). Sin esto el extract cierra un frame de menos y la
+        // unión queda con un hueco.
+        var tpf = ticksPerFrameOf(seq);
+        log.push(tpf > 0
+            ? "Ticks por frame: " + tpf + " (" + (TICKS_PER_SECOND / tpf).toFixed(3) + " fps)"
+            : "Timebase desconocido: los cortes van al tick crudo");
+
         enableAllTracks(seq);
         log.push("Tracks habilitados");
 
@@ -89,12 +98,13 @@ function executeCuts(filePath) {
         stats.method = "InOut+Extract";
 
         for (var z = removeZones.length - 1; z >= 0; z--) {
-            var zStart = parseFloat(removeZones[z].start);
-            var zEnd = parseFloat(removeZones[z].end);
-            var startTicks = secsToTicks(zStart);
-            var endTicks = secsToTicks(zEnd);
+            var startTicks = secsToFrameTicks(removeZones[z].start, tpf);
+            var endTicks = secsToFrameTicks(removeZones[z].end, tpf);
+            var zStart = parseFloat(startTicks) / TICKS_PER_SECOND;
+            var zEnd = parseFloat(endTicks) / TICKS_PER_SECOND;
 
-            log.push("Zona " + z + " [" + zStart.toFixed(2) + "s - " + zEnd.toFixed(2) + "s] (" + removeZones[z].label + ")");
+            log.push("Zona " + z + " [" + zStart.toFixed(2) + "s - " + zEnd.toFixed(2) + "s] (" + removeZones[z].label + ")"
+                + (tpf > 0 ? " = " + (parseFloat(endTicks) - parseFloat(startTicks)) / tpf + " frames" : ""));
 
             // Set In point
             var inOK = false;
@@ -227,8 +237,8 @@ function executeCuts(filePath) {
 
             // Re-read zones (timecodes haven't shifted since extract didn't work)
             for (var z2 = removeZones.length - 1; z2 >= 0; z2--) {
-                var zs2 = parseFloat(removeZones[z2].start);
-                var ze2 = parseFloat(removeZones[z2].end);
+                var zs2 = parseFloat(secsToFrameTicks(removeZones[z2].start, tpf)) / TICKS_PER_SECOND;
+                var ze2 = parseFloat(secsToFrameTicks(removeZones[z2].end, tpf)) / TICKS_PER_SECOND;
 
                 log.push("Zona " + z2 + " [" + zs2.toFixed(2) + "s - " + ze2.toFixed(2) + "s]");
 

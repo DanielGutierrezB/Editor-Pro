@@ -776,3 +776,407 @@
     white-space: nowrap;
 }
 
+/* ─── Transcribir secuencias (batch) + biblioteca ─── */
+
+.tb-inline-opt {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 6px;
+    cursor: pointer;
+}
+
+.tb-status {
+    font-size: 9px;
+    color: var(--text-muted);
+}
+.tb-status-done { color: var(--success); }
+.tb-status-error { color: var(--error); }
+.tb-status-running { color: var(--info); }
+.tb-status-has { color: var(--warning); }
+
+.tb-library-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.tb-lib-empty {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 8px 4px;
+}
+
+.tb-lib-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.tb-lib-item.tb-lib-editing {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+}
+
+.tb-lib-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.tb-lib-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tb-lib-meta {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-top: 1px;
+}
+
+.tb-lib-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.tb-editing-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+}
+
+.tb-editing-label {
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-bright);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ─── Editor tipo Descript: palabras clicables ligadas a tiempo ─── */
+.tb-editor-hint {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    line-height: 1.4;
+}
+
+.tb-editor {
+    max-height: 56vh;
+    min-height: 200px;
+    overflow-y: auto;
+    padding: 10px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    font-size: 15px;
+    color: var(--text-primary);
+    outline: none;
+    word-break: break-word;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.tb-editor:focus {
+    border-color: var(--accent-bright);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+/* Cada bloque = una idea / clip: timecode a la izquierda + texto */
+.tb-editor .tb-block {
+    display: flex;
+    gap: 12px;
+    padding: 9px 8px;
+    border-radius: var(--radius-sm);
+    transition: background 0.1s ease;
+}
+
+.tb-editor .tb-block:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.tb-editor .tb-block + .tb-block {
+    border-top: 1px solid var(--border);
+}
+
+.tb-editor .tb-tc {
+    flex: 0 0 42px;
+    align-self: flex-start;
+    margin-top: 2px;
+    font-size: 10px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent-bright);
+    background: var(--accent-dim);
+    border-radius: 4px;
+    padding: 2px 5px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 0.1s ease, color 0.1s ease;
+}
+
+.tb-editor .tb-tc:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+.tb-editor .tb-block-body {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.9;
+}
+
+.tb-editor .tb-w {
+    border-radius: 3px;
+    padding: 1px 1px;
+    cursor: pointer;
+    transition: background 0.08s ease, color 0.08s ease;
+}
+
+.tb-editor .tb-w:hover {
+    background: var(--accent-dim);
+}
+
+.tb-editor .tb-w-active {
+    background: var(--accent);
+    color: #fff;
+}
+
+.tb-editor .tb-w.tb-find-hit {
+    background: var(--warning, #d9a441);
+    color: #1a1a1a;
+    font-weight: 600;
+}
+
+/* ─── Buscar y reemplazar ─── */
+.tb-find-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    background: var(--bg-secondary, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.tb-find-fields {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 220px;
+}
+
+.tb-find-input {
+    flex: 1;
+    min-width: 80px;
+    font-size: 12px;
+    padding: 4px 8px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    outline: none;
+}
+
+.tb-find-input:focus {
+    border-color: var(--accent);
+}
+
+.tb-find-arrow {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+}
+
+.tb-find-case {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.tb-find-count {
+    font-size: 10px;
+    color: var(--text-muted);
+    min-width: 70px;
+}
+
+.tb-find-count-none {
+    color: var(--danger, #d9534f);
+}
+
+/* ─── Repeticiones / pickups ─── */
+.tb-repeats {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.tb-rep-card {
+    padding: 8px 10px;
+    background: rgba(217, 164, 65, 0.10);
+    border: 1px solid var(--warning, #d9a441);
+    border-radius: var(--radius-sm);
+}
+
+.tb-rep-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.tb-rep-title {
+    flex: 1;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--warning, #d9a441);
+}
+
+.tb-rep-sim {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.tb-rep-snippets {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.tb-rep-snippet {
+    display: block;
+    padding: 2px 0;
+}
+
+.tb-rep-snippet .tb-rep-tag {
+    display: inline-block;
+    min-width: 62px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-right: 6px;
+    color: var(--text-muted);
+}
+
+.tb-rep-snippet.tb-rep-cut { color: var(--text-muted); text-decoration: line-through; }
+.tb-rep-snippet.tb-rep-keep { color: var(--text-primary); }
+
+.tb-rep-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.tb-rep-cut-btn {
+    color: #fff !important;
+    background: var(--danger, #d9534f) !important;
+    border-color: var(--danger, #d9534f) !important;
+}
+
+.tb-rep-cut-btn:hover { filter: brightness(1.1); }
+
+.tb-rep-dismiss {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+/* Resalta en el editor las palabras de una repetición */
+.tb-editor .tb-w.tb-rep-first {
+    background: rgba(217, 83, 79, 0.22);
+    box-shadow: inset 0 -2px 0 var(--danger, #d9534f);
+}
+
+.tb-editor .tb-w.tb-rep-second {
+    background: rgba(90, 180, 120, 0.20);
+    box-shadow: inset 0 -2px 0 #4caf72;
+}
+
+.tb-row-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.tb-row-actions .btn {
+    padding: 2px 6px;
+    min-width: 24px;
+}
+
+.batch-seq-item.tb-row-running {
+    border-color: var(--info);
+    background: var(--info-bg);
+}
+
+.tb-row-prog {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.tb-row-prog-track {
+    flex: 1;
+    height: 4px;
+    background: var(--bg-input);
+    border-radius: 2px;
+    overflow: hidden;
+    min-width: 40px;
+}
+
+.tb-row-prog-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--brand-start), var(--brand-end));
+    transition: width 160ms ease;
+}
+
+/* Botón de borrar: X roja siempre legible, también en hover. */
+.tb-btn-delete {
+    color: var(--error);
+}
+.tb-btn-delete:hover {
+    background: var(--error-bg);
+    color: var(--error);
+    border-color: var(--error-border);
+}
+.tb-lib-actions .btn,
+.tb-row-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
