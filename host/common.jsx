@@ -817,6 +817,25 @@ function getBatchBackupInfo() {
 
 // ─── Marker Management (Post-Cut) ────────────────────────────
 
+/**
+ * Texto de una propiedad de Premiere, sin espacios a los lados.
+ *
+ * ExtendScript es ES3: `String.prototype.trim` es de ES5 y aquí no existe.
+ * `(marker.comments || "").trim()` reventaba con "marker.comments||.trim is not
+ * a function" y, como la lectura entera iba en un solo try, **un marcador
+ * dejaba la lista en cero**: 21 marcadores antes de cortar, ninguno después.
+ * Se veía como "la secuencia no tiene marcadores" y se llevaba puesta también
+ * la Vista de Cámaras, que sale de esos mismos nombres.
+ *
+ * Y no siempre llega un string: `comments` puede venir como objeto, así que
+ * primero se convierte y después se recorta.
+ */
+function epText(v) {
+    if (v === null || v === undefined) return "";
+    var s = String(v);
+    return s.replace(/^[\s\u00A0]+/, "").replace(/[\s\u00A0]+$/, "");
+}
+
 function getPostCutMarkers() {
     try {
         var seq = app.project.activeSequence;
@@ -825,49 +844,60 @@ function getPostCutMarkers() {
         var markers = [];
         var m = seq.markers;
 
+        var unreadable = 0;
+
         if (m.numMarkers > 0) {
             var marker = m.getFirstMarker();
             var idx = 0;
             while (marker) {
-                var raw = (marker.comments || "").trim();
-                var isOut = (raw.indexOf("OUT:") === 0);
-                var hasComment = false;
-                var editorNote = "";
-                var transcript = "";
+                // Cada marcador va en su propio try: uno que no se deje leer se
+                // cuenta y se sigue, en vez de dejar la lista entera en cero.
+                try {
+                    var raw = epText(marker.comments);
+                    var isOut = (raw.indexOf("OUT:") === 0);
+                    var hasComment = false;
+                    var editorNote = "";
+                    var transcript = "";
 
-                if (!isOut) {
-                    var dashIdx = raw.indexOf(" - ");
-                    if (dashIdx > 0) {
-                        hasComment = true;
-                        editorNote = raw.substring(0, dashIdx).trim();
-                        transcript = raw.substring(dashIdx + 3).trim();
-                    } else if (raw.indexOf("- ") === 0) {
-                        transcript = raw.substring(2).trim();
-                    } else {
-                        transcript = raw;
+                    if (!isOut) {
+                        var dashIdx = raw.indexOf(" - ");
+                        if (dashIdx > 0) {
+                            hasComment = true;
+                            editorNote = epText(raw.substring(0, dashIdx));
+                            transcript = epText(raw.substring(dashIdx + 3));
+                        } else if (raw.indexOf("- ") === 0) {
+                            transcript = epText(raw.substring(2));
+                        } else {
+                            transcript = raw;
+                        }
                     }
+
+                    markers.push({
+                        index: idx,
+                        name: epText(marker.name),
+                        comments: raw,
+                        startSeconds: marker.start.seconds,
+                        isOut: isOut,
+                        hasComment: hasComment,
+                        editorNote: editorNote,
+                        transcript: transcript,
+                        colorIndex: epGetMarkerColor(marker)
+                    });
+                } catch(eMk) {
+                    unreadable++;
                 }
-
-                var ci = epGetMarkerColor(marker);
-
-                markers.push({
-                    index: idx,
-                    name: marker.name || "",
-                    comments: raw,
-                    startSeconds: marker.start.seconds,
-                    isOut: isOut,
-                    hasComment: hasComment,
-                    editorNote: editorNote,
-                    transcript: transcript,
-                    colorIndex: ci
-                });
 
                 idx++;
                 try { marker = m.getNextMarker(marker); } catch(e) { marker = null; }
             }
         }
 
-        return JSON.stringify({ success: true, markers: markers, count: markers.length });
+        return JSON.stringify({
+            success: true,
+            markers: markers,
+            count: markers.length,
+            unreadable: unreadable
+        });
     } catch(e) {
         return JSON.stringify({ error: "Error al leer marcadores: " + e.message });
     }
@@ -918,7 +948,7 @@ function deleteMarkersWithoutComments() {
         var marker = m.getFirstMarker();
 
         while (marker) {
-            var raw = (marker.comments || "").trim();
+            var raw = epText(marker.comments);
             var isOut = (raw.indexOf("OUT:") === 0);
             var dashIdx = raw.indexOf(" - ");
             var hasComment = (!isOut && dashIdx > 0);
@@ -1068,7 +1098,7 @@ function colorizeCommentMarkers() {
         var marker = m.getFirstMarker();
 
         while (marker) {
-            var raw = (marker.comments || "").trim();
+            var raw = epText(marker.comments);
             var isOut = (raw.indexOf("OUT:") === 0);
             var dashIdx = raw.indexOf(" - ");
             var hasComment = (!isOut && dashIdx > 0);
@@ -1115,14 +1145,13 @@ function getMarkerNamesAllSequences() {
             var seenHere = {};
             var marker = m.getFirstMarker();
             while (marker) {
-                var raw = (marker.comments || "");
-                var trimmed = raw.replace(/^\s+|\s+$/g, "");
+                var trimmed = epText(marker.comments);
                 if (trimmed.indexOf("OUT:") !== 0) {
                     var note = "";
                     var dashIdx = trimmed.indexOf(" - ");
-                    if (dashIdx > 0) note = trimmed.substring(0, dashIdx).replace(/^\s+|\s+$/g, "");
+                    if (dashIdx > 0) note = epText(trimmed.substring(0, dashIdx));
 
-                    var name = marker.name || "";
+                    var name = epText(marker.name);
                     var key = name + "\u0000" + note;
                     if (seen[key] === undefined) {
                         if (items.length < MAX_ITEMS) {

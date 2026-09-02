@@ -70,7 +70,7 @@ Editor-Pro/
 ├── CSXS/
 │   └── manifest.xml         # Manifiesto CEP: com.codigo.editorpro
 ├── whisper/                 # STT local: setup-mlx.sh (MLX/Apple Silicon), setup-whisper.sh (whisper.cpp) + modelos .bin
-├── VERSION                  # Versión actual (2.25.1)
+├── VERSION                  # Versión actual (2.26.0)
 ├── dist/                    # ZXP empaquetado
 ├── build-zxp.sh             # Firma y empaqueta ZXP
 └── install.sh               # Symlink para desarrollo + habilita debug mode
@@ -661,7 +661,9 @@ Módulo puro NLE-agnóstico que opera sobre `words[]` del STT + segmentos de Not
 
 ## Tests (`npm test`)
 
-`tests/run-node-tests.js` corre en Node las suites de `cut-validator`, `marker-reviewer`, `marker-precision`, `marker-anchor`, `audio-onset`, `marker-verify`, `mlx-parser`, `transcript-edit`, `transcript-repeats` y `thecutter-core` (746 asserts sobre transcripts y marcadores sintéticos; el LLM se valida a nivel de prompts/respuestas mockeadas). Los módulos puros exponen `module.exports` además de `window.*`.
+`tests/run-node-tests.js` corre en Node las suites de `cut-validator`, `marker-reviewer`, `marker-precision`, `marker-anchor`, `audio-onset`, `marker-verify`, `mlx-parser`, `transcript-edit`, `transcript-repeats`, `thecutter-core`, `host-cutter`, `host-markers`, `backup-name` y `updater-version` (800 asserts sobre transcripts y marcadores sintéticos; el LLM se valida a nivel de prompts/respuestas mockeadas). Los módulos puros exponen `module.exports` además de `window.*`.
+
+Las dos últimas prueban ExtendScript, que no exporta nada: `host-cutter` evalúa `common.jsx` + `cutter.jsx` contra un doble de Premiere y corre `executeCuts` entero (ver "El corte va al frame"); `backup-name` carga `common.jsx` con un shim mínimo y se queda solo con las funciones puras del nombre de las copias, igual que `mlx-parser` con `speech-to-text.js`.
 
 La suite de `audio-onset` escribe un WAV PCM de verdad en un temporal y lo mide de punta a punta (cabecera, ventana, envolvente, borde, colchón), además de los casos que dieron forma al módulo: el OUT que quería abrirse hasta el *"pausa"* del editor, la cola de la palabra que se apaga a saltos, el golpe en el silencio que no es el ataque de la frase, el colchón que no cabe en el silencio disponible, la alineación del transcript entero (el arranque que el STT adelanta, el tramo que se reparte sin invertir palabras, y que **alinear dos veces no mueva nada la segunda** — si no fuera estable, un transcript guardado seguiría teniendo bordes que la medida siguiente cambia), y el WAV de la secuencia ya cortada que no debe colarse por tener el mismo nombre base.
 
@@ -798,6 +800,62 @@ Validado contra la [Premiere Pro Scripting Guide](https://ppro-scripting.docsfor
 - Sleep 800ms entre setInPoint/setOutPoint y extract, 1000ms entre zonas
 - QE sequence reference se re-obtiene antes de cada zona
 
+### El corte va al frame (v2.25.2)
+
+Premiere edita por frames. Lo único que `executeCuts` le dice a la secuencia son los puntos de entrada y salida de cada zona, y si esos puntos caen a mitad de frame el `extract` ripplea una cantidad no entera de frames: **la unión queda con un hueco**.
+
+Y a mitad de frame llegan siempre. Los tiempos salen de marcadores clavados en un frame, pero viajan al panel y vuelven como segundos redondeados al milisegundo; a 30 fps dos de cada tres frames no caen en un milisegundo exacto, y a 29.97 no cae ninguno. `secsToFrameTicks(segundos, ticksPorFrame)` los devuelve al frame más cercano antes de marcar in/out — medio milisegundo es una centésima de frame, así que el redondeo es exacto, no una aproximación.
+
+`ticksPerFrameOf(seq)` lee `seq.timebase` y cae a `getSettings().videoFrameRate` si no está. Sin timebase se corta al tick crudo, como antes, y el log lo dice.
+
+El caso real es la clase 14: el hueco salió en la unión del bloque 2 con el 3, la única brecha de esa clase cuyo IN cae en un frame que redondeado al milisegundo queda **antes** del frame. `tests/host-cutter.test.js` corre `executeCuts` con esos marcadores reales sobre un doble de Premiere y comprueba que cada zona sea un número entero de frames y que las uniones cierren sin hueco (30 y 29.97 fps).
+
+### El host corre en ES3: no hay `String.trim` (v2.25.4)
+
+`getPostCutMarkers()` empezaba cada marcador con `(marker.comments || "").trim()`. **`String.prototype.trim` es de ES5 y ExtendScript no lo tiene**, así que la llamada moría con `marker.comments||.trim is not a function`. Y como toda la lectura iba dentro de un solo `try`, el primer marcador se llevaba puestos a los demás: **21 marcadores antes de cortar, cero después**, y con ellos la Vista de Cámaras, que sale de esos mismos nombres.
+
+Se veía como "la secuencia no tiene marcadores" porque el panel no distinguía las dos cosas (ver "El panel vacío dice por qué lo está", v2.25.1). La lectura de **antes** del corte (`getSequenceMarkers`) nunca falló porque devuelve `marker.comments || ""` sin tocar el texto — de ahí que el mismo marcador se leyera bien a las 18:54 y no a las 18:55.
+
+- `epText(v)` convierte a texto y recorta con `replace`, que sí existe en ES3. Se usa en las cuatro lecturas que parten el comentario del CD (`getPostCutMarkers`, `deleteMarkersWithoutComments`, `colorizeCommentMarkers`, `getMarkerNamesAllSequences`).
+- **La lectura ya no es todo o nada**: cada marcador va en su propio `try`. Uno ilegible se cuenta en `unreadable` y el resto llega igual; el panel avisa cuántos quedaron fuera en vez de mostrar una lista vacía.
+- `comments` no siempre llega como string, así que `epText` convierte antes de recortar en vez de confiar en el `|| ""`.
+
+`tests/host-markers.test.js` carga `common.jsx` en un contexto donde **se borra `String.prototype.trim`** a propósito: sin eso Node lo tiene y el fallo pasa desapercibido. Con el host anterior, ese contexto reproduce el error del log palabra por palabra.
+
+### Las vistas se deciden en el análisis, no al final (v2.26.0)
+
+La Vista de Cámaras aparecía **después** de cortar y solo para la secuencia activa. En lote eso significaba cortar veinte clases y luego abrirlas una por una para decir, veinte veces, que CAM va en V1 — cuando el análisis en lote ya había leído los marcadores de todas y por tanto ya sabía qué vistas existen antes de tocar nada.
+
+Ahora el panel sale en el análisis (`renderBatchViews`), y lo que se decide ahí se aplica en cada secuencia según se va cortando.
+
+- **El mapeo se guarda por nombre de pista, no por índice**, que es lo que lo hace válido para todas: `activateViews` empareja `track.name` en la secuencia activa. Si en alguna no coincide ningún nombre, esa se queda sin tocar y el resultado lo dice (`ningún clip coincidió con el mapeo`) en vez de fingir que se aplicó.
+- Las pistas que se ofrecen salen de la **secuencia activa** al analizar: `getVideoTrackNames()` no acepta un `seqId` y abrir cada secuencia para leerlas costaría más de lo que resuelve.
+- Junto a cada nombre va **cuántos marcadores lo usan** (`×42`), ordenados de más a menos. `_getViewName` cae a la nota del CD cuando el marcador no tiene nombre, así que en la lista conviven vistas reales y notas sueltas (`Sin WAV`); el conteo las distingue de un vistazo. Un nombre sin pistas asignadas no hace nada.
+- `buildViewPanel()` es el panel compartido: las dos pantallas —la del lote y la de después de cortar— preguntan lo mismo pero llegan con datos distintos (marcadores crudos de todas las secuencias vs. los que quedaron en la activa), así que solo se comparte la pregunta. Cada una pone su pie: el del lote un checkbox, el de después de cortar el botón que aplica ya.
+- `updateMappingFromUI(listEl)` actualiza **solo los nombres del panel que se tocó**. Antes reescribía el preset entero; con dos paneles, tocar el de una secuencia ya cortada se habría llevado por delante las vistas de las otras diecinueve.
+- **Un nombre sin pistas asignadas ya no genera segmento** (`buildSegmentsFromMarkers`), la misma regla que The Cutter aprendió en su día: `activateViews` apaga *todo* clip que caiga en un segmento cuyo nombre no mapee a su pista, así que un marcador de nota dejaba la zona **en negro** hasta el marcador siguiente. Descartado el segmento, la vista anterior sigue corriendo, que es lo que pasa de verdad: una nota no cambia de cámara. Estaba latente en el botón manual; automatizarlo en lote lo habría repartido por veinte clases.
+
+**Dejar solo marcadores con comentarios** (checkbox del lote, `editorpro_batch_clean_markers`) borra al terminar cada corte los OUT y los IN sin nota del CD, dejando la secuencia con las notas de edición y nada más.
+
+El orden dentro de `batchPostCut()` no es negociable: **vistas primero, limpieza después**, porque los tramos de vista salen de los mismos marcadores que la limpieza se lleva. Y los marcadores se releen de la secuencia **ya cortada** (`getPostCutMarkers`), no se reusan los del análisis: el corte movió todos los tiempos.
+
+## Copias de seguridad de secuencias (v2.25.2)
+
+`backupSequence(label, seqId)` clona la secuencia al bin "Backup" antes de una operación destructiva. La etiqueta dice **de qué punto del proceso** es la copia:
+
+| Etiqueta | Cuándo | Quién la pide |
+|----------|--------|---------------|
+| `Pre-Marker` | antes de mover marcadores | `ui-marker-reviewer.js` (`backupBeforeMoves`) |
+| `Pre-Cut` | antes de aplicar los cortes | The Cutter, Cortes Automáticos, Notas de Grabación |
+
+`buildBackupName(seqName, label, dateStamp, isTaken)` arma `<secuencia>_Backup_<etiqueta>_<fecha>`:
+
+- La etiqueta va **antes** de la fecha para que se lea aunque el bin recorte el nombre.
+- `_Backup_` queda pegado al nombre original porque `restoreBackup()` busca por ese prefijo cuando ya no tiene el `sequenceID`.
+- Dos pasadas dentro del mismo minuto darían el mismo nombre; como la copia se restaura buscándola por nombre, la segunda se numera (`_2`, `_3`) en vez de dejar dos secuencias homónimas. Las dos etiquetas no se pisan entre sí, así que un Pre-Marker y un Pre-Cut del mismo minuto no numeran.
+
+Mover un marcador es borrarlo y recrearlo, así que sin la copia Pre-Marker no hay forma de volver a los marcadores que puso el CD. Se hace **una por secuencia y sesión del panel**: el paso 5 vuelve a mover marcadores y su copia ya no sería "como estaba antes". Si la copia falla se sigue adelante, pero queda dicho en el log.
+
 ## Convención de nombres de archivo (audio/SRT)
 
 `baseName = nombreSecuencia_AA-MM-DD_HH-MM-SS`
@@ -847,12 +905,23 @@ Validado contra la [Premiere Pro Scripting Guide](https://ppro-scripting.docsfor
 El header tiene 3 botones (además del dropdown de secuencia activa):
 
 1. **Log** (icono de descarga) — descarga el log de la sesión a la carpeta de Descargas.
-2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.25.1`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.25.0 → v2.25.1`).
+2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.26.0`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.25.4 → v2.26.0`).
 3. **Ajustes** — abre el panel de configuración (proveedor STT, proveedor de IA, API keys, modelo). Con el proveedor "Claude — mi cuenta" aparece el bloque de sesión: **Iniciar sesión** (abre Terminal con `claude auth login`), **Verificar** (llamada real de prueba) y **Cerrar sesión**. Con "Claude (API key)" el botón ↻ junto al modelo trae la lista actual desde `GET /v1/models`.
 
 > Nota histórica: los botones de debug de MOGRT (🔍/🔬) fueron removidos.
 
 ## Versión y auto-actualización
 
-- La versión vive en el archivo `VERSION` (actual: **2.25.1**) y en `CSXS/manifest.xml`.
+- La versión vive en el archivo `VERSION` (actual: **2.26.0**) y en `CSXS/manifest.xml`.
 - `updater.js` implementa un auto-updater basado en la GitHub API (no requiere git instalado) que descarga desde la rama **`workspace-daniel`**.
+
+### Distinto no es más nuevo (v2.25.3)
+
+El botón ofrecía "actualizar" de la **2.25.2 a la 2.5.3** —un retroceso— y al pulsarlo el `pull` fallaba. Dos fallos encadenados, y los dos son el mismo error de fondo: **tratar "distinto" como "posterior"**.
+
+- **El SHA.** En una instalación de desarrollo el panel es un symlink al repo, así que el SHA local es el `HEAD` de trabajo y lo normal es tener commits propios sin subir. Con eso, `localSha !== remoteSha` no significa que haya algo que traer: significa que **la copia local va por delante**. Ahora se le pregunta a git (`merge-base --is-ancestor <remoto> HEAD`): si el commit del canal ya está en el historial, no hay actualización y el log dice cuántos commits sin subir hay. Si git no conoce ese commit (falta un fetch), se cae a comparar versiones.
+- **La versión.** `localVer === remoteVer` como única guarda deja pasar cualquier diferencia, incluido ir hacia atrás. Y comparadas **como texto**, `"2.5.3"` es mayor que `"2.25.2"`: en el segundo tramo, `"5"` va después de `"2"`. `compareVersions` las compara tramo a tramo como números (5 < 25) y solo se bloquea el **retroceso**: publicar un commit sin subir la versión es normal y esa actualización se sigue ofreciendo.
+
+Cuando el `pull` falla igual, el botón dice cuál de las dos causas reales fue —"tu copia tiene commits que el canal no tiene" o "hay cambios sin commitear que se perderían"— en vez del texto de git.
+
+`tests/updater-version.test.js` cubre `compareVersions`, empezando por el caso real (2.5.3 vs 2.25.2) y terminando en lo que no se puede leer (`null`, vacío, `2.25.2-beta`), donde devuelve `null` y quien llama prefiere ofrecer de más antes que dejar a alguien clavado en una versión vieja.

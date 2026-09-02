@@ -33,6 +33,44 @@
     var _originalBtnHTML = "";
     var _latestSha       = null;
 
+    // ─── Versiones ──────────────────────────────────────────────────────────────
+
+    /** "v2.25.2" → [2, 25, 2]. null si no se lee como versión. */
+    function _versionParts(v) {
+        var s = String(v === null || v === undefined ? "" : v).trim().replace(/^v/i, "");
+        if (!s) return null;
+        var parts = s.split(".");
+        var out = [];
+        for (var i = 0; i < parts.length; i++) {
+            var n = parseInt(parts[i], 10);
+            if (isNaN(n) || String(n) !== parts[i].trim()) return null;
+            out.push(n);
+        }
+        return out;
+    }
+
+    /**
+     * Compara dos versiones tramo a tramo, como números.
+     * 1 si a es posterior, -1 si es anterior, 0 si son la misma, null si alguna
+     * no se puede leer.
+     *
+     * Como texto, "2.5.3" es mayor que "2.25.2" —en el segundo tramo, "5" va
+     * después de "2"—, así que una versión vieja del canal se ofrecía como
+     * actualización. Tramo a tramo, 5 < 25 y el orden es el correcto.
+     */
+    function compareVersions(a, b) {
+        var pa = _versionParts(a);
+        var pb = _versionParts(b);
+        if (!pa || !pb) return null;
+        var n = Math.max(pa.length, pb.length);
+        for (var i = 0; i < n; i++) {
+            var x = pa[i] || 0;
+            var y = pb[i] || 0;
+            if (x !== y) return x > y ? 1 : -1;
+        }
+        return 0;
+    }
+
     // ─── Logging ────────────────────────────────────────────────────────────────
 
     function _log(msg) {
@@ -397,6 +435,50 @@
         }
     }
 
+    /**
+     * ¿El commit del remoto ya está contenido en el historial local?
+     *
+     * Comparar los dos SHA por igualdad no alcanza: en una instalación de
+     * desarrollo (el panel es un symlink al repo) lo normal es tener commits
+     * propios sin subir, y entonces "distinto" significa que **el local va por
+     * delante**, no que haya algo que traer. Ofrecer la actualización ahí es
+     * ofrecer un retroceso, y el `pull --ff-only` falla porque no puede avanzar.
+     *
+     * callback("contained") el remoto ya está aquí → nada que traer
+     * callback("ahead")     el remoto tiene commits que no tenemos
+     * callback("unknown")   git no conoce ese commit (falta un fetch)
+     */
+    function _remoteAheadOfLocal(remoteSha, callback) {
+        try {
+            var cp  = require("child_process");
+            var ext = _getExtensionPath();
+            cp.execFile("git", ["merge-base", "--is-ancestor", remoteSha, "HEAD"],
+                { cwd: ext, timeout: 10000 },
+                function(err) {
+                    if (!err) return callback("contained");
+                    if (err.code === 1) return callback("ahead");
+                    callback("unknown");
+                }
+            );
+        } catch(e) {
+            callback("unknown");
+        }
+    }
+
+    /** Commits propios sin subir, para poder decirlo en el log. */
+    function _unpushedCount(remoteSha, callback) {
+        try {
+            var cp  = require("child_process");
+            var ext = _getExtensionPath();
+            cp.execFile("git", ["rev-list", "--count", remoteSha + "..HEAD"],
+                { cwd: ext, timeout: 10000 },
+                function(err, stdout) { callback(err ? null : parseInt(stdout.trim(), 10)); }
+            );
+        } catch(e) {
+            callback(null);
+        }
+    }
+
     function _getLocalGitSha(callback) {
         try {
             var cp  = require("child_process");
@@ -420,7 +502,16 @@
                 { cwd: ext, timeout: 120000 },
                 function(err, stdout, stderr) {
                     if (err) {
-                        _log("git pull failed: " + (stderr || err.message));
+                        var out = String(stderr || err.message || "");
+                        _log("git pull failed: " + out);
+                        // Las dos causas reales, dichas en cristiano: el resto del
+                        // texto de git no le sirve de nada al editor.
+                        if (out.indexOf("non-fast-forward") >= 0 || out.indexOf("fast-forward") >= 0) {
+                            return callback(new Error("tu copia tiene commits que el canal no tiene"));
+                        }
+                        if (out.indexOf("local changes") >= 0 || out.indexOf("would be overwritten") >= 0) {
+                            return callback(new Error("hay cambios sin commitear que se perderían"));
+                        }
                         return callback(err);
                     }
                     _log("git pull: " + stdout.trim());
@@ -430,6 +521,39 @@
         } catch(e) {
             callback(e);
         }
+    }
+
+    /**
+     * Decide por número de versión cuando el SHA no alcanza (instalación por ZIP,
+     * o un repo que no conoce el commit del canal).
+     *
+     * Solo se bloquea el **retroceso**: que el canal publique un commit sin subir
+     * la versión es normal, y esa actualización hay que ofrecerla igual.
+     */
+    function _decideByVersion(remoteSha, seedWhenSame, callback) {
+        var localVer = _readLocalVersion();
+        var versionUrl = "https://raw.githubusercontent.com/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/" + GITHUB_BRANCH + "/VERSION";
+        _httpsGetText(versionUrl, 5, function(vErr, vBody) {
+            var remoteVer = vErr ? null : (vBody || "").trim();
+            var cmp = compareVersions(remoteVer, localVer);
+            _log("VERSION: instalada=" + localVer + " canal=" + remoteVer +
+                 (cmp === null ? " (no comparables)" : ""));
+
+            if (cmp === -1) {
+                _log("Sin actualización: el canal está en una versión anterior a la instalada");
+                if (callback) callback(false);
+                return;
+            }
+            if (cmp === 0 && seedWhenSame) {
+                _log("Misma versión, se guarda .update-sha " + remoteSha.substr(0, 7));
+                _writeLocalSha(remoteSha);
+                if (callback) callback(false);
+                return;
+            }
+            _log("Update available: " + remoteSha.substr(0, 7) + (_isGitRepo ? " [git]" : " [zip]"));
+            _showUpdateBtn(remoteSha, remoteVer);
+            if (callback) callback(true);
+        });
     }
 
     // ─── Public: checkForUpdates ────────────────────────────────────────────────
@@ -465,34 +589,33 @@
                             return;
                         }
 
-                        // No local SHA (fresh install or write failed) — check VERSION to avoid false positives
-                        if (!localSha && !_isGitRepo) {
-                            _log("No local SHA found, checking VERSION file...");
-                            var localVer = _readLocalVersion();
-                            // Fetch remote VERSION to compare
-                            var versionUrl = "https://raw.githubusercontent.com/" + GITHUB_OWNER + "/" + GITHUB_REPO + "/" + GITHUB_BRANCH + "/VERSION";
-                            _httpsGetText(versionUrl, 5, function(vErr, vBody) {
-                                var remoteVer = vErr ? null : (vBody || "").trim();
-                                _log("VERSION check: local=" + localVer + " remote=" + remoteVer);
-                                if (localVer && remoteVer && localVer === remoteVer) {
-                                    // Same version — seed the SHA file so we don't check again
-                                    _log("Same VERSION, seeding .update-sha with " + remoteSha.substr(0, 7));
-                                    _writeLocalSha(remoteSha);
-                                    if (callback) callback(false);
+                        // El SHA es distinto, que no es lo mismo que "hay algo más
+                        // nuevo". En un repo se lo preguntamos a git; sin repo, a
+                        // los números de versión.
+                        if (_isGitRepo && localSha) {
+                            _remoteAheadOfLocal(remoteSha, function(state) {
+                                if (state === "contained") {
+                                    _unpushedCount(remoteSha, function(n) {
+                                        _log("Up to date: la copia local va por delante del canal" +
+                                             (n ? " (" + n + " commit(s) sin subir)" : "") + " [git]");
+                                        if (callback) callback(false);
+                                    });
                                     return;
                                 }
-                                // Different version or couldn't compare — show update
-                                _log("Update available: " + remoteSha.substr(0, 7) + " (no local SHA, version mismatch)");
-                                _showUpdateBtn(remoteSha, remoteVer);
-                                if (callback) callback(true);
+                                if (state === "ahead") {
+                                    _log("Update available: " + remoteSha.substr(0, 7) +
+                                         " (local: " + localSha.substr(0, 7) + ") [git]");
+                                    _showUpdateBtn(remoteSha);
+                                    if (callback) callback(true);
+                                    return;
+                                }
+                                _log("git no conoce " + remoteSha.substr(0, 7) + ": se comparan las versiones");
+                                _decideByVersion(remoteSha, false, callback);
                             });
                             return;
                         }
 
-                        // SHA mismatch — update available
-                        _log("Update available: " + remoteSha.substr(0, 7) + (localSha ? " (local: " + localSha.substr(0, 7) + ")" : "") + (_isGitRepo ? " [git]" : " [zip]"));
-                        _showUpdateBtn(remoteSha);
-                        if (callback) callback(true);
+                        _decideByVersion(remoteSha, !localSha && !_isGitRepo, callback);
                     } catch(e) {
                         _log("Parse error: " + e.message);
                         if (callback) callback(false);
@@ -614,7 +737,10 @@
     global.EPUpdater = {
         checkForUpdates:   checkForUpdates,
         doUpdate:          doUpdate,
-        isUpdateAvailable: function() { return _updateAvailable; }
+        isUpdateAvailable: function() { return _updateAvailable; },
+        compareVersions:   compareVersions
     };
 
-})(window);
+    if (typeof module !== "undefined" && module.exports) module.exports = global.EPUpdater;
+
+})(typeof window !== "undefined" ? window : this);

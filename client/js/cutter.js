@@ -12,6 +12,8 @@
     var fs, path, os;
     try { fs = require("fs"); path = require("path"); os = require("os"); } catch(e) {}
 
+    var TICKS_PER_SECOND = 254016000000;
+
     // ─── State ───────────────────────────────────────────────
 
     var state = {
@@ -173,7 +175,7 @@
             state.seqName = data.name;
             var durSeconds = 0;
             if (data.duration) {
-                durSeconds = parseFloat(data.duration) / 254016000000;
+                durSeconds = parseFloat(data.duration) / TICKS_PER_SECOND;
             }
             state.seqDuration = durSeconds;
         });
@@ -571,7 +573,7 @@
             state.seqName = seqData.name;
             var durSeconds = 0;
             if (seqData.duration) {
-                durSeconds = parseFloat(seqData.duration) / 254016000000;
+                durSeconds = parseFloat(seqData.duration) / TICKS_PER_SECOND;
             }
             state.seqDuration = durSeconds;
 
@@ -867,6 +869,15 @@
             }
             state.postMarkers = markerResult.markers;
             state.selectedMarkerTimes = {};
+            if (markerResult.unreadable) {
+                if (window.EPLogger) {
+                    EPLogger.error("cutter", "post-markers",
+                        markerResult.unreadable + " marcador(es) ilegibles de " +
+                        (markerResult.markers.length + markerResult.unreadable));
+                }
+                showToast(markerResult.unreadable + " marcador(es) no se pudieron leer; " +
+                    "el resto está en la lista", "warning");
+            }
             renderMarkerManager();
             renderViewMapping();
             if (cb) cb(true);
@@ -1140,30 +1151,83 @@
         return result;
     }
 
-    function buildSegmentsFromMarkers(markers) {
+    /**
+     * Tramos [inicio, fin] con el nombre de vista de cada uno: cada marcador con
+     * nombre abre un tramo que cierra el siguiente.
+     *
+     * @param {number} duration duración de ESTA secuencia, para cerrar el último
+     *                          tramo. En el lote hay que pasarla: `state.seqDuration`
+     *                          es la de la secuencia activa, no la que se cortó.
+     */
+    function buildSegmentsFromMarkers(markers, duration) {
         var filtered = [];
         for (var i = 0; i < markers.length; i++) {
             var mk = markers[i];
             if (!mk.isOut) {
                 var n = _getViewName(mk);
-                if (n) {
+                // Un nombre sin pistas asignadas NO genera segmento: activateViews
+                // apaga todo clip dentro de un segmento cuyo nombre no mapea a su
+                // pista, así que un marcador de nota ("Sin WAV") dejaría la zona en
+                // negro hasta el marcador siguiente. Sin él, la vista anterior sigue
+                // corriendo, que es lo que pasa de verdad: una nota no cambia de cámara.
+                if (n && hasMappedTracks(n)) {
                     filtered.push({ time: mk.startSeconds, name: n });
                 }
             }
         }
         filtered.sort(function(a, b) { return a.time - b.time; });
 
+        var last = duration || state.seqDuration || 0;
         var segments = [];
         for (var s = 0; s < filtered.length; s++) {
-            var end = (s < filtered.length - 1) ? filtered[s + 1].time : (state.seqDuration || filtered[s].time + 3600);
+            var end = (s < filtered.length - 1) ? filtered[s + 1].time : (last || filtered[s].time + 3600);
             segments.push({ start: filtered[s].time, end: end, name: filtered[s].name });
         }
         return segments;
     }
 
-    function updateMappingFromUI() {
-        var mapping = {};
-        var rows = dom.viewSection.querySelectorAll(".view-mapping-row");
+    /** ¿Ese nombre de vista tiene al menos una pista asignada? */
+    function hasMappedTracks(name) {
+        var tracks = state.viewMapping && state.viewMapping[name];
+        if (!tracks) return false;
+        if (typeof tracks === "string") return tracks !== "";
+        return tracks.length > 0;
+    }
+
+    /**
+     * Escribe el mapeo y los tramos a un temporal y se lo pasa al host, que
+     * habilita o deshabilita cada clip de la secuencia **activa** según en qué
+     * tramo cae y a qué pistas apunta ese nombre de vista.
+     */
+    function applyViews(segments, cb) {
+        var payload = JSON.stringify({ mapping: state.viewMapping, segments: segments });
+        var tmpPath = path.join(os.tmpdir(), "PRCutter_views.json");
+        try {
+            fs.writeFileSync(tmpPath, payload, "utf8");
+        } catch(e) {
+            return cb(new Error("no se pudo escribir el archivo temporal: " + e.message));
+        }
+        evalScript('activateViews("' + escExtend(tmpPath) + '")', function(result) {
+            try { fs.unlinkSync(tmpPath); } catch(_e) {}
+            if (result.error) return cb(new Error(result.error));
+            cb(null, result);
+        });
+    }
+
+    /**
+     * Recoge el mapeo de las filas de un panel y lo guarda en el preset activo.
+     *
+     * Recibe el contenedor porque hay dos paneles —el del lote y el de después de
+     * cortar— y hay que leer el que el editor acaba de tocar. Y actualiza solo
+     * los nombres que ese panel muestra: el del lote conoce las vistas de todas
+     * las secuencias, el de después de cortar solo las de una, así que si este
+     * reescribiera el preset entero se llevaría por delante las demás.
+     */
+    function updateMappingFromUI(listEl) {
+        var store = loadPresetsStore();
+        var mapping = getActivePresetMapping(store);
+
+        var rows = (listEl || dom.viewSection).querySelectorAll(".view-mapping-row");
         for (var r = 0; r < rows.length; r++) {
             var markerName = rows[r].getAttribute("data-marker-name");
             if (!markerName) continue;
@@ -1174,9 +1238,8 @@
             }
             mapping[markerName] = tracks;
         }
-        state.viewMapping = mapping;
 
-        var store = loadPresetsStore();
+        state.viewMapping = mapping;
         store.presets[store.active] = mapping;
         savePresetsStore(store);
     }
@@ -1189,6 +1252,187 @@
         note.textContent = text;
         dom.viewSection.appendChild(note);
         dom.viewSection.classList.remove("hidden");
+    }
+
+    /**
+     * El panel de Vista de Cámaras: cabecera, presets y una fila por nombre de
+     * vista con un checkbox por pista.
+     *
+     * Lo usan dos pantallas que **llegan con datos distintos**: la de después de
+     * cortar, que conoce los marcadores que quedaron en la secuencia activa, y la
+     * del lote, que los conoce de todas las secuencias antes de cortar. Lo único
+     * que comparten es la forma de preguntar "qué pista es cada vista", así que
+     * es lo único que está aquí: los nombres, las pistas y el pie los pone cada
+     * una.
+     *
+     * @param {Array}    names    nombres de vista, ya resueltos por quien llama
+     * @param {Array}    tracks   [{index, name}] de getVideoTrackNames()
+     * @param {function} rerender para volver a pintarse tras cambiar de preset
+     * @returns {{wrap: Element, body: Element}} el pie se cuelga de `body`
+     */
+    function buildViewPanel(names, tracks, rerender, counts) {
+        var store = loadPresetsStore();
+        var mapping = getActivePresetMapping(store);
+
+        var wrap = document.createElement("div");
+        wrap.className = "view-section collapsible-section";
+
+        var header = document.createElement("div");
+        header.className = "collapsible-header";
+        var title = document.createElement("span");
+        title.className = "view-section-title";
+        title.textContent = "Vista de Cámaras";
+        header.appendChild(title);
+        var colIcon = document.createElement("span");
+        colIcon.className = "collapsible-icon";
+        colIcon.textContent = "\u25BE";
+        header.appendChild(colIcon);
+        header.addEventListener("click", function() { wrap.classList.toggle("collapsed"); });
+        wrap.appendChild(header);
+
+        var body = document.createElement("div");
+        body.className = "collapsible-body";
+        body.appendChild(buildPresetBar(store, rerender));
+
+        var list = document.createElement("div");
+        list.className = "view-mapping-list";
+        for (var i = 0; i < names.length; i++) {
+            list.appendChild(buildMappingRow(names[i], mapping, tracks, counts && counts[names[i]]));
+        }
+        body.appendChild(list);
+
+        wrap.appendChild(body);
+        return { wrap: wrap, body: body };
+    }
+
+    function buildMappingRow(markerName, mapping, tracks, count) {
+        var saved = mapping[markerName] || [];
+        if (typeof saved === "string") saved = saved ? [saved] : [];
+
+        var row = document.createElement("div");
+        row.className = "view-mapping-row";
+        row.setAttribute("data-marker-name", markerName);
+
+        var nameEl = document.createElement("span");
+        nameEl.className = "view-mapping-name";
+        nameEl.textContent = markerName;
+        // Cuántos marcadores lo usan: una vista real aparece decenas de veces, una
+        // nota suelta del CD una o dos. Sin esto ambas se ven igual en la lista.
+        if (count) {
+            var countEl = document.createElement("small");
+            countEl.className = "view-mapping-count";
+            countEl.textContent = " ×" + count;
+            nameEl.appendChild(countEl);
+        }
+        row.appendChild(nameEl);
+
+        var arrow = document.createElement("span");
+        arrow.className = "view-mapping-arrow";
+        arrow.textContent = "→";
+        row.appendChild(arrow);
+
+        var tracksWrap = document.createElement("div");
+        tracksWrap.className = "view-tracks-wrap";
+        for (var t = 0; t < tracks.length; t++) {
+            (function(trackName) {
+                var lbl = document.createElement("label");
+                lbl.className = "view-track-label";
+
+                var cb = document.createElement("input");
+                cb.type = "checkbox";
+                cb.className = "view-track-cb";
+                cb.value = trackName;
+                if (saved.indexOf(trackName) !== -1) cb.checked = true;
+                cb.addEventListener("change", function() { updateMappingFromUI(row.parentNode); });
+
+                lbl.appendChild(cb);
+                lbl.appendChild(document.createTextNode(" " + trackName));
+                tracksWrap.appendChild(lbl);
+            })(tracks[t].name);
+        }
+        row.appendChild(tracksWrap);
+
+        state.viewMapping[markerName] = saved;
+        return row;
+    }
+
+    function buildPresetBar(store, rerender) {
+        var presetBar = document.createElement("div");
+        presetBar.className = "view-preset-bar";
+
+        var presetSelect = document.createElement("select");
+        presetSelect.className = "view-preset-select";
+        var presetNames = Object.keys(store.presets);
+        for (var p = 0; p < presetNames.length; p++) {
+            var pOpt = document.createElement("option");
+            pOpt.value = presetNames[p];
+            pOpt.textContent = presetNames[p];
+            if (presetNames[p] === store.active) pOpt.selected = true;
+            presetSelect.appendChild(pOpt);
+        }
+        presetSelect.addEventListener("change", function() {
+            var st = loadPresetsStore();
+            st.active = presetSelect.value;
+            savePresetsStore(st);
+            rerender();
+        });
+        presetBar.appendChild(presetSelect);
+
+        var btnNewPreset = document.createElement("button");
+        btnNewPreset.className = "btn btn-ghost btn-sm";
+        btnNewPreset.textContent = "+ Nuevo";
+        btnNewPreset.addEventListener("click", function() {
+            var name = prompt("Nombre del nuevo preset:");
+            if (!name || !name.trim()) return;
+            name = name.trim();
+            var st = loadPresetsStore();
+            if (st.presets[name]) {
+                showToast("Ya existe un preset con ese nombre.", "info");
+                return;
+            }
+            st.presets[name] = JSON.parse(JSON.stringify(st.presets[st.active] || {}));
+            st.active = name;
+            savePresetsStore(st);
+            rerender();
+        });
+        presetBar.appendChild(btnNewPreset);
+
+        var btnRename = document.createElement("button");
+        btnRename.className = "btn btn-ghost btn-sm";
+        btnRename.textContent = "Renombrar";
+        btnRename.addEventListener("click", function() {
+            var st = loadPresetsStore();
+            var newName = prompt("Nuevo nombre:", st.active);
+            if (!newName || !newName.trim() || newName.trim() === st.active) return;
+            newName = newName.trim();
+            if (st.presets[newName]) {
+                showToast("Ya existe un preset con ese nombre.", "info");
+                return;
+            }
+            st.presets[newName] = st.presets[st.active];
+            delete st.presets[st.active];
+            st.active = newName;
+            savePresetsStore(st);
+            rerender();
+        });
+        presetBar.appendChild(btnRename);
+
+        if (presetNames.length > 1) {
+            var btnDelete = document.createElement("button");
+            btnDelete.className = "btn btn-ghost btn-sm btn-danger-text";
+            btnDelete.textContent = "Borrar";
+            btnDelete.addEventListener("click", function() {
+                var st = loadPresetsStore();
+                if (Object.keys(st.presets).length <= 1) return;
+                delete st.presets[st.active];
+                st.active = Object.keys(st.presets)[0];
+                savePresetsStore(st);
+                rerender();
+            });
+            presetBar.appendChild(btnDelete);
+        }
+
+        return presetBar;
     }
 
     function renderViewMapping() {
@@ -1214,165 +1458,11 @@
             }
 
             state.videoTracks = data.tracks;
-            var store = loadPresetsStore();
-            var mapping = getActivePresetMapping(store);
 
-            var wrap = document.createElement("div");
-            wrap.className = "view-section collapsible-section";
+            var panel = buildViewPanel(names, data.tracks, renderViewMapping);
 
-            // ── Header (collapsible) ──
-            var header = document.createElement("div");
-            header.className = "collapsible-header";
-            var title = document.createElement("span");
-            title.className = "view-section-title";
-            title.textContent = "Vista de Cámaras";
-            header.appendChild(title);
-            var colIcon = document.createElement("span");
-            colIcon.className = "collapsible-icon";
-            colIcon.textContent = "\u25BE";
-            header.appendChild(colIcon);
-            header.addEventListener("click", function() {
-                wrap.classList.toggle("collapsed");
-            });
-            wrap.appendChild(header);
-
-            var body = document.createElement("div");
-            body.className = "collapsible-body";
-
-            // ── Preset Bar ──
-            var presetBar = document.createElement("div");
-            presetBar.className = "view-preset-bar";
-
-            var presetSelect = document.createElement("select");
-            presetSelect.className = "view-preset-select";
-            var presetNames = Object.keys(store.presets);
-            for (var p = 0; p < presetNames.length; p++) {
-                var pOpt = document.createElement("option");
-                pOpt.value = presetNames[p];
-                pOpt.textContent = presetNames[p];
-                if (presetNames[p] === store.active) pOpt.selected = true;
-                presetSelect.appendChild(pOpt);
-            }
-            presetSelect.addEventListener("change", function() {
-                var st = loadPresetsStore();
-                st.active = presetSelect.value;
-                savePresetsStore(st);
-                renderViewMapping();
-            });
-            presetBar.appendChild(presetSelect);
-
-            var btnNewPreset = document.createElement("button");
-            btnNewPreset.className = "btn btn-ghost btn-sm";
-            btnNewPreset.textContent = "+ Nuevo";
-            btnNewPreset.addEventListener("click", function() {
-                var name = prompt("Nombre del nuevo preset:");
-                if (!name || !name.trim()) return;
-                name = name.trim();
-                var st = loadPresetsStore();
-                if (st.presets[name]) {
-                    showToast("Ya existe un preset con ese nombre.", "info");
-                    return;
-                }
-                st.presets[name] = JSON.parse(JSON.stringify(st.presets[st.active] || {}));
-                st.active = name;
-                savePresetsStore(st);
-                renderViewMapping();
-            });
-            presetBar.appendChild(btnNewPreset);
-
-            var btnRename = document.createElement("button");
-            btnRename.className = "btn btn-ghost btn-sm";
-            btnRename.textContent = "Renombrar";
-            btnRename.addEventListener("click", function() {
-                var st = loadPresetsStore();
-                var newName = prompt("Nuevo nombre:", st.active);
-                if (!newName || !newName.trim() || newName.trim() === st.active) return;
-                newName = newName.trim();
-                if (st.presets[newName]) {
-                    showToast("Ya existe un preset con ese nombre.", "info");
-                    return;
-                }
-                st.presets[newName] = st.presets[st.active];
-                delete st.presets[st.active];
-                st.active = newName;
-                savePresetsStore(st);
-                renderViewMapping();
-            });
-            presetBar.appendChild(btnRename);
-
-            if (presetNames.length > 1) {
-                var btnDelete = document.createElement("button");
-                btnDelete.className = "btn btn-ghost btn-sm btn-danger-text";
-                btnDelete.textContent = "Borrar";
-                btnDelete.addEventListener("click", function() {
-                    var st = loadPresetsStore();
-                    var keys = Object.keys(st.presets);
-                    if (keys.length <= 1) return;
-                    delete st.presets[st.active];
-                    st.active = Object.keys(st.presets)[0];
-                    savePresetsStore(st);
-                    renderViewMapping();
-                });
-                presetBar.appendChild(btnDelete);
-            }
-
-            body.appendChild(presetBar);
-
-            // ── Mapping rows ──
-            var list = document.createElement("div");
-            list.className = "view-mapping-list";
-
-            for (var i = 0; i < names.length; i++) {
-                (function(markerName) {
-                    var saved = mapping[markerName] || [];
-                    if (typeof saved === "string") saved = saved ? [saved] : [];
-
-                    var row = document.createElement("div");
-                    row.className = "view-mapping-row";
-                    row.setAttribute("data-marker-name", markerName);
-
-                    var nameEl = document.createElement("span");
-                    nameEl.className = "view-mapping-name";
-                    nameEl.textContent = markerName;
-                    row.appendChild(nameEl);
-
-                    var arrow = document.createElement("span");
-                    arrow.className = "view-mapping-arrow";
-                    arrow.textContent = "→";
-                    row.appendChild(arrow);
-
-                    var tracksWrap = document.createElement("div");
-                    tracksWrap.className = "view-tracks-wrap";
-
-                    for (var t = 0; t < data.tracks.length; t++) {
-                        (function(trackName) {
-                            var lbl = document.createElement("label");
-                            lbl.className = "view-track-label";
-
-                            var cb = document.createElement("input");
-                            cb.type = "checkbox";
-                            cb.className = "view-track-cb";
-                            cb.value = trackName;
-                            if (saved.indexOf(trackName) !== -1) cb.checked = true;
-
-                            cb.addEventListener("change", updateMappingFromUI);
-
-                            lbl.appendChild(cb);
-                            lbl.appendChild(document.createTextNode(" " + trackName));
-                            tracksWrap.appendChild(lbl);
-                        })(data.tracks[t].name);
-                    }
-
-                    row.appendChild(tracksWrap);
-                    list.appendChild(row);
-
-                    state.viewMapping[markerName] = saved;
-                })(names[i]);
-            }
-
-            body.appendChild(list);
-
-            // ── Footer ──
+            // El pie de esta pantalla: la secuencia ya está cortada, así que las
+            // vistas se aplican ahora mismo.
             var footer = document.createElement("div");
             footer.className = "view-section-footer";
 
@@ -1382,10 +1472,9 @@
             btnActivate.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4h4v8H2zM10 4h4v8h-4z" stroke="currentColor" stroke-width="1.2"/><path d="M6 8h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg> <span>Activar Vistas</span>';
             btnActivate.addEventListener("click", doActivateViews);
             footer.appendChild(btnActivate);
-            body.appendChild(footer);
+            panel.body.appendChild(footer);
 
-            wrap.appendChild(body);
-            dom.viewSection.appendChild(wrap);
+            dom.viewSection.appendChild(panel.wrap);
             dom.viewSection.classList.remove("hidden");
         });
     }
@@ -1403,34 +1492,16 @@
             return;
         }
 
-        var markers = state.postMarkers || [];
-        var segments = buildSegmentsFromMarkers(markers);
+        var segments = buildSegmentsFromMarkers(state.postMarkers || []);
         if (segments.length === 0) {
             showToast("No se encontraron segmentos válidos.", "info");
             return;
         }
 
-        var activationData = JSON.stringify({
-            mapping: state.viewMapping,
-            segments: segments
-        });
-
-        var tmpDir = os.tmpdir();
-        var tmpPath = path.join(tmpDir, "PRCutter_views.json");
-
-        try {
-            fs.writeFileSync(tmpPath, activationData, "utf8");
-        } catch(e) {
-            showToast("Error al escribir archivo temporal: " + e.message, "error");
-            return;
-        }
-
-        var escaped = escExtend(tmpPath);
         showToast("Aplicando vistas...", "info");
-
-        evalScript('activateViews("' + escaped + '")', function(result) {
-            if (result.error) {
-                showToast(result.error, "error");
+        applyViews(segments, function(err, result) {
+            if (err) {
+                showToast(err.message, "error");
                 return;
             }
             showToast(
@@ -1438,6 +1509,207 @@
                 result.disabled + " deshabilitados.",
                 "success"
             );
+        });
+    }
+
+    // ─── Vistas desde el análisis en lote ───────────────────
+    //
+    // Al analizar en lote ya se leyeron los marcadores de todas las secuencias,
+    // así que los nombres de vista se conocen **antes** de cortar y no hay razón
+    // para esperar a terminar para preguntar qué pista es cada uno. Decidido una
+    // vez, se aplica en cada secuencia según se va cortando.
+    //
+    // El mapeo se guarda por **nombre de pista**, no por índice, que es lo que
+    // lo hace válido para todas: son clases del mismo curso con el mismo montaje.
+
+    var BATCH_CLEAN_KEY = "editorpro_batch_clean_markers";
+    var BATCH_VIEWS_KEY = "editorpro_batch_activate_views";
+
+    function readFlag(key, fallback) {
+        try {
+            var v = localStorage.getItem(key);
+            if (v !== null) return v === "true";
+        } catch(_e) {}
+        return fallback;
+    }
+
+    function writeFlag(key, value) {
+        try { localStorage.setItem(key, String(value)); } catch(_e) {}
+    }
+
+    /** El nombre de vista de un marcador crudo (getMarkersForSequence). */
+    function viewNameOfRawMarker(mk) {
+        if (isOutMarker(mk)) return "";
+        var parsed = parseInComment(mk.comments || mk.name || "");
+        return _getViewName({ name: mk.name, editorNote: parsed.note });
+    }
+
+    /**
+     * Nombres de vista de las secuencias marcadas, con cuántos marcadores usa
+     * cada uno. Van de más usado a menos: las vistas de verdad se repiten en
+     * todas las clases y quedan arriba; las notas sueltas del CD, abajo.
+     *
+     * @returns {{names: Array<string>, counts: Object}}
+     */
+    function batchViewNames() {
+        var counts = {};
+        var names = [];
+        for (var i = 0; i < state.batchSequences.length; i++) {
+            var seq = state.batchSequences[i];
+            if (!seq.checked) continue;
+            for (var m = 0; m < (seq.markers || []).length; m++) {
+                var n = viewNameOfRawMarker(seq.markers[m]);
+                if (!n) continue;
+                if (!counts[n]) { counts[n] = 0; names.push(n); }
+                counts[n]++;
+            }
+        }
+        names.sort(function(a, b) {
+            if (counts[b] !== counts[a]) return counts[b] - counts[a];
+            return a < b ? -1 : (a > b ? 1 : 0);
+        });
+        return { names: names, counts: counts };
+    }
+
+    function renderBatchViews() {
+        var host = document.getElementById("cutter-batch-views");
+        if (!host) return;
+        host.innerHTML = "";
+
+        var views = batchViewNames();
+        if (views.names.length === 0) return;
+
+        evalScript("getVideoTrackNames()", function(data) {
+            if (data.error || !data.tracks || data.tracks.length === 0) {
+                var why = data.error || "la secuencia activa no tiene pistas de video con clips";
+                if (window.EPLogger) EPLogger.error("cutter", "video-tracks", why);
+                var note = document.createElement("div");
+                note.className = "view-section marker-empty-note";
+                note.textContent = "No se pudieron leer las pistas de video para mapear las vistas: " + why;
+                host.appendChild(note);
+                return;
+            }
+
+            state.videoTracks = data.tracks;
+            var panel = buildViewPanel(views.names, data.tracks, renderBatchViews, views.counts);
+
+            var footer = document.createElement("div");
+            footer.className = "view-section-footer batch-views-footer";
+
+            var hint = document.createElement("p");
+            hint.className = "batch-views-hint";
+            hint.textContent = "Las pistas salen de la secuencia activa y se emparejan por nombre en cada " +
+                "secuencia del lote. Si en alguna no coincide ningún nombre, esa se queda sin tocar y " +
+                "aparece dicho en los resultados.";
+            footer.appendChild(hint);
+
+            // El panel se repinta al marcar secuencias o cambiar de preset, así que
+            // la decisión de activar vistas se guarda: si no, se perdería en cada
+            // repintado. Arranca encendida cuando ya hay pistas asignadas.
+            var lbl = document.createElement("label");
+            lbl.className = "batch-post-option";
+            var cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.id = "cutter-batch-activate-views";
+            cb.checked = readFlag(BATCH_VIEWS_KEY, anyMappingAssigned());
+            cb.addEventListener("change", function() { writeFlag(BATCH_VIEWS_KEY, cb.checked); });
+            lbl.appendChild(cb);
+            var txt = document.createElement("span");
+            txt.textContent = "Activar las vistas al terminar cada corte";
+            lbl.appendChild(txt);
+            footer.appendChild(lbl);
+
+            panel.body.appendChild(footer);
+            host.appendChild(panel.wrap);
+        });
+    }
+
+    function anyMappingAssigned() {
+        var mapping = getActivePresetMapping(loadPresetsStore());
+        for (var k in mapping) {
+            if (mapping.hasOwnProperty(k) && mapping[k] && mapping[k].length > 0) return true;
+        }
+        return false;
+    }
+
+    function batchWantsViews() {
+        var cb = document.getElementById("cutter-batch-activate-views");
+        return !!(cb && cb.checked) && anyMappingAssigned();
+    }
+
+    function batchWantsClean() {
+        var cb = document.getElementById("cutter-batch-clean-markers");
+        return !!(cb && cb.checked);
+    }
+
+    /**
+     * Lo que se hace en una secuencia recién cortada, antes de pasar a la
+     * siguiente. El orden no es negociable: **las vistas primero**, porque los
+     * segmentos salen de los marcadores que la limpieza se lleva por delante.
+     *
+     * Los tiempos también cambiaron con el corte, así que los marcadores se
+     * releen de la secuencia ya cortada en vez de reusar los del análisis.
+     *
+     * @param {function} done done(nota) — texto para el resultado, o "" si no hubo nada
+     */
+    function batchPostCut(done) {
+        var wantViews = batchWantsViews();
+        var wantClean = batchWantsClean();
+        if (!wantViews && !wantClean) return done("");
+
+        var notes = [];
+        var finish = function() { done(notes.join(" | ")); };
+
+        var clean = function() {
+            if (!wantClean) return finish();
+            evalScript("deleteMarkersWithoutComments()", function(res) {
+                if (res.error) {
+                    notes.push("marcadores: " + res.error);
+                    state.batchLog.push("  Limpieza de marcadores: " + res.error);
+                } else {
+                    notes.push((res.deleted || 0) + " marcador(es) sin comentario borrados");
+                    state.batchLog.push("  Marcadores borrados: " + (res.deleted || 0) +
+                        ", quedan " + (res.remaining || 0));
+                }
+                finish();
+            });
+        };
+
+        if (!wantViews) return clean();
+
+        evalScript("getPostCutMarkers()", function(mk) {
+            if (mk.error || !mk.markers) {
+                var why = mk.error || "el host no devolvió marcadores";
+                notes.push("vistas: " + why);
+                state.batchLog.push("  Vistas: " + why);
+                return clean();
+            }
+            evalScript("getActiveSequenceInfo()", function(info) {
+                var duration = info.duration ? parseFloat(info.duration) / TICKS_PER_SECOND : 0;
+                var segments = buildSegmentsFromMarkers(mk.markers, duration);
+                if (segments.length === 0) {
+                    notes.push("vistas: ningún marcador de esta secuencia está en el mapeo");
+                    state.batchLog.push("  Vistas: ningún marcador de esta secuencia tiene pistas asignadas");
+                    return clean();
+                }
+                applyViews(segments, function(err, res) {
+                    if (err) {
+                        notes.push("vistas: " + err.message);
+                        state.batchLog.push("  Vistas: " + err.message);
+                    } else if (!res.enabled) {
+                        // Ni un clip activado casi siempre es que las pistas de esta
+                        // secuencia se llaman distinto a las del mapeo.
+                        notes.push("vistas: ningún clip coincidió con el mapeo");
+                        state.batchLog.push("  Vistas: 0 activados de " +
+                            ((res.enabled || 0) + (res.disabled || 0)) + " clips — ¿otros nombres de pista?");
+                    } else {
+                        notes.push("vistas: " + res.enabled + " clips activados");
+                        state.batchLog.push("  Vistas: " + res.enabled + " activados, " +
+                            (res.disabled || 0) + " desactivados");
+                    }
+                    clean();
+                });
+            });
         });
     }
 
@@ -1567,7 +1839,7 @@
 
                     var durSeconds = 0;
                     if (mData.duration) {
-                        durSeconds = parseFloat(mData.duration) / 254016000000;
+                        durSeconds = parseFloat(mData.duration) / TICKS_PER_SECOND;
                     }
 
                     var prevDur = state.seqDuration;
@@ -1637,6 +1909,7 @@
             checkbox.addEventListener("change", (function(idx) {
                 return function(e) {
                     state.batchSequences[idx].checked = e.target.checked;
+                    renderBatchViews();
                 };
             })(i));
 
@@ -1699,6 +1972,7 @@
         }
 
         dom.batchSeqCount.textContent = validCount;
+        renderBatchViews();
     }
 
     function showBatchConfirm() {
@@ -1721,11 +1995,16 @@
             }
         }
 
+        var extras = [];
+        if (batchWantsViews()) extras.push("se activarán las vistas del mapeo");
+        if (batchWantsClean()) extras.push("se borrarán los marcadores sin comentario");
+
         dom.confirmMsg.textContent =
             "Se creará un backup de cada secuencia y se ejecutarán los cortes en " +
             selected.length + " secuencia" + (selected.length !== 1 ? "s" : "") +
             " (" + formatTime(totalRemove) + " a eliminar en total). " +
-            "Las secuencias se procesarán una a una.";
+            "Las secuencias se procesarán una a una." +
+            (extras.length ? " En cada una, después de cortar, " + extras.join(" y ") + "." : "");
 
         dom.confirmOverlay.classList.remove("hidden");
         // Override confirm button to batch execute
@@ -1890,18 +2169,24 @@
                                 " | Eliminados: " + (s.removed || 0) +
                                 (s.errors > 0 ? " | Errores: " + s.errors : "");
                             state.batchLog.push(detail);
-                            state.batchResults.push({
-                                seqId: seq.seqId,
-                                seqName: seq.seqName,
-                                success: true,
-                                error: null,
-                                detail: detail,
-                                removed: s.removed || 0,
-                                errors: s.errors || 0,
-                                log: seqLog
+
+                            // La secuencia sigue siendo la activa: es el momento de
+                            // activar vistas y limpiar marcadores, antes de abrir la
+                            // siguiente.
+                            batchPostCut(function(note) {
+                                state.batchResults.push({
+                                    seqId: seq.seqId,
+                                    seqName: seq.seqName,
+                                    success: true,
+                                    error: null,
+                                    detail: note ? detail + " | " + note : detail,
+                                    removed: s.removed || 0,
+                                    errors: s.errors || 0,
+                                    log: seqLog
+                                });
+                                current++;
+                                processNext();
                             });
-                            current++;
-                            processNext();
                         }
                     });
                 });
@@ -2222,6 +2507,15 @@
         });
     }
 
+    // ─── Limpiar marcadores tras cortar en lote ───────────
+    var cleanMarkersCb = document.getElementById("cutter-batch-clean-markers");
+    if (cleanMarkersCb) {
+        cleanMarkersCb.checked = readFlag(BATCH_CLEAN_KEY, false);
+        cleanMarkersCb.addEventListener("change", function() {
+            writeFlag(BATCH_CLEAN_KEY, cleanMarkersCb.checked);
+        });
+    }
+
     function bindCutterEvents() {
         if (dom.btnAnalyze) dom.btnAnalyze.addEventListener("click", function() {
             if (state.singleProcessing) {
@@ -2254,6 +2548,7 @@
             for (var b = 0; b < boxes.length; b++) {
                 boxes[b].checked = checked;
             }
+            renderBatchViews();
         });
         if (dom.btnBatchCopyLog) dom.btnBatchCopyLog.addEventListener("click", doBatchCopyLog);
         if (dom.btnBatchBack) dom.btnBatchBack.addEventListener("click", doBatchBack);
