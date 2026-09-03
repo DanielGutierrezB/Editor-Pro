@@ -295,11 +295,27 @@
     }
 
     var _whisperDeepSearchState = "idle"; // idle | running | done
+    var _mlxDeepSearchState = "idle";
 
     function refreshWhisperLocalStatus() {
         var statusText = document.getElementById("whisper-local-status-text");
         if (!statusText) return;
         var status = stt.getWhisperLocalStatus();
+
+        // Antes de dar por perdido el Whisper local, buscar un mlx_whisper que
+        // haya instalado otra herramienta: puede estar en un venv privado suyo,
+        // fuera del PATH y de toda carpeta estándar.
+        if (!status.ready && _mlxDeepSearchState === "idle" && stt.deepSearchMlxWhisper) {
+            _mlxDeepSearchState = "running";
+            statusText.innerHTML = '<span class="stt-connecting">⏳ Buscando Whisper MLX en el disco...</span>';
+            stt.deepSearchMlxWhisper(function(found) {
+                _mlxDeepSearchState = "done";
+                refreshWhisperLocalStatus();
+                if (found) showToast("Whisper MLX encontrado: " + found, "success");
+            });
+            return;
+        }
+        if (_mlxDeepSearchState === "running") return;
 
         // Si no hay modelo, buscarlo automáticamente en todo el disco
         // (Spotlight) una vez — sin pedirle la ruta al usuario
@@ -323,11 +339,12 @@
                 (status.modelPath ? '<br><span style="font-size:9px;color:var(--text-secondary);word-break:break-all;">' + esc(status.modelPath) + '</span>' : "");
         } else {
             var parts = [];
-            if (!status.binaryFound) parts.push("binario no encontrado (whisper-cli / whisper)");
+            if (!status.binaryFound) parts.push("binario no encontrado (mlx_whisper / whisper-cli / whisper)");
             if (!status.modelFound) parts.push("modelo no encontrado");
             var hint = status.binaryFound
                 ? "Usa \"Elegir modelo...\" para señalar tu modelo (ggml/gguf .bin), o instala uno con whisper/setup-whisper.sh"
-                : "Instala whisper.cpp (whisper/setup-whisper.sh) o usa \"Elegir binario...\"";
+                : "Instálalo con whisper/setup-mlx.sh (recomendado en Apple Silicon) o whisper/setup-whisper.sh. " +
+                  "Si ya lo tienes instalado por otra herramienta, usa \"Elegir binario...\" y señala su mlx_whisper.";
             statusText.innerHTML = '<span class="stt-disconnected">✗ ' + parts.join(" · ") + '</span>' +
                 '<br><span style="font-size:9px;color:var(--text-secondary);">' + esc(hint) + '</span>';
         }
@@ -335,7 +352,9 @@
         if (clearBtn) {
             var hasManual = false;
             try {
-                hasManual = !!(localStorage.getItem("editorpro_whisper_model") || localStorage.getItem("editorpro_whisper_binary"));
+                hasManual = !!(localStorage.getItem("editorpro_whisper_model")
+                    || localStorage.getItem("editorpro_whisper_binary")
+                    || localStorage.getItem("editorpro_mlx_binary"));
             } catch(_e) {}
             clearBtn.classList.toggle("hidden", !hasManual);
         }
@@ -358,10 +377,18 @@
     function handleWhisperBinaryPick(evt) {
         var file = evt.target.files[0];
         if (!file) return;
-        try { localStorage.setItem("editorpro_whisper_binary", file.path); } catch(_e) {}
+        // mlx_whisper y whisper-cli son motores distintos y se leen de claves
+        // distintas: guardar un mlx_whisper como binario de whisper.cpp lo dejaba
+        // sin usar, y era el único camino manual que tenía quien ya lo tiene
+        // instalado por otra herramienta.
+        var isMlx = /(^|\/)mlx_whisper$/.test(file.path || file.name);
+        try {
+            localStorage.setItem(isMlx ? "editorpro_mlx_binary" : "editorpro_whisper_binary", file.path);
+        } catch(_e) {}
+        if (isMlx && stt.refreshMlxDetection) stt.refreshMlxDetection();
         evt.target.value = "";
         refreshWhisperLocalStatus();
-        showToast("Binario Whisper configurado: " + file.name, "success");
+        showToast((isMlx ? "Whisper MLX configurado: " : "Binario Whisper configurado: ") + file.name, "success");
     }
 
     function clearWhisperManualPaths() {
@@ -369,8 +396,12 @@
             localStorage.removeItem("editorpro_whisper_model");
             localStorage.removeItem("editorpro_whisper_binary");
             localStorage.removeItem("editorpro_whisper_model_auto");
+            localStorage.removeItem("editorpro_mlx_binary");
+            localStorage.removeItem("editorpro_mlx_binary_auto");
         } catch(_e) {}
         _whisperDeepSearchState = "idle"; // re-buscar en el disco
+        _mlxDeepSearchState = "idle";
+        if (stt.refreshMlxDetection) stt.refreshMlxDetection();
         refreshWhisperLocalStatus();
         showToast("Whisper: detección automática restaurada", "info");
     }

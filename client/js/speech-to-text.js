@@ -686,36 +686,129 @@
      * El modelo se descarga/cachea en ~/.cache/huggingface (mlx-community).
      */
     var MLX_BIN_KEY = "editorpro_mlx_binary";
+    var MLX_BIN_AUTO_KEY = "editorpro_mlx_binary_auto";
     var MLX_MODEL_KEY = "editorpro_mlx_model";
     var MLX_DEFAULT_MODEL = "mlx-community/whisper-large-v3-turbo";
 
-    SpeechToText.prototype._findMlxWhisper = function() {
-        if (!fs || !childProcess) return { binary: null, model: null };
+    /**
+     * Rutas donde acaba el CLI `mlx_whisper` según quién lo instaló. Nuestro
+     * setup-mlx.sh usa un venv propio, pero el paquete lo instala cualquier pip
+     * y **otras herramientas del editor también lo instalan** (un `pip3 install
+     * mlx-whisper` con el Python de python.org deja el CLI en
+     * /Library/Frameworks/Python.framework/Versions/<ver>/bin, que es el caso
+     * real que no detectábamos).
+     *
+     * Las carpetas con versión en el nombre se recorren, no se adivinan.
+     */
+    SpeechToText.prototype._mlxCandidatePaths = function() {
         var home = (typeof process !== "undefined" && process.env) ? (process.env.HOME || "") : "";
+        var list = [];
+        var manual = _lsGet(MLX_BIN_KEY);
+        if (manual) list.push(manual);
+        var auto = _lsGet(MLX_BIN_AUTO_KEY);
+        if (auto) list.push(auto);
 
-        // 1) Override manual
-        var manual = null;
-        try { manual = localStorage.getItem(MLX_BIN_KEY); } catch(e) {}
-
-        var candidates = [];
-        if (manual) candidates.push(manual);
         if (home) {
-            candidates.push(home + "/.editorpro/mlx-whisper-venv/bin/mlx_whisper");
-            candidates.push(home + "/.local/bin/mlx_whisper");
+            list.push(home + "/.editorpro/mlx-whisper-venv/bin/mlx_whisper");
+            list.push(home + "/.local/bin/mlx_whisper");
+            list.push(home + "/.local/pipx/venvs/mlx-whisper/bin/mlx_whisper");
         }
-        var binary = null;
-        for (var i = 0; i < candidates.length; i++) {
-            try { if (candidates[i] && fs.existsSync(candidates[i])) { binary = candidates[i]; break; } } catch(e) {}
+        list.push("/opt/homebrew/bin/mlx_whisper");
+        list.push("/usr/local/bin/mlx_whisper");
+
+        // Carpetas con la versión de Python en el nombre: se enumeran.
+        var versioned = [
+            "/Library/Frameworks/Python.framework/Versions",   // python.org (system)
+            home ? home + "/Library/Python" : null,             // pip3 install --user
+            home ? home + "/Library/Frameworks/Python.framework/Versions" : null
+        ];
+        for (var v = 0; v < versioned.length; v++) {
+            if (!versioned[v]) continue;
+            var entries = [];
+            try { entries = fs.readdirSync(versioned[v]); } catch(e) { continue; }
+            for (var e2 = 0; e2 < entries.length; e2++) {
+                list.push(versioned[v] + "/" + entries[e2] + "/bin/mlx_whisper");
+            }
         }
-        // PATH como último recurso
-        if (!binary) {
-            try {
-                var whichCmd = (process && process.platform === "win32") ? "where mlx_whisper 2>NUL" : "which mlx_whisper 2>/dev/null";
-                var found = childProcess.execSync(whichCmd, { encoding: "utf8" }).trim();
-                if (found) binary = found.split(/\r?\n/)[0];
-            } catch(e) {}
+
+        // Entornos conda/miniforge, habituales en Apple Silicon para ML.
+        var condaRoots = [];
+        if (home) {
+            condaRoots.push(home + "/miniforge3");
+            condaRoots.push(home + "/miniconda3");
+            condaRoots.push(home + "/anaconda3");
         }
+        condaRoots.push("/opt/miniforge3");
+        condaRoots.push("/opt/miniconda3");
+        for (var c = 0; c < condaRoots.length; c++) {
+            list.push(condaRoots[c] + "/bin/mlx_whisper");
+            var envs = [];
+            try { envs = fs.readdirSync(condaRoots[c] + "/envs"); } catch(e) { envs = []; }
+            for (var en = 0; en < envs.length; en++) {
+                list.push(condaRoots[c] + "/envs/" + envs[en] + "/bin/mlx_whisper");
+            }
+        }
+        return list;
+    };
+
+    /**
+     * El PATH real del usuario, preguntándole a su shell de login.
+     *
+     * Premiere lanza el panel con un PATH mínimo (/usr/bin:/bin), así que el
+     * `which` de toda la vida no ve **nada** de lo que el editor tenga
+     * instalado: ni Homebrew, ni el Python de python.org. Es el mismo problema
+     * que ya resuelve así `claude-code.js`. Cuesta el arranque del shell, por
+     * eso solo se pregunta cuando las rutas conocidas no dieron nada.
+     */
+    SpeechToText.prototype._findMlxViaShell = function() {
+        if (!childProcess || (typeof process !== "undefined" && process.platform === "win32")) return null;
+        var shell = (typeof process !== "undefined" && process.env && process.env.SHELL) || "/bin/zsh";
+        try {
+            var out = childProcess.execFileSync(shell, ["-lc", "command -v mlx_whisper"], {
+                encoding: "utf8", timeout: 8000
+            });
+            var p = String(out || "").split("\n")[0].trim();
+            if (p && fs.existsSync(p)) return p;
+        } catch(e) {}
+        return null;
+    };
+
+    var _mlxBinCache = null;   // null = sin averiguar; "" = averiguado y no está
+
+    SpeechToText.prototype._findMlxWhisper = function(force) {
+        if (!fs || !childProcess) return { binary: null, model: null };
+
+        if (force) _mlxBinCache = null;
+        var binary = _mlxBinCache;
+
+        if (binary === null) {
+            binary = "";
+            var candidates = this._mlxCandidatePaths();
+            for (var i = 0; i < candidates.length; i++) {
+                try {
+                    if (candidates[i] && fs.existsSync(candidates[i])) { binary = candidates[i]; break; }
+                } catch(e) {}
+            }
+            // El PATH del usuario, no el que hereda el panel.
+            if (!binary) {
+                try {
+                    var env = this._childEnv();
+                    var found = childProcess.execSync("which mlx_whisper 2>/dev/null",
+                        { encoding: "utf8", env: env }).trim();
+                    if (found) binary = found.split(/\r?\n/)[0];
+                } catch(e) {}
+            }
+            if (!binary) binary = this._findMlxViaShell() || "";
+
+            _mlxBinCache = binary;
+            // Lo encontrado se recuerda: la próxima vez no se paga el shell.
+            if (binary) { try { localStorage.setItem(MLX_BIN_AUTO_KEY, binary); } catch(e) {} }
+            if (global.EPLogger) global.EPLogger.log("stt", "mlx-detect", binary || "no encontrado");
+        }
+
         if (!binary) return { binary: null, model: null };
+
+        var home = (typeof process !== "undefined" && process.env) ? (process.env.HOME || "") : "";
 
         // Modelo: override manual, o repo cacheado en HuggingFace, o el default
         var model = null;
@@ -731,6 +824,51 @@
             } catch(e) {}
         }
         return { binary: binary, model: model, modelLabel: modelLabel, cached: cached };
+    };
+
+    /**
+     * Busca `mlx_whisper` en todo el disco indexado con Spotlight.
+     *
+     * Es la red para el instalador que se lo lleva a un venv privado suyo —igual
+     * que nuestro ~/.editorpro/mlx-whisper-venv, que nadie de fuera podría
+     * adivinar—: ahí no está en el PATH ni en ninguna carpeta estándar, así que
+     * ni las rutas conocidas ni el shell de login lo encuentran.
+     *
+     * Solo cuenta el CLI (`.../bin/mlx_whisper`): mdfind devuelve también la
+     * carpeta del paquete en site-packages, que no es ejecutable.
+     * callback(rutaOEnNull)
+     */
+    SpeechToText.prototype.deepSearchMlxWhisper = function(callback) {
+        if (!childProcess || !fs || (typeof process !== "undefined" && process.platform === "win32")) {
+            callback(null);
+            return;
+        }
+        childProcess.exec("mdfind -name mlx_whisper 2>/dev/null",
+            { timeout: 20000, maxBuffer: 10 * 1024 * 1024 },
+            function(err, stdout) {
+                var lines = (!err && stdout) ? String(stdout).split("\n") : [];
+                var best = null;
+                for (var i = 0; i < lines.length; i++) {
+                    var p = lines[i].trim();
+                    if (!p || !/\/bin\/mlx_whisper$/.test(p)) continue;
+                    try { if (!fs.statSync(p).isFile()) continue; } catch(e) { continue; }
+                    best = p;
+                    break;
+                }
+                if (best) {
+                    try { localStorage.setItem(MLX_BIN_AUTO_KEY, best); } catch(e) {}
+                    _mlxBinCache = null;   // que la próxima lectura lo vea
+                    if (global.EPLogger) global.EPLogger.log("stt", "mlx-deep-search", best);
+                } else if (global.EPLogger) {
+                    global.EPLogger.log("stt", "mlx-deep-search", "sin resultados");
+                }
+                callback(best);
+            });
+    };
+
+    /** Vuelve a mirar si hay MLX instalado, ignorando lo que ya se averiguó. */
+    SpeechToText.prototype.refreshMlxDetection = function() {
+        return this._findMlxWhisper(true);
     };
 
     SpeechToText.prototype.getWhisperLocalStatus = function() {
@@ -824,23 +962,35 @@
         if (!status.ready && !status.modelFound) {
             // Último intento: búsqueda profunda del modelo en todo el disco
             onProgress(2);
-            this.deepSearchWhisperModel(function() {
-                var retry = self.getWhisperLocalStatus();
-                if (!retry.ready) {
-                    var missing = [];
-                    if (!retry.binaryFound) missing.push("binario (whisper-cli / whisper)");
-                    if (!retry.modelFound) missing.push("modelo (busqué en carpetas conocidas y con Spotlight)");
-                    callback({ error: "Whisper local no disponible: falta " + missing.join(" y ") +
-                        ". Instala whisper.cpp (whisper/setup-whisper.sh) o usa \"Elegir modelo...\" en Ajustes." });
+            // Antes de buscar un modelo de whisper.cpp, mirar si hay un
+            // mlx_whisper instalado por otra herramienta: es el motor preferido
+            // y se trae su propio modelo, así que resuelve el problema entero.
+            // Aquí también, no solo en Ajustes: se puede llegar a transcribir sin
+            // haber abierto nunca ese panel.
+            this.deepSearchMlxWhisper(function(mlxFound) {
+                if (mlxFound && self.getWhisperLocalStatus().ready) {
+                    self._transcribeWhisperLocal(filePath, onProgress, callback);
                     return;
                 }
-                self._transcribeWhisperLocal(filePath, onProgress, callback);
+                self.deepSearchWhisperModel(function() {
+                    var retry = self.getWhisperLocalStatus();
+                    if (!retry.ready) {
+                        var missing = [];
+                        if (!retry.binaryFound) missing.push("binario (mlx_whisper / whisper-cli / whisper)");
+                        if (!retry.modelFound) missing.push("modelo (busqué en carpetas conocidas y con Spotlight)");
+                        callback({ error: "Whisper local no disponible: falta " + missing.join(" y ") +
+                            ". Instálalo con whisper/setup-mlx.sh (Apple Silicon) o whisper/setup-whisper.sh, " +
+                            "o señala el tuyo con \"Elegir binario...\" / \"Elegir modelo...\" en Ajustes." });
+                        return;
+                    }
+                    self._transcribeWhisperLocal(filePath, onProgress, callback);
+                });
             });
             return;
         }
 
         if (!status.ready) {
-            callback({ error: "Whisper local no disponible: falta el binario (whisper-cli / whisper). Instala whisper.cpp (whisper/setup-whisper.sh) o usa \"Elegir binario...\" en Ajustes." });
+            callback({ error: "Whisper local no disponible: falta el binario (mlx_whisper / whisper-cli / whisper). Instálalo con whisper/setup-mlx.sh (Apple Silicon) o whisper/setup-whisper.sh, o señala el tuyo con \"Elegir binario...\" en Ajustes." });
             return;
         }
 

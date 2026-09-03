@@ -70,7 +70,7 @@ Editor-Pro/
 ├── CSXS/
 │   └── manifest.xml         # Manifiesto CEP: com.codigo.editorpro
 ├── whisper/                 # STT local: setup-mlx.sh (MLX/Apple Silicon), setup-whisper.sh (whisper.cpp) + modelos .bin
-├── VERSION                  # Versión actual (2.26.0)
+├── VERSION                  # Versión actual (2.26.1)
 ├── dist/                    # ZXP empaquetado
 ├── build-zxp.sh             # Firma y empaqueta ZXP
 └── install.sh               # Symlink para desarrollo + habilita debug mode
@@ -186,7 +186,29 @@ Clase `SpeechToText`. Proveedores: `elevenlabs`, `whisper_local`, `whisper_api`.
 - `saveSRT(result, folder, baseName, wordsPerLine)` — escribe un único `.srt`
 - Resultado normalizado: `{ words: [{text, start, end, type}], text, language }`
 - **`whisper_local` tiene 3 motores** (auto-detectados por `getWhisperLocalStatus()`, en orden de preferencia): `mlx` → `cpp` → `python`.
-  - **MLX (v2.6.0, Apple Silicon)**: motor preferido en Macs M-series. CLI `mlx_whisper` en el venv del plugin (`~/.editorpro/mlx-whisper-venv/bin/mlx_whisper`, instalar con `whisper/setup-mlx.sh`) o en PATH/`--user`. Modelo por defecto `mlx-community/whisper-large-v3-turbo` (cache HuggingFace). Timestamps reales por palabra, ~15-27x tiempo real en M3. Overrides: `localStorage` `editorpro_mlx_binary` / `editorpro_mlx_model`.
+  - **MLX (v2.6.0, Apple Silicon)**: motor preferido en Macs M-series. CLI `mlx_whisper` en el venv del plugin (`~/.editorpro/mlx-whisper-venv/bin/mlx_whisper`, instalar con `whisper/setup-mlx.sh`) o donde lo haya dejado quien lo instalara (ver abajo). Modelo por defecto `mlx-community/whisper-large-v3-turbo` (cache HuggingFace). Timestamps reales por palabra, ~15-27x tiempo real en M3. Overrides: `localStorage` `editorpro_mlx_binary` / `editorpro_mlx_model`.
+
+#### El MLX que instaló otra herramienta también cuenta (v2.26.1)
+
+Un editor tenía `mlx_whisper` instalado —se lo puso automáticamente otra herramienta suya— y el panel decía que no había Whisper local. No era su instalación: era que **solo mirábamos donde lo pone nuestro `setup-mlx.sh`**, y el único mecanismo genérico que había estaba muerto.
+
+`which mlx_whisper` no sirve de nada aquí: **Premiere lanza el panel con un PATH mínimo** (`/usr/bin:/bin`), así que no ve ni Homebrew ni el Python de python.org, tenga el editor lo que tenga en su shell. Es el mismo problema que `claude-code.js` ya resolvía preguntándole al shell de login, y la detección de MLX no lo hacía. El caso real: `pip3 install mlx-whisper` con el Python de python.org deja el CLI en `/Library/Frameworks/Python.framework/Versions/<ver>/bin`, que no estaba en la lista ni aparece en ese PATH.
+
+Se busca en cascada, de lo barato a lo caro, y **para en cuanto encuentra**:
+
+1. El override manual (`editorpro_mlx_binary`) y lo que se encontró la vez pasada (`editorpro_mlx_binary_auto`).
+2. Las rutas conocidas: nuestro venv, `~/.local/bin`, pipx, Homebrew, `/usr/local/bin`, los entornos de conda/miniforge y **las carpetas con la versión de Python en el nombre** (python.org y `pip3 install --user`), que se recorren en vez de adivinarse.
+3. `which` con el PATH enriquecido de `_childEnv()`.
+4. **El shell de login** (`$SHELL -lc 'command -v mlx_whisper'`), donde vive el PATH real del usuario.
+5. `deepSearchMlxWhisper()` — Spotlight, para el instalador que se lo lleva a un venv privado suyo, igual que el nuestro: ahí no está en el PATH ni en ninguna carpeta estándar, así que nada de lo anterior lo encuentra. Solo cuenta el CLI (`.../bin/mlx_whisper`); `mdfind` devuelve también la carpeta del paquete en site-packages, que no es ejecutable.
+
+Lo encontrado se **recuerda** (en memoria y en `localStorage`) porque arrancar el shell de login cuesta, y `getWhisperLocalStatus()` se consulta en cada render de Ajustes: medido, las rutas conocidas resuelven en ~1 ms, la cascada completa con shell en ~50 ms y la segunda lectura en 0. Una ruta recordada que ya no existe no bloquea nada, se vuelve a buscar.
+
+**Y el escape manual ahora cubre MLX**: "Elegir binario..." guardaba siempre en `editorpro_whisper_binary`, la clave de *whisper.cpp*, así que señalar un `mlx_whisper` a mano lo dejaba sin usar — o sea que quien ya lo tenía instalado no tenía ningún camino. Se guarda en la clave del motor que corresponde según el nombre del binario.
+
+Ojo con lo que decía el panel mientras tanto: sin MLX se lanzaba la búsqueda del modelo **ggml/gguf** y el mensaje era "instala whisper.cpp", que manda a instalar otro motor a quien ya tiene el bueno.
+
+Detectarlo era lo único que faltaba: un `mlx_whisper` ajeno **corre** tal cual desde el panel (su shebang apunta a su propio Python, acepta las mismas flags, y el `ffmpeg` que necesita lo resuelve el PATH que arma `_childEnv`).
   - **cpp**: whisper.cpp (`-ml 1 -sow` para word-level real; fallback a estimación ponderada si el build no los soporta).
   - **python**: openai-whisper (`--word_timestamps True`), modelos `.pt` en `~/.cache/whisper/`.
   - `parseWhisperSegmentsToWords(data)` (estático): parser compartido MLX/Python del JSON de Whisper (`segments[].words[]` → `words[]`).
@@ -661,9 +683,11 @@ Módulo puro NLE-agnóstico que opera sobre `words[]` del STT + segmentos de Not
 
 ## Tests (`npm test`)
 
-`tests/run-node-tests.js` corre en Node las suites de `cut-validator`, `marker-reviewer`, `marker-precision`, `marker-anchor`, `audio-onset`, `marker-verify`, `mlx-parser`, `transcript-edit`, `transcript-repeats`, `thecutter-core`, `host-cutter`, `host-markers`, `backup-name` y `updater-version` (800 asserts sobre transcripts y marcadores sintéticos; el LLM se valida a nivel de prompts/respuestas mockeadas). Los módulos puros exponen `module.exports` además de `window.*`.
+`tests/run-node-tests.js` corre en Node las suites de `cut-validator`, `marker-reviewer`, `marker-precision`, `marker-anchor`, `audio-onset`, `marker-verify`, `mlx-parser`, `mlx-detect`, `transcript-edit`, `transcript-repeats`, `thecutter-core`, `host-cutter`, `host-markers`, `backup-name` y `updater-version` (824 asserts sobre transcripts y marcadores sintéticos; el LLM se valida a nivel de prompts/respuestas mockeadas). Los módulos puros exponen `module.exports` además de `window.*`.
 
-Las dos últimas prueban ExtendScript, que no exporta nada: `host-cutter` evalúa `common.jsx` + `cutter.jsx` contra un doble de Premiere y corre `executeCuts` entero (ver "El corte va al frame"); `backup-name` carga `common.jsx` con un shim mínimo y se queda solo con las funciones puras del nombre de las copias, igual que `mlx-parser` con `speech-to-text.js`.
+`mlx-detect` monta un disco, un PATH y un shell de mentira para que el resultado no dependa de lo que tenga instalada la máquina donde corren los tests: comprueba que se encuentre el MLX de cada forma de instalarlo (la nuestra, python.org, Homebrew, `--user`, pipx, conda, y un venv ajeno vía shell de login), que sin nada instalado no se invente una ruta, que la respuesta se recuerde en vez de pagar el shell en cada render, y que Spotlight se quede con el CLI y no con la carpeta del paquete.
+
+`host-cutter` y `backup-name` prueban ExtendScript, que no exporta nada: `host-cutter` evalúa `common.jsx` + `cutter.jsx` contra un doble de Premiere y corre `executeCuts` entero (ver "El corte va al frame"); `backup-name` carga `common.jsx` con un shim mínimo y se queda solo con las funciones puras del nombre de las copias, igual que `mlx-parser` con `speech-to-text.js`.
 
 La suite de `audio-onset` escribe un WAV PCM de verdad en un temporal y lo mide de punta a punta (cabecera, ventana, envolvente, borde, colchón), además de los casos que dieron forma al módulo: el OUT que quería abrirse hasta el *"pausa"* del editor, la cola de la palabra que se apaga a saltos, el golpe en el silencio que no es el ataque de la frase, el colchón que no cabe en el silencio disponible, la alineación del transcript entero (el arranque que el STT adelanta, el tramo que se reparte sin invertir palabras, y que **alinear dos veces no mueva nada la segunda** — si no fuera estable, un transcript guardado seguiría teniendo bordes que la medida siguiente cambia), y el WAV de la secuencia ya cortada que no debe colarse por tener el mismo nombre base.
 
@@ -905,14 +929,14 @@ Mover un marcador es borrarlo y recrearlo, así que sin la copia Pre-Marker no h
 El header tiene 3 botones (además del dropdown de secuencia activa):
 
 1. **Log** (icono de descarga) — descarga el log de la sesión a la carpeta de Descargas.
-2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.26.0`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.25.4 → v2.26.0`).
+2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.26.1`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.26.0 → v2.26.1`).
 3. **Ajustes** — abre el panel de configuración (proveedor STT, proveedor de IA, API keys, modelo). Con el proveedor "Claude — mi cuenta" aparece el bloque de sesión: **Iniciar sesión** (abre Terminal con `claude auth login`), **Verificar** (llamada real de prueba) y **Cerrar sesión**. Con "Claude (API key)" el botón ↻ junto al modelo trae la lista actual desde `GET /v1/models`.
 
 > Nota histórica: los botones de debug de MOGRT (🔍/🔬) fueron removidos.
 
 ## Versión y auto-actualización
 
-- La versión vive en el archivo `VERSION` (actual: **2.26.0**) y en `CSXS/manifest.xml`.
+- La versión vive en el archivo `VERSION` (actual: **2.26.1**) y en `CSXS/manifest.xml`.
 - `updater.js` implementa un auto-updater basado en la GitHub API (no requiere git instalado) que descarga desde la rama **`workspace-daniel`**.
 
 ### Distinto no es más nuevo (v2.25.3)
