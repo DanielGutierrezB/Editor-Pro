@@ -32,10 +32,14 @@ fi
 # ─── Elegir Python (3.12 recomendado para wheels de mlx) ─────
 PY=""
 for cand in python3.12 python3.11 python3.13 /opt/homebrew/bin/python3.12 python3; do
-    if command -v "$cand" &>/dev/null; then PY="$cand"; break; fi
+    # No basta con que exista: /usr/bin/python3 está siempre, y sin las Command
+    # Line Tools instaladas no arranca. Si no responde --version, no sirve.
+    if command -v "$cand" &>/dev/null && "$cand" --version &>/dev/null; then PY="$cand"; break; fi
 done
 if [ -z "$PY" ]; then
-    echo -e "${RED}✗${NC} No se encontró Python 3. Instala con: brew install python@3.12"
+    echo -e "${RED}✗${NC} No hay un Python 3 utilizable."
+    echo "   Instálalo con: brew install python@3.12"
+    echo "   (o ejecuta 'xcode-select --install' si te falta el de macOS)"
     exit 1
 fi
 echo -e "${GREEN}✓${NC} Python: $($PY --version) ($PY)"

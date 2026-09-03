@@ -803,7 +803,12 @@
             _mlxBinCache = binary;
             // Lo encontrado se recuerda: la próxima vez no se paga el shell.
             if (binary) { try { localStorage.setItem(MLX_BIN_AUTO_KEY, binary); } catch(e) {} }
-            if (global.EPLogger) global.EPLogger.log("stt", "mlx-detect", binary || "no encontrado");
+            if (global.EPLogger) {
+                // Cuando no aparece, el log tiene que servir para averiguar por
+                // qué: sin saber dónde se miró, "no encontrado" no dice nada.
+                global.EPLogger.log("stt", "mlx-detect", binary ||
+                    ("no encontrado — " + candidates.length + " rutas conocidas, `which` y el shell de login"));
+            }
         }
 
         if (!binary) return { binary: null, model: null };
@@ -869,6 +874,98 @@
     /** Vuelve a mirar si hay MLX instalado, ignorando lo que ya se averiguó. */
     SpeechToText.prototype.refreshMlxDetection = function() {
         return this._findMlxWhisper(true);
+    };
+
+    var _armCache = null;
+
+    /**
+     * ¿Es un Mac con Apple Silicon? `process.arch` no sirve para preguntarlo:
+     * si el panel corre traducido por Rosetta responde "x64" en la máquina que
+     * justamente sí puede usar MLX. `hw.optional.arm64` dice la verdad igual.
+     */
+    SpeechToText.prototype.isAppleSilicon = function() {
+        if (_armCache !== null) return _armCache;
+        _armCache = false;
+        if (childProcess && (typeof process === "undefined" || process.platform !== "win32")) {
+            try {
+                var out = childProcess.execSync("sysctl -n hw.optional.arm64 2>/dev/null",
+                    { encoding: "utf8" });
+                _armCache = String(out).trim() === "1";
+            } catch(e) {}
+        }
+        return _armCache;
+    };
+
+    /** Ruta de nuestro instalador, que deja el CLI donde la detección lo espera. */
+    SpeechToText.prototype.mlxSetupScript = function() {
+        if (!this._pluginDir || !fs) return null;
+        var p = this._pluginDir + "/whisper/setup-mlx.sh";
+        try { return fs.existsSync(p) ? p : null; } catch(e) { return null; }
+    };
+
+    /**
+     * Instala Whisper MLX abriendo Terminal.app con nuestro setup-mlx.sh.
+     *
+     * En Terminal y no en silencio dentro del panel, por tres razones: son
+     * varios minutos y ~1.5 GB de modelo (a oscuras parecería colgado), el
+     * script puede necesitar responder algo (Command Line Tools), y si falla
+     * —sin Python, sin red— el editor ve el motivo en vez de un aspa. Es el
+     * mismo camino que el login de Claude.
+     *
+     * Terminal arranca un shell de login, así que ahí sí se ve el PATH real del
+     * usuario y encuentra su python3 aunque el panel no lo vea.
+     */
+    SpeechToText.prototype.installMlx = function(cb) {
+        if (!childProcess) { cb("child_process no disponible."); return; }
+        if (!this.isAppleSilicon()) {
+            cb("Whisper MLX solo funciona en Mac con Apple Silicon. En este equipo usa whisper/setup-whisper.sh (whisper.cpp).");
+            return;
+        }
+        var script = this.mlxSetupScript();
+        if (!script) {
+            cb("No encuentro whisper/setup-mlx.sh en la carpeta del plugin.");
+            return;
+        }
+        var cmd = "clear; bash '" + script.replace(/'/g, "'\\''") + "'";
+        var osa = 'tell application "Terminal"\nactivate\ndo script "' +
+            cmd.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\nend tell';
+        try {
+            childProcess.execFile("osascript", ["-e", osa], { timeout: 15000 }, function(err, stdout, stderr) {
+                if (err) { cb(String(stderr || err.message)); return; }
+                if (global.EPLogger) global.EPLogger.log("stt", "mlx-install", "Terminal abierta: " + script);
+                cb(null);
+            });
+        } catch(e) {
+            cb(e.message);
+        }
+    };
+
+    /**
+     * Sondea hasta que el instalador deje el binario en su sitio, para que
+     * Ajustes se actualice solo. onDone(err, ruta); devuelve {cancel}.
+     */
+    SpeechToText.prototype.waitForMlx = function(opts, onDone) {
+        opts = opts || {};
+        var self = this;
+        var everyMs = opts.everyMs || 4000;
+        // El modelo son ~1.5 GB: la espera se mide en decenas de minutos, no en
+        // segundos, y agotarla antes de tiempo diría que falló algo que sigue.
+        var timeoutMs = opts.timeoutMs || 45 * 60 * 1000;
+        var started = Date.now();
+        var cancelled = false;
+
+        function tick() {
+            if (cancelled) return;
+            var found = self.refreshMlxDetection().binary;
+            if (found) { onDone(null, found); return; }
+            if (Date.now() - started >= timeoutMs) {
+                onDone("Se agotó la espera de la instalación. Mira la ventana de Terminal para ver en qué quedó.");
+                return;
+            }
+            setTimeout(tick, everyMs);
+        }
+        setTimeout(tick, everyMs);
+        return { cancel: function() { cancelled = true; } };
     };
 
     SpeechToText.prototype.getWhisperLocalStatus = function() {

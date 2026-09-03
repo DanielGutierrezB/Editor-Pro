@@ -341,12 +341,24 @@
             var parts = [];
             if (!status.binaryFound) parts.push("binario no encontrado (mlx_whisper / whisper-cli / whisper)");
             if (!status.modelFound) parts.push("modelo no encontrado");
-            var hint = status.binaryFound
-                ? "Usa \"Elegir modelo...\" para señalar tu modelo (ggml/gguf .bin), o instala uno con whisper/setup-whisper.sh"
-                : "Instálalo con whisper/setup-mlx.sh (recomendado en Apple Silicon) o whisper/setup-whisper.sh. " +
-                  "Si ya lo tienes instalado por otra herramienta, usa \"Elegir binario...\" y señala su mlx_whisper.";
+            var canInstallMlx = stt.isAppleSilicon && stt.isAppleSilicon() && stt.mlxSetupScript && stt.mlxSetupScript();
+            var hint;
+            if (status.binaryFound) {
+                hint = "Usa \"Elegir modelo...\" para señalar tu modelo (ggml/gguf .bin), o instala uno con whisper/setup-whisper.sh";
+            } else if (canInstallMlx) {
+                hint = "Dale a \"Instalar Whisper MLX\" y lo dejo listo (unos minutos, ~1.5 GB). " +
+                    "Si ya lo tienes instalado por otra herramienta y no aparece, señálalo con \"Elegir binario...\".";
+            } else {
+                hint = "Instálalo con whisper/setup-whisper.sh, o señala el tuyo con \"Elegir binario...\".";
+            }
             statusText.innerHTML = '<span class="stt-disconnected">✗ ' + parts.join(" · ") + '</span>' +
                 '<br><span style="font-size:9px;color:var(--text-secondary);">' + esc(hint) + '</span>';
+        }
+        var installBtn = document.getElementById("btn-whisper-install-mlx");
+        if (installBtn) {
+            var offerInstall = !status.ready && !!(stt.isAppleSilicon && stt.isAppleSilicon()
+                && stt.mlxSetupScript && stt.mlxSetupScript());
+            installBtn.classList.toggle("hidden", !offerInstall);
         }
         var clearBtn = document.getElementById("btn-whisper-clear-manual");
         if (clearBtn) {
@@ -389,6 +401,42 @@
         evt.target.value = "";
         refreshWhisperLocalStatus();
         showToast((isMlx ? "Whisper MLX configurado: " : "Binario Whisper configurado: ") + file.name, "success");
+    }
+
+    var _mlxInstallWatch = null;
+
+    /**
+     * Instala Whisper MLX con nuestro script, que lo deja exactamente donde la
+     * detección lo busca. Es la salida para el editor cuya instalación no
+     * aparece por ningún lado: en vez de averiguar dónde se la dejó otra
+     * herramienta, se le pone una que sabemos encontrar.
+     */
+    function installWhisperMlx() {
+        var btn = document.getElementById("btn-whisper-install-mlx");
+        var statusText = document.getElementById("whisper-local-status-text");
+        if (_mlxInstallWatch) return;
+
+        stt.installMlx(function(err) {
+            if (err) { showToast(err, "error"); return; }
+            if (btn) { btn.disabled = true; btn.textContent = "Instalando..."; }
+            if (statusText) {
+                statusText.innerHTML = '<span class="stt-connecting">⏳ Instalando Whisper MLX en la ventana de Terminal ' +
+                    '(descarga ~1.5 GB, unos minutos). Puedes seguir usando el panel.</span>';
+            }
+            showToast("Se abrió Terminal con la instalación. El panel se actualiza solo al terminar.", "info");
+            _mlxInstallWatch = stt.waitForMlx({}, function(waitErr, found) {
+                _mlxInstallWatch = null;
+                if (btn) { btn.disabled = false; btn.textContent = "Instalar Whisper MLX"; }
+                if (waitErr) {
+                    showToast(waitErr, "error");
+                    refreshWhisperLocalStatus();
+                    return;
+                }
+                _mlxDeepSearchState = "done";   // ya está, no hace falta rastrear el disco
+                showToast("Whisper MLX instalado y detectado: " + found, "success");
+                refreshWhisperLocalStatus();
+            });
+        });
     }
 
     function clearWhisperManualPaths() {
@@ -2644,6 +2692,7 @@
         handleWhisperModelPick: handleWhisperModelPick,
         handleWhisperBinaryPick: handleWhisperBinaryPick,
         clearWhisperManualPaths: clearWhisperManualPaths,
+        installWhisperMlx: installWhisperMlx,
         applyWhisperResultToTranscriptCard: applyWhisperResultToTranscriptCard,
         restoreRecCutBackup: restoreRecCutBackup,
         saveSRTFiles: saveSRTFiles,

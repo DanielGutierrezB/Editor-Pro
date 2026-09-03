@@ -294,6 +294,10 @@
             var rec = window.EditorProUI && window.EditorProUI.recording;
             if (rec && rec.clearWhisperManualPaths) rec.clearWhisperManualPaths();
         });
+        on("btn-whisper-install-mlx", "click", function() {
+            var rec = window.EditorProUI && window.EditorProUI.recording;
+            if (rec && rec.installWhisperMlx) rec.installWhisperMlx();
+        });
         var whisperModelInput = document.getElementById("whisper-model-file");
         if (whisperModelInput) whisperModelInput.addEventListener("change", function(evt) {
             var rec = window.EditorProUI && window.EditorProUI.recording;

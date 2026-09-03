@@ -70,7 +70,7 @@ Editor-Pro/
 ├── CSXS/
 │   └── manifest.xml         # Manifiesto CEP: com.codigo.editorpro
 ├── whisper/                 # STT local: setup-mlx.sh (MLX/Apple Silicon), setup-whisper.sh (whisper.cpp) + modelos .bin
-├── VERSION                  # Versión actual (2.26.1)
+├── VERSION                  # Versión actual (2.26.2)
 ├── dist/                    # ZXP empaquetado
 ├── build-zxp.sh             # Firma y empaqueta ZXP
 └── install.sh               # Symlink para desarrollo + habilita debug mode
@@ -209,6 +209,18 @@ Lo encontrado se **recuerda** (en memoria y en `localStorage`) porque arrancar e
 Ojo con lo que decía el panel mientras tanto: sin MLX se lanzaba la búsqueda del modelo **ggml/gguf** y el mensaje era "instala whisper.cpp", que manda a instalar otro motor a quien ya tiene el bueno.
 
 Detectarlo era lo único que faltaba: un `mlx_whisper` ajeno **corre** tal cual desde el panel (su shebang apunta a su propio Python, acepta las mismas flags, y el `ffmpeg` que necesita lo resuelve el PATH que arma `_childEnv`).
+
+#### Y si aun así no aparece, se instala de un botón (v2.26.2)
+
+Buscar mejor reduce el problema pero no lo cierra: siempre puede haber un instalador que lo deje donde no miramos. La salida es dejar de averiguar dónde está el suyo y **poner uno donde sabemos encontrarlo** — "Instalar Whisper MLX", en Ajustes, junto al estado del Whisper local. Corre nuestro `whisper/setup-mlx.sh`, que instala en `~/.editorpro/mlx-whisper-venv`, la primera ruta de la cascada.
+
+- **Se abre en Terminal.app**, no en silencio dentro del panel, por el mismo motivo que el login de Claude: son varios minutos y ~1.5 GB de modelo (a oscuras parecería colgado), el script puede necesitar que el editor responda algo (Command Line Tools), y si falla —sin Python, sin red— se ve el motivo en vez de un aspa. De regalo, Terminal arranca un **shell de login**, así que el script sí ve el PATH real del usuario y encuentra su `python3` aunque el panel no lo vea.
+- `waitForMlx()` sondea la detección cada 4 s para que Ajustes se actualice solo al terminar. El tope es de **45 min**: con 1.5 GB de descarga, agotar la espera antes diría que falló algo que sigue corriendo.
+- **`isAppleSilicon()` no le pregunta a `process.arch`**: si el panel corre traducido por Rosetta responde `x64` justo en la máquina que sí puede usar MLX. `sysctl -n hw.optional.arm64` dice la verdad igual. En un Intel el botón no aparece y, si se llegara a llamar, `installMlx` explica en vez de abrir una Terminal que va a fallar.
+- El botón solo se ofrece si además **el script está** en la carpeta del plugin.
+- `setup-mlx.sh` ya no se queda con un Python que no arranca: `/usr/bin/python3` existe siempre, pero sin las Command Line Tools instaladas falla al usarlo, y el error salía luego y sin explicación. Ahora un candidato solo cuenta si responde a `--version`.
+
+El comando se arma con la ruta entre comillas simples y escapada: los paneles CEP viven en `~/Library/Application Support/...`, o sea **con espacios**, y ahí un quoting flojo parte la ruta en dos.
   - **cpp**: whisper.cpp (`-ml 1 -sow` para word-level real; fallback a estimación ponderada si el build no los soporta).
   - **python**: openai-whisper (`--word_timestamps True`), modelos `.pt` en `~/.cache/whisper/`.
   - `parseWhisperSegmentsToWords(data)` (estático): parser compartido MLX/Python del JSON de Whisper (`segments[].words[]` → `words[]`).
@@ -683,9 +695,9 @@ Módulo puro NLE-agnóstico que opera sobre `words[]` del STT + segmentos de Not
 
 ## Tests (`npm test`)
 
-`tests/run-node-tests.js` corre en Node las suites de `cut-validator`, `marker-reviewer`, `marker-precision`, `marker-anchor`, `audio-onset`, `marker-verify`, `mlx-parser`, `mlx-detect`, `transcript-edit`, `transcript-repeats`, `thecutter-core`, `host-cutter`, `host-markers`, `backup-name` y `updater-version` (824 asserts sobre transcripts y marcadores sintéticos; el LLM se valida a nivel de prompts/respuestas mockeadas). Los módulos puros exponen `module.exports` además de `window.*`.
+`tests/run-node-tests.js` corre en Node las suites de `cut-validator`, `marker-reviewer`, `marker-precision`, `marker-anchor`, `audio-onset`, `marker-verify`, `mlx-parser`, `mlx-detect`, `transcript-edit`, `transcript-repeats`, `thecutter-core`, `host-cutter`, `host-markers`, `backup-name` y `updater-version` (838 asserts sobre transcripts y marcadores sintéticos; el LLM se valida a nivel de prompts/respuestas mockeadas). Los módulos puros exponen `module.exports` además de `window.*`.
 
-`mlx-detect` monta un disco, un PATH y un shell de mentira para que el resultado no dependa de lo que tenga instalada la máquina donde corren los tests: comprueba que se encuentre el MLX de cada forma de instalarlo (la nuestra, python.org, Homebrew, `--user`, pipx, conda, y un venv ajeno vía shell de login), que sin nada instalado no se invente una ruta, que la respuesta se recuerde en vez de pagar el shell en cada render, y que Spotlight se quede con el CLI y no con la carpeta del paquete.
+`mlx-detect` monta un disco, un PATH y un shell de mentira para que el resultado no dependa de lo que tenga instalada la máquina donde corren los tests: comprueba que se encuentre el MLX de cada forma de instalarlo (la nuestra, python.org, Homebrew, `--user`, pipx, conda, y un venv ajeno vía shell de login), que sin nada instalado no se invente una ruta, que la respuesta se recuerde en vez de pagar el shell en cada render, y que Spotlight se quede con el CLI y no con la carpeta del paquete. Del botón de instalar cubre que solo se ofrezca donde puede funcionar (Apple Silicon vía `sysctl`, y con el script presente) y que lance nuestro `setup-mlx.sh`; los sondeos se ejecutan al momento, así que no hay esperas reales.
 
 `host-cutter` y `backup-name` prueban ExtendScript, que no exporta nada: `host-cutter` evalúa `common.jsx` + `cutter.jsx` contra un doble de Premiere y corre `executeCuts` entero (ver "El corte va al frame"); `backup-name` carga `common.jsx` con un shim mínimo y se queda solo con las funciones puras del nombre de las copias, igual que `mlx-parser` con `speech-to-text.js`.
 
@@ -929,14 +941,14 @@ Mover un marcador es borrarlo y recrearlo, así que sin la copia Pre-Marker no h
 El header tiene 3 botones (además del dropdown de secuencia activa):
 
 1. **Log** (icono de descarga) — descarga el log de la sesión a la carpeta de Descargas.
-2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.26.1`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.26.0 → v2.26.1`).
+2. **Recargar / Actualizar** — recarga el panel y verifica actualizaciones vía GitHub API. Muestra la versión actual (`v2.26.2`); cuando hay una actualización disponible muestra la transición pulsante (p.ej. `v2.26.1 → v2.26.2`).
 3. **Ajustes** — abre el panel de configuración (proveedor STT, proveedor de IA, API keys, modelo). Con el proveedor "Claude — mi cuenta" aparece el bloque de sesión: **Iniciar sesión** (abre Terminal con `claude auth login`), **Verificar** (llamada real de prueba) y **Cerrar sesión**. Con "Claude (API key)" el botón ↻ junto al modelo trae la lista actual desde `GET /v1/models`.
 
 > Nota histórica: los botones de debug de MOGRT (🔍/🔬) fueron removidos.
 
 ## Versión y auto-actualización
 
-- La versión vive en el archivo `VERSION` (actual: **2.26.1**) y en `CSXS/manifest.xml`.
+- La versión vive en el archivo `VERSION` (actual: **2.26.2**) y en `CSXS/manifest.xml`.
 - `updater.js` implementa un auto-updater basado en la GitHub API (no requiere git instalado) que descarga desde la rama **`workspace-daniel`**.
 
 ### Distinto no es más nuevo (v2.25.3)

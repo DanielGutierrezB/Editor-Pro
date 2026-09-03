@@ -47,7 +47,7 @@ function loadSTT(opts) {
     const files = opts.files || [];
     const dirs = opts.dirs || {};
     const store = Object.assign({}, opts.stored || {});
-    const calls = { which: 0, shell: 0, mdfind: 0 };
+    const calls = { which: 0, shell: 0, mdfind: 0, sysctl: 0, execFile: [] };
 
     const fakeFs = {
         existsSync: function(p) { return files.indexOf(p) !== -1; },
@@ -74,7 +74,16 @@ function loadSTT(opts) {
                 if (opts.pathFinds) return opts.pathFinds + "\n";
                 throw new Error("exit 1");
             }
+            if (cmd.indexOf("hw.optional.arm64") !== -1) {
+                calls.sysctl++;
+                if (opts.appleSilicon === false) throw new Error("exit 1");
+                return "1\n";
+            }
             throw new Error("comando inesperado: " + cmd);
+        },
+        execFile: function(bin, args, o, cb) {
+            calls.execFile.push({ bin: bin, args: args });
+            cb(opts.osascriptFails ? new Error("osascript falló") : null, "", "");
         },
         // El shell de login, donde vive el PATH real del usuario.
         execFileSync: function(bin, args) {
@@ -113,11 +122,17 @@ function loadSTT(opts) {
         removeItem: function(k) { delete store[k]; }
     };
 
+    // Los sondeos se ejecutan al momento: así el sondeo de la instalación se
+    // puede probar sin esperas reales.
+    const now = function(fn) { fn(); };
+
     const window = {};
-    const factory = new Function("window", "localStorage", "require", "process", "Buffer", "console",
+    const factory = new Function("window", "localStorage", "require", "process", "Buffer", "console", "setTimeout",
         SRC + "\nreturn window;");
-    const w = factory(window, localStorage, fakeRequire, fakeProcess, Buffer, console);
-    return { STT: w.SpeechToText, stt: new w.SpeechToText(), calls: calls, store: store };
+    const w = factory(window, localStorage, fakeRequire, fakeProcess, Buffer, console, now);
+    const stt = new w.SpeechToText();
+    if (opts.pluginDir) stt.setPluginDir(opts.pluginDir);
+    return { STT: w.SpeechToText, stt: stt, calls: calls, store: store };
 }
 
 const OURS = HOME + "/.editorpro/mlx-whisper-venv/bin/mlx_whisper";
@@ -221,6 +236,59 @@ function run() {
     deepResult = "pendiente";
     env.stt.deepSearchMlxWhisper(function(found) { deepResult = found; });
     assertEq(deepResult, null, "sin resultados devuelve null en vez de colgarse");
+
+    // ─── Instalarlo cuando no aparece por ningún lado ───────────
+    const PLUGIN = "/Applications/plugin/Editor-Pro";
+    const SETUP = PLUGIN + "/whisper/setup-mlx.sh";
+
+    section("isAppleSilicon() — no se le pregunta a process.arch");
+    env = loadSTT({ files: [] });
+    assertEq(env.stt.isAppleSilicon(), true, "lo dice sysctl, que no miente bajo Rosetta");
+    env.stt.isAppleSilicon();
+    assertEq(env.calls.sysctl, 1, "y se pregunta una sola vez");
+
+    env = loadSTT({ files: [], appleSilicon: false });
+    assertEq(env.stt.isAppleSilicon(), false, "en un Intel responde que no");
+
+    section("El botón de instalar solo existe si tenemos con qué");
+    env = loadSTT({ files: [], pluginDir: PLUGIN });
+    assertEq(env.stt.mlxSetupScript(), null, "sin el script en el plugin, no hay instalador");
+    env = loadSTT({ files: [SETUP], pluginDir: PLUGIN });
+    assertEq(env.stt.mlxSetupScript(), SETUP, "con el script, se ofrece");
+
+    section("installMlx() — abre Terminal con nuestro instalador");
+    env = loadSTT({ files: [SETUP], pluginDir: PLUGIN });
+    let installErr = "pendiente";
+    env.stt.installMlx(function(err) { installErr = err; });
+    assertEq(installErr, null, "sin error");
+    assertEq(env.calls.execFile.length, 1, "se lanza osascript");
+    assertEq(env.calls.execFile[0].bin, "osascript", "con osascript, no con un shell suelto");
+    assert(env.calls.execFile[0].args.join(" ").indexOf(SETUP) !== -1,
+        "y el comando corre nuestro setup-mlx.sh");
+
+    env = loadSTT({ files: [SETUP], pluginDir: PLUGIN, appleSilicon: false });
+    installErr = "pendiente";
+    env.stt.installMlx(function(err) { installErr = err; });
+    assert(installErr && installErr.indexOf("Apple Silicon") !== -1,
+        "en un Intel se explica en vez de abrir una Terminal que va a fallar");
+    assertEq(env.calls.execFile.length, 0, "y no se abre nada");
+
+    env = loadSTT({ files: [], pluginDir: PLUGIN });
+    installErr = "pendiente";
+    env.stt.installMlx(function(err) { installErr = err; });
+    assert(installErr && installErr.indexOf("setup-mlx.sh") !== -1, "sin el script se dice cuál falta");
+
+    section("waitForMlx() — el panel se entera solo cuando termina");
+    env = loadSTT({ files: [OURS] });
+    let waitRes = "pendiente";
+    env.stt.waitForMlx({}, function(err, found) { waitRes = err || found; });
+    assertEq(waitRes, OURS, "en cuanto el binario está, se avisa con su ruta");
+
+    env = loadSTT({ files: [] });
+    waitRes = "pendiente";
+    env.stt.waitForMlx({ timeoutMs: -1 }, function(err) { waitRes = err; });
+    assert(typeof waitRes === "string" && waitRes.indexOf("Terminal") !== -1,
+        "si se agota la espera, se manda a mirar la Terminal");
 
     return { passed: passed, failed: failed };
 }
